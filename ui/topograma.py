@@ -368,9 +368,17 @@ def render_topograma_panel():
 
         with st.container(border=True):
             st.markdown("##### Vista anatómica")
-            img_region = obtener_imagen_region_topograma(region)
-            if img_region is not None:
-                st.image(img_region, use_container_width=True)
+            img_region = obtener_imagen_region(region)
+
+if img_region:
+    with st.container(border=True):
+        st.markdown(
+            '<div style="height:220px; display:flex; align-items:center; justify-content:center;">',
+            unsafe_allow_html=True
+        )
+        st.image(img_region, width=180)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
             else:
                 st.markdown(
                     """
