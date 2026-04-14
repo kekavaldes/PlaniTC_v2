@@ -236,6 +236,19 @@ def cargar_tabla_topogramas():
     col_imagen = buscar_columna("nombre exacto de la imagen", "nombre imagen", "nombre_imagen", "archivo", "archivo imagen", "imagen")
 
     if not all([col_examen, col_posicion, col_entrada, col_tubo, col_imagen]):
+    st.error("Columnas detectadas en Excel:")
+    st.write(df.columns)
+
+    st.error("Columnas reconocidas:")
+    st.write({
+        "examen": col_examen,
+        "posicion": col_posicion,
+        "entrada": col_entrada,
+        "tubo": col_tubo,
+        "imagen": col_imagen,
+    })
+
+    return pd.DataFrame(), "El Excel no tiene las columnas esperadas."
         detalle = {
             "columnas_en_excel": list(df.columns),
             "detectadas": {
