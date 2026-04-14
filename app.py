@@ -37,12 +37,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()        st.info("Pendiente de modularizar")
-
-    with tabs[5]:
-        st.subheader("Inyectora")
-        st.info("Pendiente de modularizar")
-
-
-if __name__ == "__main__":
     main()
