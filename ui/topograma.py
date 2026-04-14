@@ -21,6 +21,11 @@ ZIP_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRA
 
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
 
+# Imágenes de datos del examen por región anatómica
+DIR_IMAGENES_DATOS_EXAMEN = BASE_DIR / "data/images/datos_examen_topograma"
+ZIP_IMAGENES_DATOS_EXAMEN = BASE_DIR / "data/images/datos_examen_topograma.zip"
+CACHE_IMAGENES_DATOS_EXAMEN = BASE_DIR / "_cache_datos_examen_topograma"
+
 REGIONES = {
     "CABEZA":   ["CEREBRO", "ORBITAS", "OIDOS", "SPN", "MAXILOFACIAL"],
     "CUELLO":   ["CUELLO"],
@@ -162,6 +167,54 @@ def preparar_fuentes_imagenes_topograma():
         fuentes.append(CACHE_IMAGENES_TOPO_POS)
 
     return [f for f in fuentes if f.exists()]
+
+
+@st.cache_data
+def preparar_fuentes_imagenes_datos_examen():
+    fuentes = []
+    if DIR_IMAGENES_DATOS_EXAMEN.exists():
+        fuentes.append(DIR_IMAGENES_DATOS_EXAMEN)
+
+    if ZIP_IMAGENES_DATOS_EXAMEN.exists():
+        CACHE_IMAGENES_DATOS_EXAMEN.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(ZIP_IMAGENES_DATOS_EXAMEN, "r") as zf:
+            for member in zf.namelist():
+                if member.endswith("/"):
+                    continue
+                member_fixed = _reparar_nombre_zip(member)
+                base = Path(member_fixed).name
+                if base.startswith("._") or base == ".DS_Store" or "__MACOSX" in member:
+                    continue
+                out = CACHE_IMAGENES_DATOS_EXAMEN / base
+                if not out.exists():
+                    with zf.open(member) as src, open(out, "wb") as dst:
+                        dst.write(src.read())
+        fuentes.append(CACHE_IMAGENES_DATOS_EXAMEN)
+
+    return [f for f in fuentes if f.exists()]
+
+
+def obtener_imagen_region_topograma(region: str):
+    if not region:
+        return None
+
+    region_norm = norm(region)
+    extensiones = {".png", ".jpg", ".jpeg", ".webp"}
+
+    for fuente in preparar_fuentes_imagenes_datos_examen():
+        for ruta in fuente.rglob("*"):
+            if not ruta.is_file() or ruta.suffix.lower() not in extensiones:
+                continue
+            if ruta.name.startswith("._") or ruta.name == ".DS_Store":
+                continue
+
+            stem = norm(ruta.stem)
+
+            # Coincidencia flexible por nombre de región
+            if stem == region_norm or stem.startswith(region_norm + "_") or region_norm in stem.split("_"):
+                return Image.open(ruta)
+
+    return None
 
 
 def normalizar_entrada_topograma(entrada: str) -> str:
@@ -315,14 +368,18 @@ def render_topograma_panel():
 
         with st.container(border=True):
             st.markdown("##### Vista anatómica")
-            st.markdown(
-                """
-                <div style="height:280px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                    <span style="opacity:0.45;">Imagen anatómica pendiente</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            img_region = obtener_imagen_region_topograma(region)
+            if img_region is not None:
+                st.image(img_region, use_container_width=True)
+            else:
+                st.markdown(
+                    """
+                    <div style="height:280px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                        <span style="opacity:0.45;">Imagen anatómica no encontrada</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     with col2:
         st.markdown("### 🛏️ Posicionamiento del paciente")
@@ -439,14 +496,18 @@ def render_topograma_panel():
 
             with st.container(border=True):
                 st.markdown("##### Vista anatómica")
-                st.markdown(
-                    """
-                    <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                        <span style="opacity:0.45;">Imagen anatómica Topograma 2 pendiente</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                img_region_t2 = obtener_imagen_region_topograma(t2_region)
+                if img_region_t2 is not None:
+                    st.image(img_region_t2, use_container_width=True)
+                else:
+                    st.markdown(
+                        """
+                        <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                            <span style="opacity:0.45;">Imagen anatómica Topograma 2 no encontrada</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
         with mid_t2:
             st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
