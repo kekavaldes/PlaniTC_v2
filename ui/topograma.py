@@ -1,77 +1,72 @@
-# SOLO reemplaza tu archivo ui/topograma.py por este
-
-# (archivo completo con debug de columnas)
+# topograma FINAL FIX
 
 import io
-import unicodedata
 import zipfile
 from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 from PIL import Image
+import unicodedata
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
-EXCEL_DIR = DATA_DIR / "excel"
-IMAGES_DIR = DATA_DIR / "images"
+ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
+EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
-EXCEL_TOPOGRAMAS = EXCEL_DIR / "imagenes_topograma.xlsx"
-
-def _norm_text(v):
-    if v is None:
+def norm(s):
+    if s is None:
         return ""
-    s = str(v).strip().lower()
+    s = str(s).strip().lower()
     s = unicodedata.normalize("NFKD", s)
-    s = "".join(ch for ch in s if not unicodedata.combining(ch))
-    return " ".join(s.split())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s
 
 @st.cache_data
-def cargar_tabla_topogramas():
-    if not EXCEL_TOPOGRAMAS.exists():
-        return pd.DataFrame(), "No se encontró el Excel"
+def load_excel():
+    df = pd.read_excel(EXCEL_PATH)
+    return df
 
-    df = pd.read_excel(EXCEL_TOPOGRAMAS)
+@st.cache_data
+def index_zip():
+    idx = {}
+    with zipfile.ZipFile(ZIP_PATH, "r") as z:
+        for f in z.namelist():
+            if "__MACOSX" in f or f.endswith("/"):
+                continue
+            name = Path(f).name
+            idx[norm(name)] = f
+            idx[norm(Path(name).stem)] = f
+    return idx
 
-    columnas_norm = {_norm_text(c): c for c in df.columns}
-
-    def buscar(*nombres):
-        for n in nombres:
-            if n in columnas_norm:
-                return columnas_norm[n]
+def get_image(nombre):
+    idx = index_zip()
+    key = norm(nombre)
+    if key not in idx:
         return None
-
-    col_examen = buscar("examen")
-    col_posicion = buscar("posicion paciente")
-    col_entrada = buscar("entrada del paciente")
-    col_tubo = buscar("posicion tubo")
-    col_imagen = buscar("nombre exacto de la imagen")
-
-    if not all([col_examen, col_posicion, col_entrada, col_tubo, col_imagen]):
-        st.error("Columnas detectadas en Excel:")
-        st.write(df.columns)
-
-        st.error("Columnas reconocidas:")
-        st.write({
-            "examen": col_examen,
-            "posicion": col_posicion,
-            "entrada": col_entrada,
-            "tubo": col_tubo,
-            "imagen": col_imagen,
-        })
-
-        return pd.DataFrame(), "Error columnas"
-
-    return df, None
-
+    with zipfile.ZipFile(ZIP_PATH, "r") as z:
+        data = z.read(idx[key])
+        return Image.open(io.BytesIO(data))
 
 def render_topograma_panel():
-    st.title("Topograma DEBUG")
+    st.title("Topograma FINAL")
 
-    df, err = cargar_tabla_topogramas()
+    df = load_excel()
 
-    if err:
-        st.warning(err)
-    else:
-        st.success("Excel leído correctamente")
-        st.dataframe(df.head())
+    examen = st.selectbox("Examen", df["examen"].dropna().unique())
+    posicion = st.selectbox("Posición paciente", df["Posición paciente"].dropna().unique())
+    entrada = st.selectbox("Entrada", df["entrada del paciente"].dropna().unique())
+    tubo = st.selectbox("Posición tubo", df["Posición tubo"].dropna().unique())
+
+    sel = df[
+        (df["examen"] == examen) &
+        (df["Posición paciente"] == posicion) &
+        (df["entrada del paciente"] == entrada) &
+        (df["Posición tubo"] == tubo)
+    ]
+
+    if not sel.empty:
+        nombre = sel.iloc[0]["nombre exacto de la imagen"]
+        img = get_image(nombre)
+        if img:
+            st.image(img)
+        else:
+            st.error(f"No se encontró imagen: {nombre}")
