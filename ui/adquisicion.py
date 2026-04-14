@@ -174,16 +174,10 @@ def _init_adquisicion_state():
         st.session_state["exploraciones"] = []
 
     if "exp_activa" not in st.session_state:
-        st.session_state["exp_activa"] = 0
+        st.session_state["exp_activa"] = "topograma"
 
 
-def _topograma_listo(store):
-    if not store:
-        return False
-    return bool(store.get("t1_longitud") and store.get("t1_direccion") and store.get("t1_voz"))
-
-
-def _crear_exploracion_base(nombre="Sin contraste"):
+def _crear_exploracion_base(nombre="SIN CONTRASTE"):
     return {
         "nombre": nombre,
         "tipo_item": "adquisicion",
@@ -208,25 +202,10 @@ def _crear_exploracion_base(nombre="Sin contraste"):
     }
 
 
-def _asegurar_exploraciones_desde_topograma(store):
-    exploraciones = st.session_state["exploraciones"]
-    if exploraciones:
+def _asegurar_exploraciones():
+    if st.session_state["exploraciones"]:
         return
-
-    exploraciones.append(
-        {
-            "nombre": "Topograma",
-            "tipo_item": "topograma",
-        }
-    )
-
-    nombre_inicial = "Sin contraste"
-    examen = (store.get("examen") or "").upper()
-
-    if "ATC" in examen or "ANGIO" in examen:
-        nombre_inicial = "Fase angiográfica"
-
-    exploraciones.append(_crear_exploracion_base(nombre_inicial))
+    st.session_state["exploraciones"] = [_crear_exploracion_base("SIN CONTRASTE")]
 
 
 def _calcular_cobertura(config_detectores, doble_muestreo):
@@ -254,93 +233,104 @@ def _calcular_cobertura(config_detectores, doble_muestreo):
 
 
 def _selectbox_con_indice(label, options, actual, key):
-    if actual in options:
-        index = options.index(actual)
-    else:
-        index = 0
+    index = options.index(actual) if actual in options else 0
     return st.selectbox(label, options, index=index, key=key)
 
 
-def _render_resumen_topograma(store):
-    st.markdown("### 📡 Referencia del Topograma")
-
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
-    with col2:
-        st.info(f"**Posición**\n\n{store.get('posicion_paciente') or '-'}")
-    with col3:
-        st.info(f"**Entrada**\n\n{store.get('entrada_paciente') or '-'}")
-    with col4:
-        st.info(f"**Tubo**\n\n{store.get('posicion_tubo') or '-'}")
-
-    aplica_t2 = store.get("aplica_topograma_2", False)
-
-    resumen = []
-    if store.get("t1_longitud"):
-        resumen.append(
-            f"Topograma 1: {store.get('t1_longitud')} mm · {store.get('t1_direccion')} · {store.get('t1_voz')}"
-        )
-
-    if aplica_t2 and store.get("t2_longitud"):
-        resumen.append(
-            f"Topograma 2: {store.get('t2_longitud')} mm · {store.get('t2_direccion')} · {store.get('t2_voz')}"
-        )
-
-    if resumen:
-        st.success(" | ".join(resumen))
-    else:
-        st.warning("Aún no hay datos completos de topograma para usar como referencia.")
+def _topograma_tiene_minimo(store):
+    return bool(
+        store.get("examen")
+        and store.get("t1_posicion_paciente")
+        and store.get("t1_entrada_paciente")
+        and store.get("t1_posicion_tubo")
+    )
 
 
 def _render_lista_exploraciones():
-    exploraciones = st.session_state["exploraciones"]
+    st.markdown("### 📋 Exploraciones")
 
-    st.markdown("### 🧾 Exploraciones")
+    if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
+        st.session_state["exp_activa"] = "topograma"
 
-    for i, exp in enumerate(exploraciones):
-        nombre = exp.get("nombre", f"Exploración {i}")
-        icono = "📡" if exp.get("tipo_item") == "topograma" else "⚙️"
-        activo = st.session_state.get("exp_activa", 0) == i
-        etiqueta = f"{icono} {nombre}"
-        if activo:
-            etiqueta = f"➡️ {etiqueta}"
+    st.markdown(
+        """
+        <div style="height:10px"></div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        if st.button(etiqueta, key=f"btn_exp_{i}", use_container_width=True):
-            st.session_state["exp_activa"] = i
+    for idx, exp in enumerate(st.session_state["exploraciones"]):
+        etiqueta = exp.get("nombre", f"Exploración {idx+1}")
+        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{idx}", use_container_width=True):
+            st.session_state["exp_activa"] = idx
 
     st.markdown(" ")
-
     if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
-        n = len([e for e in exploraciones if e.get("tipo_item") == "adquisicion"]) + 1
-        exploraciones.append(_crear_exploracion_base(f"Exploración {n}"))
-        st.session_state["exp_activa"] = len(exploraciones) - 1
+        n = len(st.session_state["exploraciones"]) + 1
+        st.session_state["exploraciones"].append(_crear_exploracion_base(f"EXPLORACIÓN {n}"))
+        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
         st.rerun()
 
+    if isinstance(st.session_state.get("exp_activa"), int):
+        idx = st.session_state["exp_activa"]
+        if 0 <= idx < len(st.session_state["exploraciones"]):
+            col1, col2 = st.columns(2, gap="small")
 
-def _render_panel_topograma(store):
-    st.markdown("### ⚙️ Topograma")
-    st.info("Esta exploración corresponde al topograma ya programado.")
+            with col1:
+                if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
+                    copia = dict(st.session_state["exploraciones"][idx])
+                    copia["nombre"] = f"{copia.get('nombre', 'Exploración')} copia"
+                    st.session_state["exploraciones"].insert(idx + 1, copia)
+                    st.session_state["exp_activa"] = idx + 1
+                    st.rerun()
 
-    tabla = {
-        "Examen": store.get("examen") or "-",
-        "Posición paciente": store.get("posicion_paciente") or "-",
-        "Entrada": store.get("entrada_paciente") or "-",
-        "Posición tubo": store.get("posicion_tubo") or "-",
-        "Topograma 1": f"{store.get('t1_longitud') or '-'} · {store.get('t1_direccion') or '-'} · {store.get('t1_voz') or '-'}",
-        "Topograma 2": (
-            f"{store.get('t2_longitud') or '-'} · {store.get('t2_direccion') or '-'} · {store.get('t2_voz') or '-'}"
-            if store.get("aplica_topograma_2")
-            else "No aplica"
-        ),
-    }
-
-    for k, v in tabla.items():
-        st.write(f"**{k}:** {v}")
+            with col2:
+                if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
+                    if len(st.session_state["exploraciones"]) > 1:
+                        st.session_state["exploraciones"].pop(idx)
+                        st.session_state["exp_activa"] = 0
+                        st.rerun()
 
 
-def _render_parametros_bloque_general(exp, idx):
-    st.markdown("### ⚙️ Parámetros de adquisición")
+def _render_resumen_topograma(store):
+    st.markdown("### 📡 Resumen de referencia")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
+    with c2:
+        st.info(f"**Topograma 1**\n\n{store.get('t1_posicion_paciente') or '-'}")
+    with c3:
+        st.info(f"**Entrada 1**\n\n{store.get('t1_entrada_paciente') or '-'}")
+    with c4:
+        st.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '-'}")
+
+    if store.get("aplica_topograma_2"):
+        st.success(
+            "Topograma 2 activo: "
+            f"{store.get('t2_posicion_paciente') or '-'} · "
+            f"{store.get('t2_entrada_paciente') or '-'} · "
+            f"{store.get('t2_posicion_tubo') or '-'}"
+        )
+
+
+def _render_parametros_adquisicion(exp, idx, store):
+    st.markdown(f"## ⚙️ {exp.get('nombre', f'Exploración {idx+1}')}")
+
+    row_head = st.columns([2, 1], gap="medium")
+    with row_head[0]:
+        exp["nombre"] = st.text_input(
+            "Nombre de la exploración",
+            value=exp.get("nombre", f"EXPLORACIÓN {idx+1}"),
+            key=f"nombre_exp_{idx}",
+        )
+    with row_head[1]:
+        exp["tipo_exploracion"] = _selectbox_con_indice(
+            "Tipo exploración",
+            TIPOS_EXPLORACION,
+            exp.get("tipo_exploracion", "HELICOIDAL"),
+            key=f"tipo_exp_{idx}",
+        )
 
     row1 = st.columns(4, gap="medium")
     with row1[0]:
@@ -348,7 +338,7 @@ def _render_parametros_bloque_general(exp, idx):
             "Modulación de corriente",
             MODULACION_CORRIENTE,
             exp.get("modulacion_corriente", "SELECCIONAR"),
-            key=f"mod_corr_{idx}",
+            key=f"modcorr_{idx}",
         )
     with row1[1]:
         exp["mas"] = _selectbox_con_indice(
@@ -374,20 +364,13 @@ def _render_parametros_bloque_general(exp, idx):
 
     row2 = st.columns(6, gap="medium")
     with row2[0]:
-        exp["tipo_exploracion"] = _selectbox_con_indice(
-            "Tipo exploración",
-            TIPOS_EXPLORACION,
-            exp.get("tipo_exploracion", "HELICOIDAL"),
-            key=f"tipo_exp_{idx}",
-        )
-    with row2[1]:
         exp["doble_muestreo"] = _selectbox_con_indice(
             "Doble muestreo",
             DOBLE_MUESTREO_OPCIONES,
             exp.get("doble_muestreo", "SELECCIONAR"),
             key=f"doble_{idx}",
         )
-    with row2[2]:
+    with row2[1]:
         exp["config_detectores"] = _selectbox_con_indice(
             "Configuración detección",
             CONFIG_DETECTORES,
@@ -397,27 +380,29 @@ def _render_parametros_bloque_general(exp, idx):
 
     exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
 
-    with row2[3]:
+    with row2[2]:
         st.text_input(
             "Cobertura",
             value=exp.get("cobertura", ""),
             disabled=True,
             key=f"cobertura_{idx}",
         )
-    with row2[4]:
+    with row2[3]:
         exp["grosor_prospectivo"] = _selectbox_con_indice(
             "Grosor prospectivo",
             GROSOR_PROSPECTIVO_OPCIONES,
             exp.get("grosor_prospectivo", "SELECCIONAR"),
             key=f"grosor_{idx}",
         )
-    with row2[5]:
+    with row2[4]:
         exp["sfov"] = _selectbox_con_indice(
             "SFOV",
             SFOV_OPCIONES,
             exp.get("sfov", "SELECCIONAR"),
             key=f"sfov_{idx}",
         )
+    with row2[5]:
+        st.info(store.get("examen") or "-")
 
     tipo = exp.get("tipo_exploracion")
 
@@ -475,127 +460,63 @@ def _render_parametros_bloque_general(exp, idx):
                 key=f"rot_{idx}",
             )
 
-
-def _render_bloque_superior_exploracion(exp, idx, store):
-    row0 = st.columns([2, 1], gap="medium")
-    with row0[0]:
-        exp["nombre"] = st.text_input(
-            "Nombre de la exploración",
-            value=exp.get("nombre", f"Exploración {idx}"),
-            key=f"nombre_exp_{idx}",
-        )
-    with row0[1]:
-        examen = store.get("examen", "")
-        sugerido = "HELICOIDAL"
-        if "ATC" in examen or "ANGIO" in examen:
-            sugerido = "HELICOIDAL"
-        exp["tipo_exploracion"] = _selectbox_con_indice(
-            "Tipo exploración",
-            TIPOS_EXPLORACION,
-            exp.get("tipo_exploracion", sugerido),
-            key=f"tipo_exp_header_{idx}",
-        )
-
-
-def _render_validaciones(exp, store):
-    st.markdown("### 🔎 Validación")
+    exp["observaciones"] = st.text_area(
+        "Observaciones",
+        value=exp.get("observaciones", ""),
+        key=f"obs_{idx}",
+        height=100,
+    )
 
     mensajes = []
 
-    cobertura_texto = exp.get("cobertura", "")
-    t1_longitud = store.get("t1_longitud")
-    tipo = exp.get("tipo_exploracion")
-
-    if t1_longitud and cobertura_texto:
-        try:
-            cobertura_valor = float(cobertura_texto.replace(" mm", "").replace(",", "."))
-            if cobertura_valor < float(t1_longitud):
-                mensajes.append(
-                    f"⚠️ La cobertura calculada ({cobertura_texto}) es menor que la longitud del topograma 1 ({t1_longitud} mm)."
-                )
-        except Exception:
-            pass
-
-    if tipo not in ["TEST BOLUS", "BOLUS TRACKING"]:
-        if exp.get("instruccion_voz") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir la instrucción de voz.")
-        if exp.get("pitch") in ["1,8"]:
-            mensajes.append("⚠️ Pitch alto. Revisa si es adecuado para este estudio.")
-        if exp.get("kv") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta seleccionar kV.")
-        if exp.get("config_detectores") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
-    else:
-        if exp.get("posicion_corte") == "SELECCIONAR":
-            mensajes.append("⚠️ Debes definir la posición de corte.")
-        if exp.get("n_imagenes") == "SELECCIONAR":
-            mensajes.append("⚠️ Debes definir el número de imágenes.")
+    if exp.get("kv") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta seleccionar kV.")
+    if exp.get("config_detectores") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
+    if tipo not in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("instruccion_voz") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta definir la instrucción de voz.")
+    if tipo in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("posicion_corte") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta definir la posición de corte.")
 
     if mensajes:
         for msg in mensajes:
             st.warning(msg)
     else:
-        st.success("Configuración coherente para continuar.")
-
-
-def _render_imagen_simulada_placeholder(exp):
-    st.markdown("### 🖼️ Imagen simulada")
-    tipo = exp.get("tipo_exploracion", "")
+        st.success("Configuración lista para continuar.")
 
     with st.container(border=True):
-        if tipo in ["TEST BOLUS", "BOLUS TRACKING"]:
-            st.caption("Aquí irá la imagen de posición de corte / ROI en una siguiente etapa.")
-        else:
-            st.caption("Aquí irá la imagen simulada de la adquisición en una siguiente etapa.")
-
-
-def _render_panel_exploracion(exp, idx, store):
-    st.markdown(f"## ⚙️ {exp.get('nombre', f'Exploración {idx}')}")
-    _render_bloque_superior_exploracion(exp, idx, store)
-    _render_parametros_bloque_general(exp, idx)
-
-    exp["observaciones"] = st.text_area(
-        "Observaciones",
-        value=exp.get("observaciones", ""),
-        key=f"obs_{idx}",
-        height=90,
-    )
-
-    _render_validaciones(exp, store)
-    _render_imagen_simulada_placeholder(exp)
+        st.markdown("### 🖼️ Imagen simulada")
+        st.caption("Aquí irá la imagen simulada de esta adquisición en el siguiente paso.")
 
 
 def render_adquisicion():
     _init_adquisicion_state()
+    _asegurar_exploraciones()
 
-    store = render_topograma_panel()
+    col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
 
-    st.markdown("---")
-    st.markdown("# Adquisición real")
-
-    if not _topograma_listo(store):
-        st.warning("Primero debes completar al menos el Topograma 1 para continuar con la adquisición.")
-        return
-
-    _render_resumen_topograma(store)
-    _asegurar_exploraciones_desde_topograma(store)
-
-    col_lista, col_panel = st.columns([1, 3], gap="large")
-
-    with col_lista:
+    with col_sidebar:
         _render_lista_exploraciones()
 
-    with col_panel:
-        exploraciones = st.session_state["exploraciones"]
-        idx = st.session_state.get("exp_activa", 0)
+    with col_main:
+        activa = st.session_state.get("exp_activa", "topograma")
 
-        if idx >= len(exploraciones):
-            idx = 0
-            st.session_state["exp_activa"] = 0
-
-        exp = exploraciones[idx]
-
-        if exp.get("tipo_item") == "topograma":
-            _render_panel_topograma(store)
+        if activa == "topograma":
+            store = render_topograma_panel()
         else:
-            _render_panel_exploracion(exp, idx, store)
+            store = st.session_state.get("topograma_store", {})
+
+            if not _topograma_tiene_minimo(store):
+                st.warning("Primero debes completar al menos el Topograma 1.")
+                render_topograma_panel()
+                return
+
+            _render_resumen_topograma(store)
+
+            exploraciones = st.session_state["exploraciones"]
+            if not isinstance(activa, int) or activa >= len(exploraciones):
+                st.session_state["exp_activa"] = 0
+                activa = 0
+
+            exp = exploraciones[activa]
+            _render_parametros_adquisicion(exp, activa, store)
