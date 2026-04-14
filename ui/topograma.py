@@ -124,7 +124,6 @@ def _init_state():
         "entrada_paciente": None,
         "posicion_tubo": None,
         "posicion_extremidades": None,
-
         "t1_inicio": None,
         "t1_fin": None,
         "t1_kv": 100,
@@ -135,7 +134,6 @@ def _init_state():
         "t1_direccion": None,
         "t1_voz": None,
         "t1_centraje_inicio": None,
-
         "t2_inicio": None,
         "t2_fin": None,
         "t2_kv": 100,
@@ -146,17 +144,14 @@ def _init_state():
         "t2_direccion": None,
         "t2_voz": None,
         "t2_centraje_inicio": None,
-
         "aplica_topograma_2": False,
         "topograma_1_iniciado": False,
         "topograma_2_iniciado": False,
         "topograma_store": {},
     }
-
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
-
     if not isinstance(st.session_state["topograma_store"], dict):
         st.session_state["topograma_store"] = {}
 
@@ -184,10 +179,8 @@ def number_input_con_stepper(label, key, min_value=0, max_value=4000, step=1):
             key=f"widget_{key}",
             label_visibility="collapsed",
         )
-
     with c2:
         minus = st.button("−", key=f"minus_{key}", use_container_width=True)
-
     with c3:
         plus = st.button("+", key=f"plus_{key}", use_container_width=True)
 
@@ -252,7 +245,6 @@ def obtener_imagen_posicionamiento(posicion, entrada, tubo):
             with zipfile.ZipFile(ZIP_IMAGENES_TOPO_POS, "r") as zf:
                 zf.extractall(CACHE_IMAGENES_TOPO_POS)
             marker.write_text("ok", encoding="utf-8")
-
         interna = CACHE_IMAGENES_TOPO_POS / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
         if interna.exists():
             fuentes.append(interna)
@@ -268,7 +260,6 @@ def obtener_imagen_posicionamiento(posicion, entrada, tubo):
             stem = norm_file_name(ruta.stem)
             if stem in objetivos:
                 return ruta
-
     return None
 
 
@@ -289,25 +280,42 @@ def aplicar_estilo_oscuro():
             color: white !important;
         }
 
-        div[data-testid="stVerticalBlock"] > div {
-            border-radius: 12px;
-        }
-
         div[data-baseweb="select"] > div {
-            background-color: #111111 !important;
+            background: #111111 !important;
             color: white !important;
             border: 1px solid #444 !important;
             border-radius: 10px !important;
         }
 
-        div[data-baseweb="select"] span {
+        div[data-baseweb="select"] * {
             color: white !important;
         }
 
-        div[data-baseweb="popover"],
-        ul[role="listbox"] {
+        .stTextInput input,
+        .stNumberInput input,
+        .stDateInput input,
+        input[type="text"],
+        input[type="number"],
+        textarea {
             background-color: #111111 !important;
             color: white !important;
+            border: 1px solid #444 !important;
+            border-radius: 10px !important;
+            -webkit-text-fill-color: white !important;
+        }
+
+        div[data-baseweb="popover"] {
+            background-color: #111111 !important;
+            color: white !important;
+        }
+
+        div[data-baseweb="popover"] * {
+            color: white !important;
+        }
+
+        ul[role="listbox"] {
+            background-color: #111111 !important;
+            border: 1px solid #444 !important;
         }
 
         ul[role="listbox"] li {
@@ -317,23 +325,27 @@ def aplicar_estilo_oscuro():
 
         ul[role="listbox"] li:hover {
             background-color: #222222 !important;
+            color: white !important;
         }
 
-        .stNumberInput input,
-        .stTextInput input,
-        .stDateInput input,
-        textarea,
-        input[type="text"],
-        input[type="number"] {
+        ul[role="listbox"] li[aria-selected="true"] {
+            background-color: #2a2e36 !important;
+            color: white !important;
+        }
+
+        div[role="listbox"] {
             background-color: #111111 !important;
             color: white !important;
             border: 1px solid #444 !important;
-            border-radius: 10px !important;
-            -webkit-text-fill-color: white !important;
         }
 
-        .stNumberInput button,
-        .stDateInput button {
+        div[role="option"] {
+            background-color: #111111 !important;
+            color: white !important;
+        }
+
+        div[role="option"]:hover {
+            background-color: #222222 !important;
             color: white !important;
         }
 
@@ -422,23 +434,11 @@ def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df)
         st.markdown(f"mm fin {titulo}")
         mm_fin = number_input_con_stepper(f"mm fin {titulo}", f"{prefix}_mm_fin")
     with row2[2]:
-        longitud = selectbox_con_placeholder(
-            "Longitud de topograma (mm)",
-            LONGITUDES_TOPO,
-            f"{prefix}_longitud",
-        )
+        longitud = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, f"{prefix}_longitud")
     with row2[3]:
-        direccion = selectbox_con_placeholder(
-            "Dirección topograma",
-            DIRECCIONES,
-            f"{prefix}_direccion",
-        )
+        direccion = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, f"{prefix}_direccion")
     with row2[4]:
-        voz = selectbox_con_placeholder(
-            "Instrucción de voz",
-            INSTRUCCIONES_VOZ,
-            f"{prefix}_voz",
-        )
+        voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, f"{prefix}_voz")
 
     faltantes = []
     if not examen:
