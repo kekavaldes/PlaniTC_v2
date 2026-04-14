@@ -258,6 +258,59 @@ def render_topograma_panel():
     df = load_excel()
 
     st.markdown("### 📡 Topograma")
+    st.markdown("""
+<style>
+
+/* Fondo general */
+.stApp {
+    background-color: #0e1117;
+    color: white;
+}
+
+/* Títulos */
+h1, h2, h3, h4 {
+    color: white !important;
+}
+
+/* Cards / contenedores */
+div[data-testid="stVerticalBlock"] > div {
+    background-color: #1c1f26;
+    border-radius: 12px;
+    padding: 12px;
+}
+
+/* Selectbox */
+div[data-baseweb="select"] {
+    background-color: #2a2e36 !important;
+    color: white !important;
+}
+
+/* Inputs */
+input {
+    background-color: #2a2e36 !important;
+    color: white !important;
+}
+
+/* Botón principal */
+.stButton button {
+    background-color: #2a2e36;
+    color: white;
+    border-radius: 10px;
+    border: 1px solid #444;
+}
+
+/* Botón hover */
+.stButton button:hover {
+    background-color: #3a3f4b;
+}
+
+/* Mensajes */
+.stAlert {
+    border-radius: 10px;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
     left, middle, right = st.columns([1.15, 1.2, 1.2], gap="large")
 
