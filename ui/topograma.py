@@ -12,7 +12,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
-# Mantengo estas rutas por si luego reutilizamos las imágenes de posicionamiento
 DIR_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA"
 ZIP_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
@@ -47,7 +46,6 @@ POSICIONES_PACIENTE = [
 ]
 
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
-
 POS_TUBO = ["ARRIBA 0°", "ABAJO 180°", "DERECHA 90°", "IZQUIERDA 90°"]
 
 POS_EXTREMIDADES = [
@@ -97,7 +95,8 @@ def norm(s):
     s = str(s).strip().lower()
     s = unicodedata.normalize("NFKD", s)
     s = "".join(c for c in s if not unicodedata.combining(c))
-    return s
+    s = s.replace("°", "").replace("º", "")
+    return " ".join(s.split())
 
 
 def norm_file_name(s):
@@ -108,8 +107,6 @@ def norm_file_name(s):
     s = s.replace("pies primero", "pies_primero")
     s = s.replace("derecha", "derecho")
     s = s.replace("izquierda", "izquierdo")
-    s = s.replace("arriba 0°", "arriba")
-    s = s.replace("abajo 180°", "abajo")
     s = s.replace("arriba 0", "arriba")
     s = s.replace("abajo 180", "abajo")
     s = s.replace("decubito ", "")
@@ -151,11 +148,7 @@ def _init_state():
 def selectbox_con_placeholder(label, options, key, placeholder="Seleccionar"):
     opciones = [placeholder] + list(options)
     actual = st.session_state.get(key)
-    if actual in options:
-        index = opciones.index(actual)
-    else:
-        index = 0
-
+    index = opciones.index(actual) if actual in options else 0
     valor = st.selectbox(label, opciones, index=index, key=f"widget_{key}")
     st.session_state[key] = None if valor == placeholder else valor
     return st.session_state[key]
@@ -190,7 +183,14 @@ def number_input_con_stepper(label, key, min_value=0, max_value=4000, step=1):
 
 @st.cache_data
 def load_excel():
-    return pd.read_excel(EXCEL_PATH)
+    df = pd.read_excel(EXCEL_PATH)
+    # normalizados robustos
+    df["examen_norm"] = df["examen"].apply(norm)
+    df["posicion_norm"] = df["Posición paciente"].apply(norm)
+    df["entrada_norm"] = df["entrada del paciente"].apply(norm)
+    df["tubo_norm"] = df["Posición tubo"].apply(norm)
+    df["nombre_imagen_norm"] = df["nombre exacto de la imagen"].apply(norm)
+    return df
 
 
 @st.cache_data
@@ -244,9 +244,7 @@ def obtener_imagen_posicionamiento(posicion, entrada, tubo):
         if not fuente.exists():
             continue
         for ruta in fuente.rglob("*"):
-            if not ruta.is_file():
-                continue
-            if ruta.suffix.lower() not in exts:
+            if not ruta.is_file() or ruta.suffix.lower() not in exts:
                 continue
             stem = norm_file_name(ruta.stem)
             if stem in objetivos:
@@ -287,9 +285,7 @@ def render_topograma_panel():
 
     with right:
         st.markdown("#### 🖼️ Topograma")
-        ruta_pos = None
-        if posicion and entrada and tubo:
-            ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, tubo)
+        ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, tubo) if (posicion and entrada and tubo) else None
 
         with st.container(border=True):
             if ruta_pos is not None:
@@ -375,10 +371,10 @@ def render_topograma_panel():
         st.markdown("### Topograma 1 adquirido")
 
         sel = df[
-            (df["examen"] == examen) &
-            (df["Posición paciente"] == posicion) &
-            (df["entrada del paciente"] == entrada) &
-            (df["Posición tubo"] == tubo)
+            (df["examen_norm"] == norm(examen)) &
+            (df["posicion_norm"] == norm(posicion)) &
+            (df["entrada_norm"] == norm(entrada)) &
+            (df["tubo_norm"] == norm(tubo))
         ]
 
         if not sel.empty:
@@ -391,7 +387,10 @@ def render_topograma_panel():
             else:
                 st.error(f"No se encontró imagen: {nombre}")
         else:
-            st.warning("No hay coincidencia en el Excel para esta combinación")
+            st.warning(
+                "No hay coincidencia en el Excel para esta combinación: "
+                f"examen='{examen}', posición='{posicion}', entrada='{entrada}', tubo='{tubo}'"
+            )
 
         if st.button("↺ Repetir topograma 1", key="btn_reset_topograma", use_container_width=True):
             st.session_state["topograma_iniciado"] = False
