@@ -1,42 +1,65 @@
 import io
+import re
 import zipfile
 import unicodedata
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from PIL import Image, ImageDraw
+from PIL import Image
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
+# Imágenes de posicionamiento subidas por la usuaria
+DIR_IMAGENES_TOPO_POS = BASE_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
+ZIP_IMAGENES_TOPO_POS = BASE_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
+CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
+
 REGIONES = {
-    "CABEZA": ["CEREBRO", "SPN", "MAXILOFACIAL", "ORBITAS", "OIDOS"],
-    "CUELLO": ["CUELLO"],
-    "CUERPO": ["TORAX", "ABDOMEN", "PELVIS"],
+    "CABEZA":   ["CEREBRO", "ORBITAS", "OIDOS", "SPN", "MAXILOFACIAL"],
+    "CUELLO":   ["CUELLO"],
+    "EESS":     ["HOMBRO", "BRAZO", "CODO", "ANTEBRAZO", "MUÑECA", "MANO"],
+    "COLUMNA":  ["CERVICAL", "DORSAL", "LUMBAR", "SACROCOXIS"],
+    "CUERPO":   ["TORAX", "ABDOMEN", "PELVIS", "ABDOMEN-PELVIS", "TORAX-ABDOMEN-PELVIS"],
+    "EEII":     ["CADERA", "MUSLO", "RODILLA", "TOBILLO", "PIE"],
+    "ANGIO":    ["ATC CEREBRO", "ATC CUELLO", "ATC CEREBRO CUELLO", "ATC TORAX", "ATC ABDOMEN", "ATC ABDOMEN-PELVIS", "ATC TORAX-ABDOMEN-PELVIS", "EESS DERECHA", "EESS IZQUIERDA", "EEII"],
 }
 
-POSICIONES_PACIENTE = ["DECUBITO SUPINO", "DECUBITO PRONO"]
+
+# Ampliadas para cubrir las combinaciones de las imágenes subidas.
+POSICIONES_PACIENTE = [
+    "DECUBITO SUPINO",
+    "DECUBITO PRONO",
+    "DECUBITO LATERAL DERECHO",
+    "DECUBITO LATERAL IZQUIERDO",
+]
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
-POS_TUBO = ["ARRIBA 0°", "ABAJO 180°"]
-POS_EXTREMIDADES = ["brazos arriba", "brazos abajo"]
+POS_TUBO = ["ARRIBA 0°", "ABAJO 180°", "DERECHA 90°", "IZQUIERDA 90°"]
+POS_EXTREMIDADES = ["brazos arriba", "brazos abajo", "eleva brazo derecho", "eleva brazo izquierdo", "flexión extremidad inferior derecha", "flexión extremidad inferior izquierda"]
 
-LONGITUDES_TOPO = [128, 256, 512]
+LONGITUDES_TOPO = [128, 256, 512, 768, 1020, 1560]
 DIRECCIONES = ["CAUDO-CRANEAL", "CRANEO-CAUDAL"]
-INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN"]
+INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN", "NO TRAGAR", "VALSALVA", "NO RESPIRE"]
 
-REFS_INICIO = {
-    "CABEZA": ["VERTEX", "ORBOMEATAL"],
-    "CUELLO": ["BASE CRANEO", "C2", "C4"],
-    "CUERPO": ["APICES", "SUPRAHEPATICO", "HEPATICO"],
-}
-
-REFS_FIN = {
-    "CABEZA": ["MAXILAR", "MANDIBULA", "C1", "C4"],
-    "CUELLO": ["T1", "T4", "CARINA"],
-    "CUERPO": ["PUBIS", "SINFISIS PUBICA", "CRESTAS ILIACAS"],
-}
+REFS_TOPO = [
+    "VERTEX",
+    "GLABELA",
+    "ORBITAS",
+    "MAXILAR",
+    "MENTON",
+    "CUELLO",
+    "CLAVICULAS",
+    "CARINA",
+    "CUPULAS DIAFRAGMATICAS",
+    "XIFOIDES",
+    "CRESTAS ILIACAS",
+    "SINFISIS PUBICA",
+    "RODILLAS",
+    "TOBILLOS",
+    "PLANTAS",
+]
 
 
 def norm(s):
@@ -47,35 +70,40 @@ def norm(s):
     return "".join(c for c in s if not unicodedata.combining(c))
 
 
-def _safe_get(dct, *keys):
-    for k in keys:
-        if k in dct:
-            return dct[k]
-    return None
+def _reparar_nombre_zip(name: str) -> str:
+    try:
+        return name.encode("cp437").decode("utf-8")
+    except Exception:
+        return name
 
 
 @st.cache_data
 def load_excel():
     if not EXCEL_PATH.exists():
         return pd.DataFrame()
-
     df = pd.read_excel(EXCEL_PATH)
-    cols = {norm(c): c for c in df.columns}
 
-    examen_col = _safe_get(cols, "examen")
-    pos_col = _safe_get(cols, "posicion paciente")
-    entrada_col = _safe_get(cols, "entrada del paciente", "entrada paciente", "entrada")
-    tubo_col = _safe_get(cols, "posicion tubo", "tubo")
+    cols = {c.lower().strip(): c for c in df.columns}
+    examen_col = cols.get("examen")
+    posicion_col = cols.get("posición paciente") or cols.get("posicion paciente")
+    entrada_col = cols.get("entrada del paciente") or cols.get("entrada")
+    tubo_col = cols.get("posición tubo") or cols.get("posicion tubo")
+    nombre_col = (
+        cols.get("nombre exacto de la imagen")
+        or cols.get("nombre imagen")
+        or cols.get("nombre_imagen")
+    )
 
     if examen_col:
-        df["_examen_norm"] = df[examen_col].apply(norm)
-    if pos_col:
-        df["_posicion_norm"] = df[pos_col].apply(norm)
+        df["examen_norm"] = df[examen_col].apply(norm)
+    if posicion_col:
+        df["posicion_norm"] = df[posicion_col].apply(norm)
     if entrada_col:
-        df["_entrada_norm"] = df[entrada_col].apply(norm)
+        df["entrada_norm"] = df[entrada_col].apply(norm)
     if tubo_col:
-        df["_tubo_norm"] = df[tubo_col].apply(norm)
-
+        df["tubo_norm"] = df[tubo_col].apply(norm)
+    if nombre_col:
+        df["nombre_imagen"] = df[nombre_col].astype(str).str.strip()
     return df
 
 
@@ -88,387 +116,384 @@ def index_zip():
         for f in z.namelist():
             if f.endswith("/"):
                 continue
-            name = Path(f).name
+            fixed = _reparar_nombre_zip(f)
+            name = Path(fixed).name
+            if name.startswith("._") or name == ".DS_Store":
+                continue
             idx[norm(name)] = f
-            idx.setdefault(norm(Path(name).stem), f)
+            idx[norm(Path(name).stem)] = f
     return idx
 
 
-def get_image_by_name(nombre):
-    if not nombre:
-        return None
+def get_image(nombre):
     idx = index_zip()
-    candidates = [norm(nombre), norm(Path(str(nombre)).name), norm(Path(str(nombre)).stem)]
-    for key in candidates:
-        if key in idx:
-            with zipfile.ZipFile(ZIP_PATH, "r") as z:
-                data = z.read(idx[key])
-                img = Image.open(io.BytesIO(data))
-                try:
-                    return img.convert("RGB")
-                except Exception:
-                    return img
+    key = norm(nombre)
+    if key not in idx:
+        return None
+    with zipfile.ZipFile(ZIP_PATH, "r") as z:
+        data = z.read(idx[key])
+        return Image.open(io.BytesIO(data))
+
+
+@st.cache_data
+def preparar_fuentes_imagenes_topograma():
+    fuentes = []
+    if DIR_IMAGENES_TOPO_POS.exists():
+        fuentes.append(DIR_IMAGENES_TOPO_POS)
+
+    if ZIP_IMAGENES_TOPO_POS.exists():
+        CACHE_IMAGENES_TOPO_POS.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(ZIP_IMAGENES_TOPO_POS, "r") as zf:
+            for member in zf.namelist():
+                if member.endswith("/"):
+                    continue
+                member_fixed = _reparar_nombre_zip(member)
+                base = Path(member_fixed).name
+                if base.startswith("._") or base == ".DS_Store" or "__MACOSX" in member:
+                    continue
+                out = CACHE_IMAGENES_TOPO_POS / base
+                if not out.exists():
+                    with zf.open(member) as src, open(out, "wb") as dst:
+                        dst.write(src.read())
+        fuentes.append(CACHE_IMAGENES_TOPO_POS)
+
+    return [f for f in fuentes if f.exists()]
+
+
+def normalizar_entrada_topograma(entrada: str) -> str:
+    entrada = norm(entrada)
+    if "cabeza" in entrada:
+        return "cabeza_primero"
+    if "pies" in entrada:
+        return "pies_primero"
+    return ""
+
+
+def normalizar_posicion_topograma(posicion: str) -> str:
+    posicion = norm(posicion)
+    posicion = posicion.replace("decubito ", "")
+    posicion = posicion.replace("lateral derecho", "lateral_derecho")
+    posicion = posicion.replace("lateral izquierdo", "lateral_izquierdo")
+    posicion = posicion.replace(" ", "_")
+    return posicion
+
+
+def normalizar_tubo_topograma(pos_tubo: str) -> str:
+    pos_tubo = norm(pos_tubo)
+    if "arriba" in pos_tubo:
+        return "arriba"
+    if "abajo" in pos_tubo:
+        return "abajo"
+    if "derecha" in pos_tubo:
+        return "derecho"
+    if "izquierda" in pos_tubo:
+        return "izquierdo"
+    return ""
+
+
+def normalizar_nombre_archivo_topograma(nombre: str) -> str:
+    nombre = norm(nombre)
+    reemplazos = {
+        "°": "",
+        "º": "",
+        "┬░": "",
+        "decubito ": "",
+        "lateral derecho": "lateral_derecho",
+        "lateral izquierdo": "lateral_izquierdo",
+        "derecha": "derecho",
+        "izquierda": "izquierdo",
+        "cabeza primero": "cabeza_primero",
+        "pies primero": "pies_primero",
+    }
+    for a, b in reemplazos.items():
+        nombre = nombre.replace(a, b)
+    nombre = nombre.replace("__", "_").replace(" ", "_")
+    nombre = re.sub(r"[^a-z0-9_]+", "_", nombre)
+    nombre = re.sub(r"_+", "_", nombre).strip("_")
+    tokens = [t for t in nombre.split("_") if t and not t.isdigit()]
+    nombre = "_".join(tokens)
+    nombre = nombre.replace("arriba_0", "arriba").replace("abajo_180", "abajo")
+    return nombre
+
+
+def obtener_imagen_posicionamiento_topograma(posicion: str, entrada: str, pos_tubo: str):
+    entrada_norm = normalizar_entrada_topograma(entrada)
+    posicion_norm = normalizar_posicion_topograma(posicion)
+    tubo_norm = normalizar_tubo_topograma(pos_tubo)
+
+    if not entrada_norm or not posicion_norm or not tubo_norm:
+        return None
+
+    objetivo_norm = normalizar_nombre_archivo_topograma(
+        f"topograma_{entrada_norm}_{posicion_norm}_{tubo_norm}"
+    )
+    extensiones = {".png", ".jpg", ".jpeg", ".webp"}
+
+    for fuente in preparar_fuentes_imagenes_topograma():
+        for ruta in fuente.rglob("*"):
+            if not ruta.is_file() or ruta.suffix.lower() not in extensiones:
+                continue
+            if ruta.name.startswith("._") or ruta.name == ".DS_Store":
+                continue
+            stem_norm = normalizar_nombre_archivo_topograma(ruta.stem)
+            if stem_norm == objetivo_norm:
+                return Image.open(ruta)
     return None
 
 
-def _draw_region_placeholder(region):
-    img = Image.new("RGB", (500, 500), "black")
-    d = ImageDraw.Draw(img)
-    color = (210, 210, 215)
-    if region == "CABEZA":
-        d.ellipse((180, 40, 320, 180), outline=color, width=6)
-        d.rectangle((220, 170, 280, 280), outline=color, width=6)
-        d.line((250, 280, 250, 380), fill=color, width=6)
-        d.line((250, 320, 190, 420), fill=color, width=6)
-        d.line((250, 320, 310, 420), fill=color, width=6)
-        d.line((250, 220, 170, 290), fill=color, width=6)
-        d.line((250, 220, 330, 290), fill=color, width=6)
-    elif region == "CUELLO":
-        d.ellipse((190, 40, 310, 160), outline=color, width=6)
-        d.rectangle((220, 150, 280, 340), outline=color, width=6)
-        d.line((250, 340, 250, 440), fill=color, width=6)
-    else:
-        d.ellipse((190, 35, 310, 155), outline=color, width=6)
-        d.rectangle((180, 150, 320, 330), outline=color, width=6)
-        d.line((220, 330, 180, 455), fill=color, width=6)
-        d.line((280, 330, 320, 455), fill=color, width=6)
-        d.line((180, 190, 110, 300), fill=color, width=6)
-        d.line((320, 190, 390, 300), fill=color, width=6)
-    return img
-
-
-def _draw_position_placeholder(posicion, entrada, tubo):
-    img = Image.new("RGB", (700, 430), (18, 20, 28))
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle((35, 55, 665, 365), radius=26, outline=(115, 118, 135), width=4)
-    d.rounded_rectangle((250, 220, 450, 280), radius=18, outline=(220, 220, 220), width=4)
-    d.ellipse((275, 140, 355, 220), outline=(235, 235, 235), width=4)
-    d.line((355, 180, 560, 180), fill=(228, 197, 77), width=8)
-    d.polygon([(560, 180), (530, 165), (530, 195)], fill=(228, 197, 77))
-    d.text((44, 22), f"{posicion or '-'} | {entrada or '-'} | {tubo or '-'}", fill=(235, 235, 235))
-    return img
-
-
-def obtener_imagen_topograma_adquirido(examen, posicion_paciente, entrada, posicion_tubo):
+def obtener_imagen_topograma_adquirido(examen, posicion_paciente, entrada, pos_tubo):
     df = load_excel()
     if df.empty:
-        return None, "No se pudo cargar el Excel de topograma"
+        return None, "No se pudo leer el Excel de topogramas."
+    needed = {"examen_norm", "posicion_norm", "entrada_norm", "tubo_norm", "nombre_imagen"}
+    if not needed.issubset(df.columns):
+        return None, "El Excel no tiene las columnas esperadas para topograma adquirido."
 
-    filtros = pd.Series([True] * len(df))
-    if "_examen_norm" in df:
-        filtros &= df["_examen_norm"] == norm(examen)
-    if "_posicion_norm" in df:
-        filtros &= df["_posicion_norm"] == norm(posicion_paciente)
-    if "_entrada_norm" in df:
-        filtros &= df["_entrada_norm"] == norm(entrada)
-    if "_tubo_norm" in df:
-        filtros &= df["_tubo_norm"] == norm(posicion_tubo)
+    candidatos = df[
+        (df["examen_norm"] == norm(examen))
+        & (df["posicion_norm"] == norm(posicion_paciente))
+        & (df["entrada_norm"] == norm(entrada))
+        & (df["tubo_norm"] == norm(pos_tubo))
+    ]
+    if candidatos.empty:
+        return None, "No hay coincidencia en Excel para esta combinación."
 
-    sel = df[filtros]
-    if sel.empty:
-        return None, "No hay coincidencia en Excel"
-
-    row = sel.iloc[0]
-    for col in sel.columns:
-        ncol = norm(col)
-        if "nombre exacto" in ncol or ("imagen" in ncol and "nombre" in ncol):
-            img = get_image_by_name(row[col])
-            if img is not None:
-                return img, None
-
-    for col in sel.columns:
-        if "imagen" in norm(col):
-            img = get_image_by_name(row[col])
-            if img is not None:
-                return img, None
-
-    return None, "Imagen no encontrada"
+    nombre = str(candidatos.iloc[0]["nombre_imagen"]).strip()
+    img = get_image(nombre)
+    if img is None:
+        return None, f"La imagen '{nombre}' no está dentro del ZIP de topogramas adquiridos."
+    return img, None
 
 
-def selectbox_con_placeholder(label, options, value=None, key=None):
-    opciones = [None] + list(options)
-    index = opciones.index(value) if value in opciones else 0
-    return st.selectbox(
-        label,
-        opciones,
-        index=index,
-        key=key,
-        format_func=lambda x: "Seleccionar" if x is None else str(x),
-    )
+def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
+    opciones = ["Seleccionar"] + list(options)
+    if value in options:
+        idx = opciones.index(value)
+    else:
+        idx = 0
+    val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
+    return None if val == "Seleccionar" else val
 
 
-def _number_with_buttons(label, key, default):
-    c1, c2 = st.columns([4, 2], gap="small")
-    with c1:
-        st.number_input(label, min_value=-2000, max_value=3000, step=1, key=key, value=int(st.session_state.get(key, default)))
-    with c2:
-        st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-        m1, m2 = st.columns(2)
-        with m1:
-            if st.button("−", key=f"{key}_menos", use_container_width=True):
-                st.session_state[key] = int(st.session_state.get(key, default)) - 1
-                st.rerun()
-        with m2:
-            if st.button("+", key=f"{key}_mas", use_container_width=True):
-                st.session_state[key] = int(st.session_state.get(key, default)) + 1
-                st.rerun()
-    return int(st.session_state.get(key, default))
+def _build_store(**kwargs):
+    prev = st.session_state.get("topograma_store", {})
+    prev.update(kwargs)
+    st.session_state["topograma_store"] = prev
 
-
-def _init_state():
-    st.session_state.setdefault("topograma_iniciado", False)
-    st.session_state.setdefault("topograma2_iniciado", False)
-    st.session_state.setdefault("topograma_store", {})
-    t = st.session_state["topograma_store"]
-
-    defaults = {
-        "region": st.session_state.get("region"),
-        "examen": st.session_state.get("examen"),
-        "posicion": st.session_state.get("posicion"),
-        "entrada": st.session_state.get("entrada"),
-        "t1pt": st.session_state.get("t1pt"),
-        "extremidades": st.session_state.get("extremidades"),
-        "t1_inicio_ref": st.session_state.get("t1_inicio_ref"),
-        "t1_fin_ref": st.session_state.get("t1_fin_ref"),
-        "t1_ini_mm": st.session_state.get("t1_ini_mm", 0),
-        "t1_fin_mm": st.session_state.get("t1_fin_mm", 400),
-        "t1_centraje_inicio": st.session_state.get("t1_centraje_inicio"),
-        "t1l": st.session_state.get("t1l", 256),
-        "t1dir": st.session_state.get("t1dir", "CAUDO-CRANEAL"),
-        "t1vz": st.session_state.get("t1vz", "NINGUNA"),
-        "t1kv": st.session_state.get("t1kv", 100),
-        "t1ma": st.session_state.get("t1ma", 40),
-        "aplica_topo2": st.session_state.get("aplica_topo2", False),
-        "t2_posicion_paciente": st.session_state.get("t2_posicion_paciente"),
-        "t2_entrada": st.session_state.get("t2_entrada"),
-        "t2pt": st.session_state.get("t2pt"),
-        "t2_extremidades": st.session_state.get("t2_extremidades"),
-        "t2_inicio_ref": st.session_state.get("t2_inicio_ref"),
-        "t2_fin_ref": st.session_state.get("t2_fin_ref"),
-        "t2_ini_mm": st.session_state.get("t2_ini_mm", 0),
-        "t2_fin_mm": st.session_state.get("t2_fin_mm", 400),
-        "t2_centraje_inicio": st.session_state.get("t2_centraje_inicio"),
-        "t2l": st.session_state.get("t2l", 256),
-        "t2dir": st.session_state.get("t2dir", "CAUDO-CRANEAL"),
-        "t2vz": st.session_state.get("t2vz", "NINGUNA"),
-        "t2kv": st.session_state.get("t2kv", 100),
-        "t2ma": st.session_state.get("t2ma", 40),
-    }
-    for k, v in defaults.items():
-        t.setdefault(k, v)
-
-
-def _save_store_only(**kwargs):
-    t = st.session_state["topograma_store"]
-    for k, v in kwargs.items():
-        t[k] = v
-
-
-def _render_section_title(text):
-    st.markdown(f"### {text}")
 
 
 def render_topograma_panel():
-    _init_state()
-    t = st.session_state["topograma_store"]
+    store = st.session_state.get("topograma_store", {})
 
     st.markdown("## 📡 Topograma")
 
-    top_c1, top_c2, top_c3 = st.columns([1.05, 1.15, 1.15], gap="large")
+    col1, col2, col3 = st.columns([1.05, 1.15, 1.1], gap="large")
 
-    with top_c1:
+    with col1:
+        st.markdown("### 🧾 Datos del examen")
+        region = selectbox_con_placeholder(
+            "Región anatómica", list(REGIONES.keys()), "region_widget", value=store.get("region_anat")
+        )
+        examen = selectbox_con_placeholder(
+            "Examen", REGIONES.get(region, []), "examen_widget", value=store.get("examen")
+        )
+
         with st.container(border=True):
-            _render_section_title("🧾 Datos del Examen")
-            region = selectbox_con_placeholder("Región anatómica", REGIONES.keys(), value=t.get("region"), key="region")
-            examen = selectbox_con_placeholder(
-                "Examen",
-                REGIONES.get(region, []),
-                value=t.get("examen") if t.get("region") == region else None,
-                key="examen",
+            st.markdown("##### Vista anatómica")
+            st.markdown(
+                """
+                <div style="height:280px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                    <span style="opacity:0.45;">Imagen anatómica pendiente</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-            st.image(_draw_region_placeholder(region), use_container_width=True)
 
-    with top_c2:
-        with st.container(border=True):
-            _render_section_title("🛏️ Posicionamiento del paciente")
-            c21, c22 = st.columns(2, gap="medium")
-            with c21:
-                posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, value=t.get("posicion"), key="posicion")
-                t1pt = selectbox_con_placeholder("Posición tubo", POS_TUBO, value=t.get("t1pt"), key="t1pt")
-            with c22:
-                entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, value=t.get("entrada"), key="entrada")
-                extremidades = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, value=t.get("extremidades"), key="extremidades")
-            st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-            st.image(_draw_position_placeholder(posicion, entrada, t1pt), use_container_width=True)
+    with col2:
+        st.markdown("### 🛏️ Posicionamiento del paciente")
+        c2a, c2b = st.columns(2)
+        with c2a:
+            posicion = selectbox_con_placeholder(
+                "Posición paciente", POSICIONES_PACIENTE, "pos_widget", value=store.get("posicion")
+            )
+        with c2b:
+            entrada = selectbox_con_placeholder(
+                "Entrada", ENTRADAS_PACIENTE, "entrada_widget", value=store.get("entrada")
+            )
+        with c2a:
+            tubo = selectbox_con_placeholder(
+                "Posición tubo", POS_TUBO, "tubo_widget", value=store.get("t1pt")
+            )
+        with c2b:
+            extremidades = selectbox_con_placeholder(
+                "Posición extremidades", POS_EXTREMIDADES, "ext_widget", value=store.get("extremidades")
+            )
 
-    with top_c3:
         with st.container(border=True):
-            _render_section_title("✅ Topograma adquirido")
-            if st.session_state.get("topograma_iniciado", False):
-                img1, err1 = obtener_imagen_topograma_adquirido(examen, posicion, entrada, t1pt)
-                if img1 is not None:
-                    st.image(img1, use_container_width=True)
-                    st.caption(
-                        f"Proyección: AP · Tubo: {t1pt or '—'} · {t.get('t1l') or '—'} mm · {t.get('t1kv') or '—'} kV · {t.get('t1ma') or '—'} mA"
-                    )
-                    st.success("✅ Topograma adquirido correctamente. Continúa a ⚡ Adquisición.")
-                else:
-                    st.error(err1 or "Imagen no encontrada")
+            st.markdown("##### Posicionamiento")
+            img_pos = obtener_imagen_posicionamiento_topograma(posicion or "", entrada or "", tubo or "")
+            if img_pos is not None:
+                st.image(img_pos, use_container_width=True)
             else:
-                st.info("Configura e inicia el topograma")
+                st.markdown(
+                    """
+                    <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
+                        <span style="opacity:0.45;">Imagen de posicionamiento no encontrada</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-    _save_store_only(
-        region=region,
+    with col3:
+        st.markdown("### ✅ Topograma adquirido")
+        if st.button("☢️ INICIAR TOPOGRAMA", key="btn_iniciar_topo1", use_container_width=True):
+            st.session_state["topograma_iniciado"] = True
+
+        if st.session_state.get("topograma_iniciado", False):
+            img_topo, err = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", tubo or "")
+            if img_topo is not None:
+                st.image(img_topo, use_container_width=True)
+                st.success("Topograma adquirido correctamente. Continúa a ⚡ Adquisición.")
+            else:
+                st.warning(err or "Imagen no encontrada")
+        else:
+            st.markdown(
+                """
+                <div style="height:420px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                    <span style="opacity:0.35;">Topograma no iniciado</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("---")
+    st.markdown("### 📡 Topograma 1")
+    r1a, r1b, r1c, r1d, r1e = st.columns(5, gap="medium")
+    with r1a:
+        t1_ini_ref = selectbox_con_placeholder("Inicio Topograma 1", REFS_TOPO, "t1_ini_ref_widget", value=store.get("t1_ini_ref"))
+    with r1b:
+        t1_fin_ref = selectbox_con_placeholder("Fin Topograma 1", REFS_TOPO, "t1_fin_ref_widget", value=store.get("t1_fin_ref"))
+    with r1c:
+        st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
+    with r1d:
+        st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
+    with r1e:
+        t1_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, "t1_centraje_inicio_widget", value=store.get("t1_centraje_inicio"))
+
+    r2a, r2b, r2c = st.columns(3, gap="medium")
+    with r2a:
+        t1_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, "t1l_widget", value=store.get("t1l"))
+    with r2b:
+        t1_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, "t1dir_widget", value=store.get("t1dir"))
+    with r2c:
+        t1_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, "t1vz_widget", value=store.get("t1vz"))
+
+    aplica_topo2 = st.checkbox("¿Aplica Topograma 2?", value=bool(store.get("aplica_topograma_2") or store.get("aplica_topo2")), key="aplica_topo2_widget")
+
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("☢️ INICIAR TOPOGRAMA 1", key="btn_iniciar_topo1_down", use_container_width=True):
+            st.session_state["topograma_iniciado"] = True
+    with col_btn2:
+        if st.button("↺ Repetir topograma 1", key="btn_reset_topo1", use_container_width=True):
+            st.session_state["topograma_iniciado"] = False
+            st.rerun()
+
+    t2_pos = t2_entrada = t2_tubo = t2_ext = t2_long = t2_dir = t2_voz = None
+    t2_ini_ref = t2_fin_ref = t2_centraje_inicio = None
+
+    if aplica_topo2:
+        st.markdown("---")
+        left_t2, right_t2 = st.columns([1.05, 1], gap="large")
+        with left_t2:
+            st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
+            a, b = st.columns(2)
+            with a:
+                t2_pos = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, "t2_pos_widget", value=store.get("t2_posicion"))
+            with b:
+                t2_entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, "t2_entrada_widget", value=store.get("t2_entrada"))
+            with a:
+                t2_tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, "t2_tubo_widget", value=store.get("t2pt"))
+            with b:
+                t2_ext = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, "t2_ext_widget", value=store.get("t2_extremidades"))
+
+        with right_t2:
+            st.markdown("### 🖼️ Topograma 2")
+            img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
+            if img_pos2 is not None:
+                st.image(img_pos2, use_container_width=True)
+            else:
+                st.markdown(
+                    """
+                    <div style="height:240px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
+                        <span style="opacity:0.45;">Imagen de Topograma 2 no encontrada</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown("### 📡 Parámetros Topograma 2")
+        t2a, t2b, t2c, t2d, t2e = st.columns(5, gap="medium")
+        with t2a:
+            t2_ini_ref = selectbox_con_placeholder("Inicio Topograma 2", REFS_TOPO, "t2_ini_ref_widget", value=store.get("t2_ini_ref"))
+        with t2b:
+            t2_fin_ref = selectbox_con_placeholder("Fin Topograma 2", REFS_TOPO, "t2_fin_ref_widget", value=store.get("t2_fin_ref"))
+        with t2c:
+            st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
+        with t2d:
+            st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
+        with t2e:
+            t2_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, "t2_centraje_inicio_widget", value=store.get("t2_centraje_inicio"))
+
+        t2f, t2g, t2h = st.columns(3, gap="medium")
+        with t2f:
+            t2_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, "t2l_widget", value=store.get("t2l"))
+        with t2g:
+            t2_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, "t2dir_widget", value=store.get("t2dir"))
+        with t2h:
+            t2_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, "t2vz_widget", value=store.get("t2vz"))
+
+        col_btn3, col_btn4 = st.columns(2)
+        with col_btn3:
+            if st.button("☢️ INICIAR TOPOGRAMA 2", key="btn_iniciar_topo2", use_container_width=True):
+                st.session_state["topograma2_iniciado"] = True
+        with col_btn4:
+            if st.button("↺ Repetir topograma 2", key="btn_reset_topo2", use_container_width=True):
+                st.session_state["topograma2_iniciado"] = False
+                st.rerun()
+
+    _build_store(
+        region_anat=region,
         examen=examen,
         posicion=posicion,
         entrada=entrada,
-        t1pt=t1pt,
         extremidades=extremidades,
+        t1pt=tubo,
+        t1l=t1_long,
+        t1dir=t1_dir,
+        t1vz=t1_voz,
+        t1_ini_ref=t1_ini_ref,
+        t1_fin_ref=t1_fin_ref,
+        t1_centraje_inicio=t1_centraje_inicio,
+        aplica_topograma_2=aplica_topo2,
+        aplica_topo2=aplica_topo2,
+        t2_posicion=t2_pos,
+        t2_entrada=t2_entrada,
+        t2_extremidades=t2_ext,
+        t2pt=t2_tubo,
+        t2l=t2_long,
+        t2dir=t2_dir,
+        t2vz=t2_voz,
+        t2_ini_ref=t2_ini_ref,
+        t2_fin_ref=t2_fin_ref,
+        t2_centraje_inicio=t2_centraje_inicio,
+        # aliases que espera adquisicion-2.py
         t1_posicion_paciente=posicion,
         t1_entrada_paciente=entrada,
-        t1_posicion_tubo=t1pt,
+        t1_posicion_tubo=tubo,
+        t2_posicion_paciente=t2_pos,
+        t2_entrada_paciente=t2_entrada,
+        t2_posicion_tubo=t2_tubo,
     )
-
-    st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-    with st.container(border=True):
-        _render_section_title("📡 Topograma 1")
-
-        refs_inicio = REFS_INICIO.get(region or "CUERPO", REFS_INICIO["CUERPO"])
-        refs_fin = REFS_FIN.get(region or "CUERPO", REFS_FIN["CUERPO"])
-
-        r1 = st.columns(5, gap="medium")
-        with r1[0]:
-            t1_inicio_ref = selectbox_con_placeholder("Inicio Topograma 1", refs_inicio, value=t.get("t1_inicio_ref"), key="t1_inicio_ref")
-        with r1[1]:
-            t1_fin_ref = selectbox_con_placeholder("Fin Topograma 1", refs_fin, value=t.get("t1_fin_ref"), key="t1_fin_ref")
-        with r1[2]:
-            st.text_input("kV", value=str(t.get("t1kv", 100)), disabled=True, key="_t1kv_show")
-        with r1[3]:
-            st.text_input("mA", value=str(t.get("t1ma", 40)), disabled=True, key="_t1ma_show")
-        with r1[4]:
-            t1_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", refs_inicio, value=t.get("t1_centraje_inicio"), key="t1_centraje_inicio")
-
-        r2 = st.columns(5, gap="medium")
-        with r2[0]:
-            t1_ini_mm = _number_with_buttons("mm inicio Topograma 1", "t1_ini_mm", int(t.get("t1_ini_mm", 0)))
-        with r2[1]:
-            t1_fin_mm = _number_with_buttons("mm fin Topograma 1", "t1_fin_mm", int(t.get("t1_fin_mm", 400)))
-        with r2[2]:
-            t1l = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, value=t.get("t1l"), key="t1l")
-        with r2[3]:
-            t1dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, value=t.get("t1dir"), key="t1dir")
-        with r2[4]:
-            t1vz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, value=t.get("t1vz"), key="t1vz")
-
-        aplica_topo2 = st.checkbox("¿Aplica Topograma 2?", value=bool(t.get("aplica_topo2", False)), key="aplica_topo2")
-
-        _save_store_only(
-            t1_inicio_ref=t1_inicio_ref,
-            t1_fin_ref=t1_fin_ref,
-            t1_ini_mm=t1_ini_mm,
-            t1_fin_mm=t1_fin_mm,
-            t1_centraje_inicio=t1_centraje_inicio,
-            t1l=t1l,
-            t1dir=t1dir,
-            t1vz=t1vz,
-            t1kv=100,
-            t1ma=40,
-            aplica_topo2=aplica_topo2,
-        )
-
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-    campos_t1_ok = all([region, examen, posicion, entrada, t1pt, t1l, t1dir, t1vz])
-    if st.button("☢️ INICIAR TOPOGRAMA", key="btn_iniciar_topo1", use_container_width=True, disabled=not campos_t1_ok):
-        st.session_state["topograma_iniciado"] = True
-        st.rerun()
-    if st.button("↺ Repetir topograma", key="btn_reset_topo1", use_container_width=True, disabled=not st.session_state.get("topograma_iniciado", False)):
-        st.session_state["topograma_iniciado"] = False
-        st.rerun()
-
-    if aplica_topo2:
-        st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        cta, ctb = st.columns([1.05, 1.0], gap="large")
-        with cta:
-            with st.container(border=True):
-                _render_section_title("🛏️ Posicionamiento del paciente — Topograma 2")
-                c1, c2 = st.columns(2, gap="medium")
-                with c1:
-                    t2_pos = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, value=t.get("t2_posicion_paciente"), key="t2_posicion_paciente")
-                    t2_pt = selectbox_con_placeholder("Posición tubo", POS_TUBO, value=t.get("t2pt"), key="t2pt")
-                with c2:
-                    t2_ent = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, value=t.get("t2_entrada"), key="t2_entrada")
-                    t2_ext = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, value=t.get("t2_extremidades"), key="t2_extremidades")
-                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-                st.image(_draw_position_placeholder(t2_pos, t2_ent, t2_pt), use_container_width=True)
-
-        with ctb:
-            with st.container(border=True):
-                _render_section_title("🖼️ Topograma 2")
-                if st.session_state.get("topograma2_iniciado", False):
-                    img2, err2 = obtener_imagen_topograma_adquirido(examen, t2_pos, t2_ent, t2_pt)
-                    if img2 is not None:
-                        st.image(img2, use_container_width=True)
-                        st.caption(
-                            f"Proyección: AP · Tubo: {t2_pt or '—'} · {t.get('t2l') or '—'} mm · {t.get('t2kv') or '—'} kV · {t.get('t2ma') or '—'} mA"
-                        )
-                        st.success("✅ Topograma 2 adquirido correctamente.")
-                    else:
-                        st.error(err2 or "Imagen no encontrada")
-                else:
-                    st.info("Configura e inicia Topograma 2")
-
-        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-        with st.container(border=True):
-            _render_section_title("📡 Topograma 2")
-            rr1 = st.columns(5, gap="medium")
-            with rr1[0]:
-                t2_inicio_ref = selectbox_con_placeholder("Inicio Topograma 2", refs_inicio, value=t.get("t2_inicio_ref"), key="t2_inicio_ref")
-            with rr1[1]:
-                t2_fin_ref = selectbox_con_placeholder("Fin Topograma 2", refs_fin, value=t.get("t2_fin_ref"), key="t2_fin_ref")
-            with rr1[2]:
-                st.text_input("kV", value=str(t.get("t2kv", 100)), disabled=True, key="_t2kv_show")
-            with rr1[3]:
-                st.text_input("mA", value=str(t.get("t2ma", 40)), disabled=True, key="_t2ma_show")
-            with rr1[4]:
-                t2_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", refs_inicio, value=t.get("t2_centraje_inicio"), key="t2_centraje_inicio")
-
-            rr2 = st.columns(5, gap="medium")
-            with rr2[0]:
-                t2_ini_mm = _number_with_buttons("mm inicio Topograma 2", "t2_ini_mm", int(t.get("t2_ini_mm", 0)))
-            with rr2[1]:
-                t2_fin_mm = _number_with_buttons("mm fin Topograma 2", "t2_fin_mm", int(t.get("t2_fin_mm", 400)))
-            with rr2[2]:
-                t2l = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, value=t.get("t2l"), key="t2l")
-            with rr2[3]:
-                t2dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, value=t.get("t2dir"), key="t2dir")
-            with rr2[4]:
-                t2vz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, value=t.get("t2vz"), key="t2vz")
-
-        _save_store_only(
-            t2_posicion_paciente=t2_pos,
-            t2_entrada=t2_ent,
-            t2pt=t2_pt,
-            t2_extremidades=t2_ext,
-            t2_inicio_ref=t2_inicio_ref,
-            t2_fin_ref=t2_fin_ref,
-            t2_ini_mm=t2_ini_mm,
-            t2_fin_mm=t2_fin_mm,
-            t2_centraje_inicio=t2_centraje_inicio,
-            t2l=t2l,
-            t2dir=t2dir,
-            t2vz=t2vz,
-            t2kv=100,
-            t2ma=40,
-        )
-
-        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
-        campos_t2_ok = all([t2_pos, t2_ent, t2_pt, t2l, t2dir, t2vz])
-        if st.button("☢️ INICIAR TOPOGRAMA 2", key="btn_iniciar_topo2", use_container_width=True, disabled=not campos_t2_ok):
-            st.session_state["topograma2_iniciado"] = True
-            st.rerun()
-        if st.button("↺ Repetir topograma 2", key="btn_reset_topo2", use_container_width=True, disabled=not st.session_state.get("topograma2_iniciado", False)):
-            st.session_state["topograma2_iniciado"] = False
-            st.rerun()
 
     return st.session_state["topograma_store"]
