@@ -14,7 +14,7 @@ def cargar_excel():
         df = pd.read_excel(EXCEL_PATH)
         df.columns = df.columns.str.strip().str.lower()
         return df
-    except Exception as e:
+    except:
         return None
 
 
