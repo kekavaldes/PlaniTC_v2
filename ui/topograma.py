@@ -221,27 +221,38 @@ def normalizar_nombre_archivo_topograma(nombre: str) -> str:
 
 
 def obtener_imagen_posicionamiento_topograma(posicion: str, entrada: str, pos_tubo: str):
-    entrada_norm = normalizar_entrada_topograma(entrada)
-    posicion_norm = normalizar_posicion_topograma(posicion)
-    tubo_norm = normalizar_tubo_topograma(pos_tubo)
 
-    if not entrada_norm or not posicion_norm or not tubo_norm:
+    if not posicion or not entrada or not pos_tubo:
         return None
 
-    objetivo_norm = normalizar_nombre_archivo_topograma(
-        f"topograma_{entrada_norm}_{posicion_norm}_{tubo_norm}"
-    )
+    entrada_norm = norm(entrada)
+    posicion_norm = norm(posicion)
+    tubo_norm = norm(pos_tubo)
+
     extensiones = {".png", ".jpg", ".jpeg", ".webp"}
 
     for fuente in preparar_fuentes_imagenes_topograma():
         for ruta in fuente.rglob("*"):
             if not ruta.is_file() or ruta.suffix.lower() not in extensiones:
                 continue
-            if ruta.name.startswith("._") or ruta.name == ".DS_Store":
-                continue
-            stem_norm = normalizar_nombre_archivo_topograma(ruta.stem)
-            if stem_norm == objetivo_norm:
+
+            nombre = norm(ruta.stem)
+
+            # DEBUG (puedes comentar después)
+            # st.write("Evaluando:", nombre)
+
+            if (
+                entrada_norm in nombre
+                and posicion_norm.replace("decubito ", "") in nombre
+                and (
+                    ("arriba" in tubo_norm and "arriba" in nombre)
+                    or ("abajo" in tubo_norm and "abajo" in nombre)
+                    or ("derecha" in tubo_norm and "derecha" in nombre)
+                    or ("izquierda" in tubo_norm and "izquierda" in nombre)
+                )
+            ):
                 return Image.open(ruta)
+
     return None
 
 
