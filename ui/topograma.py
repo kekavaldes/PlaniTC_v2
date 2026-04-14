@@ -61,10 +61,10 @@ def _init_topograma_state():
         "topograma_iniciado": False,
         "topograma2_iniciado": False,
         "topograma_store": {},
-        "region_anatomica": None,
-        "examen": None,
-        "posicion": None,
-        "entrada": None,
+        "region_anatomica_ui": None,
+        "examen_ui": None,
+        "posicion_ui": None,
+        "entrada_ui": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -254,7 +254,6 @@ def render_topograma():
 
     st.subheader("Topograma")
 
-    # Datos generales del examen
     st.markdown("### Datos del examen")
     a1, a2 = st.columns([1, 1])
 
@@ -262,40 +261,37 @@ def render_topograma():
         region = selectbox_con_placeholder(
             "Región anatómica",
             REGIONES,
-            value=st.session_state.get("region_anatomica"),
+            value=st.session_state.get("region_anatomica_ui"),
             key="region_anatomica_ui",
         )
-        st.session_state["region_anatomica"] = region
 
     examenes = EXAMENES_POR_REGION.get(region, []) if region else []
 
     with a2:
+        examen_actual = st.session_state.get("examen_ui")
         examen = selectbox_con_placeholder(
             "Examen",
             examenes,
-            value=st.session_state.get("examen") if st.session_state.get("examen") in examenes else None,
+            value=examen_actual if examen_actual in examenes else None,
             key="examen_ui",
         )
-        st.session_state["examen"] = examen
 
     b1, b2, b3 = st.columns(3)
     with b1:
         posicion = selectbox_con_placeholder(
             "Posición del paciente",
             POSICIONES_PACIENTE,
-            value=st.session_state.get("posicion"),
+            value=st.session_state.get("posicion_ui"),
             key="posicion_ui",
         )
-        st.session_state["posicion"] = posicion
 
     with b2:
         entrada = selectbox_con_placeholder(
             "Entrada",
             ENTRADAS,
-            value=st.session_state.get("entrada"),
+            value=st.session_state.get("entrada_ui"),
             key="entrada_ui",
         )
-        st.session_state["entrada"] = entrada
 
     with b3:
         aplica_topo2 = st.checkbox(
@@ -320,9 +316,9 @@ def render_topograma():
         st.markdown("### Vista previa")
         _render_topograma_image(
             titulo="Imagen Topograma 1",
-            examen=st.session_state.get("examen"),
-            posicion=st.session_state.get("posicion"),
-            entrada=st.session_state.get("entrada"),
+            examen=st.session_state.get("examen_ui"),
+            posicion=st.session_state.get("posicion_ui"),
+            entrada=st.session_state.get("entrada_ui"),
             pos_tubo=_tstore.get("t1p"),
             iniciado=st.session_state.get("topograma_iniciado", False),
         )
@@ -331,9 +327,9 @@ def render_topograma():
             st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
             _render_topograma_image(
                 titulo="Imagen Topograma 2",
-                examen=st.session_state.get("examen"),
-                posicion=st.session_state.get("posicion"),
-                entrada=st.session_state.get("entrada"),
+                examen=st.session_state.get("examen_ui"),
+                posicion=st.session_state.get("posicion_ui"),
+                entrada=st.session_state.get("entrada_ui"),
                 pos_tubo=_tstore.get("t2p"),
                 iniciado=st.session_state.get("topograma2_iniciado", False),
             )
