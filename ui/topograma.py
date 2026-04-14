@@ -12,81 +12,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
-DIR_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA"
-ZIP_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
-CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
-
 
 REGIONES = {
     "CABEZA": ["CEREBRO", "SPN", "MAXILOFACIAL", "ORBITAS", "OIDOS"],
     "CUELLO": ["CUELLO"],
-    "COLUMNA": ["CERVICAL", "DORSAL", "LUMBAR"],
-    "CUERPO": ["TORAX", "ABDOMEN", "PELVIS", "ABDOMEN-PELVIS", "PIELOTC", "TORAX-ABDOMEN-PELVIS"],
-    "EESS": ["HOMBRO", "BRAZO", "CODO", "ANTEBRAZO", "MUÑECA", "MANO"],
-    "EEII": ["CADERA", "MUSLO", "RODILLA", "PIERNA", "TOBILLO", "PIE"],
-    "ANGIO": [
-        "ATC CEREBRO",
-        "ATC CUELLO",
-        "ATC CEREBRO CUELLO",
-        "ATC TORAX",
-        "ATC ABDOMEN",
-        "ATC ABDOMEN-PELVIS",
-        "ATC TORAX-ABDOMEN-PELVIS",
-        "ATC EESS DERECHA",
-        "ATC EESS IZQUIERDA",
-        "ATC EEII",
-    ],
+    "CUERPO": ["TORAX", "ABDOMEN", "PELVIS"],
 }
 
-POSICIONES_PACIENTE = [
-    "DECUBITO SUPINO",
-    "DECUBITO PRONO",
-    "LATERAL DERECHO",
-    "LATERAL IZQUIERDO",
-]
 
+POSICIONES_PACIENTE = ["DECUBITO SUPINO", "DECUBITO PRONO"]
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
-POS_TUBO = ["ARRIBA 0°", "ABAJO 180°", "DERECHA 90°", "IZQUIERDA 90°"]
+POS_TUBO = ["ARRIBA 0°", "ABAJO 180°"]
+POS_EXTREMIDADES = ["brazos arriba", "brazos abajo"]
 
-POS_EXTREMIDADES = [
-    "NINGUNA",
-    "BRAZOS ARRIBA",
-    "BRAZOS ABAJO",
-    "ELEVA BRAZO DERECHO",
-    "ELEVA BRAZO IZQUIERDO",
-    "FLEXION EXTREMIDAD INFERIOR DERECHA",
-    "FLEXION EXTREMIDAD INFERIOR IZQUIERDA",
-]
-
-INICIO_TOPO_OPCIONES = [
-    "SOBRE APICES PULMONARES",
-    "SOBRE CUPULAS DIAF.",
-    "SOBRE ORBITAS",
-    "SOBRE OIDOS",
-    "SOBRE SPN",
-    "SOBRE MAXILOFACIAL",
-    "SOBRE C1",
-    "SOBRE D1",
-    "SOBRE L1",
-    "SOBRE SACRO",
-]
-
-FIN_TOPO_OPCIONES = [
-    "SOBRE APICES PULMONARES",
-    "SOBRE CUPULAS DIAF.",
-    "SOBRE ORBITAS",
-    "SOBRE OIDOS",
-    "SOBRE SPN",
-    "SOBRE MAXILOFACIAL",
-    "SOBRE C1",
-    "SOBRE D1",
-    "SOBRE L1",
-    "SOBRE SACRO",
-]
-
-LONGITUDES_TOPO = [128, 256, 512, 768, 1020, 1560]
+LONGITUDES_TOPO = [128, 256, 512]
 DIRECCIONES = ["CAUDO-CRANEAL", "CRANEO-CAUDAL"]
-INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN", "NO TRAGAR", "VALSALVA", "NO RESPIRE"]
+INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN"]
 
 
 def norm(s):
@@ -94,112 +35,7 @@ def norm(s):
         return ""
     s = str(s).strip().lower()
     s = unicodedata.normalize("NFKD", s)
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.replace("°", "").replace("º", "")
-    return " ".join(s.split())
-
-
-def norm_file_name(s):
-    s = norm(s)
-    s = s.replace("lateral derecho", "lateral_derecho")
-    s = s.replace("lateral izquierdo", "lateral_izquierdo")
-    s = s.replace("cabeza primero", "cabeza_primero")
-    s = s.replace("pies primero", "pies_primero")
-    s = s.replace("derecha", "derecho")
-    s = s.replace("izquierda", "izquierdo")
-    s = s.replace("arriba 0", "arriba")
-    s = s.replace("abajo 180", "abajo")
-    s = s.replace("decubito ", "")
-    s = s.replace(" ", "_")
-    while "__" in s:
-        s = s.replace("__", "_")
-    return s.strip("_")
-
-
-def _init_state():
-    defaults = {
-        "region_anatomica": None,
-        "examen": None,
-
-        "t1_posicion_paciente": None,
-        "t1_entrada_paciente": None,
-        "t1_posicion_tubo": None,
-        "t1_posicion_extremidades": None,
-        "t1_inicio": None,
-        "t1_fin": None,
-        "t1_kv": 100,
-        "t1_ma": 40,
-        "t1_mm_inicio": 0,
-        "t1_mm_fin": 400,
-        "t1_longitud": None,
-        "t1_direccion": None,
-        "t1_voz": None,
-        "t1_centraje_inicio": None,
-        "t1_iniciado": False,
-
-        "aplica_topograma_2": False,
-
-        "t2_posicion_paciente": None,
-        "t2_entrada_paciente": None,
-        "t2_posicion_tubo": None,
-        "t2_posicion_extremidades": None,
-        "t2_inicio": None,
-        "t2_fin": None,
-        "t2_kv": 100,
-        "t2_ma": 40,
-        "t2_mm_inicio": 0,
-        "t2_mm_fin": 400,
-        "t2_longitud": None,
-        "t2_direccion": None,
-        "t2_voz": None,
-        "t2_centraje_inicio": None,
-        "t2_iniciado": False,
-
-        "topograma_store": {},
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-    if not isinstance(st.session_state["topograma_store"], dict):
-        st.session_state["topograma_store"] = {}
-
-
-def selectbox_con_placeholder(label, options, key, placeholder="Seleccionar"):
-    opciones = [placeholder] + list(options)
-    actual = st.session_state.get(key)
-    index = opciones.index(actual) if actual in options else 0
-    valor = st.selectbox(label, opciones, index=index, key=f"widget_{key}")
-    st.session_state[key] = None if valor == placeholder else valor
-    return st.session_state[key]
-
-
-def number_input_con_stepper(label, key, min_value=0, max_value=4000, step=1):
-    current = int(st.session_state.get(key, 0))
-    c1, c2, c3 = st.columns([4, 1, 1])
-
-    with c1:
-        value = st.number_input(
-            label,
-            min_value=min_value,
-            max_value=max_value,
-            step=step,
-            value=current,
-            key=f"widget_{key}",
-            label_visibility="collapsed",
-        )
-    with c2:
-        minus = st.button("−", key=f"minus_{key}", use_container_width=True)
-    with c3:
-        plus = st.button("+", key=f"plus_{key}", use_container_width=True)
-
-    if minus:
-        value = max(min_value, int(value) - step)
-    if plus:
-        value = min(max_value, int(value) + step)
-
-    st.session_state[key] = int(value)
-    return st.session_state[key]
+    return "".join(c for c in s if not unicodedata.combining(c))
 
 
 @st.cache_data
@@ -209,7 +45,6 @@ def load_excel():
     df["posicion_norm"] = df["Posición paciente"].apply(norm)
     df["entrada_norm"] = df["entrada del paciente"].apply(norm)
     df["tubo_norm"] = df["Posición tubo"].apply(norm)
-    df["nombre_imagen_norm"] = df["nombre exacto de la imagen"].apply(norm)
     return df
 
 
@@ -218,11 +53,8 @@ def index_zip():
     idx = {}
     with zipfile.ZipFile(ZIP_PATH, "r") as z:
         for f in z.namelist():
-            if "__MACOSX" in f or f.endswith("/"):
-                continue
             name = Path(f).name
             idx[norm(name)] = f
-            idx[norm(Path(name).stem)] = f
     return idx
 
 
@@ -236,278 +68,93 @@ def get_image(nombre):
         return Image.open(io.BytesIO(data))
 
 
-def obtener_imagen_posicionamiento(posicion, entrada, tubo):
-    objetivos = {
-        norm_file_name(f"topograma_{entrada}_{posicion}_{tubo}"),
-        norm_file_name(f"{entrada}_{posicion}_{tubo}"),
-    }
-    exts = {".png", ".jpg", ".jpeg", ".webp"}
-
-    fuentes = []
-    if DIR_IMAGENES_TOPO_POS.exists():
-        fuentes.append(DIR_IMAGENES_TOPO_POS)
-
-    if ZIP_IMAGENES_TOPO_POS.exists():
-        CACHE_IMAGENES_TOPO_POS.mkdir(parents=True, exist_ok=True)
-        marker = CACHE_IMAGENES_TOPO_POS / ".ok"
-        if not marker.exists():
-            with zipfile.ZipFile(ZIP_IMAGENES_TOPO_POS, "r") as zf:
-                zf.extractall(CACHE_IMAGENES_TOPO_POS)
-            marker.write_text("ok", encoding="utf-8")
-
-        interna = CACHE_IMAGENES_TOPO_POS / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
-        if interna.exists():
-            fuentes.append(interna)
-        else:
-            fuentes.append(CACHE_IMAGENES_TOPO_POS)
-
-    for fuente in fuentes:
-        if not fuente.exists():
-            continue
-        for ruta in fuente.rglob("*"):
-            if not ruta.is_file() or ruta.suffix.lower() not in exts:
-                continue
-            stem = norm_file_name(ruta.stem)
-            if stem in objetivos:
-                return ruta
-
-    return None
-
-
-def _guardar_topograma_en_store(prefix, posicion, entrada, tubo, extremidades, inicio, fin, centraje, mm_inicio, mm_fin, longitud, direccion, voz):
-    store = st.session_state["topograma_store"]
-    store[f"{prefix}_posicion_paciente"] = posicion
-    store[f"{prefix}_entrada_paciente"] = entrada
-    store[f"{prefix}_posicion_tubo"] = tubo
-    store[f"{prefix}_posicion_extremidades"] = extremidades
-    store[f"{prefix}_inicio"] = inicio
-    store[f"{prefix}_fin"] = fin
-    store[f"{prefix}_centraje_inicio"] = centraje
-    store[f"{prefix}_mm_inicio"] = mm_inicio
-    store[f"{prefix}_mm_fin"] = mm_fin
-    store[f"{prefix}_longitud"] = longitud
-    store[f"{prefix}_direccion"] = direccion
-    store[f"{prefix}_voz"] = voz
-    store[f"{prefix}_kv"] = 100
-    store[f"{prefix}_ma"] = 40
-
-
-def _render_bloque_posicionamiento(prefix, titulo):
-    st.markdown(f"### 🛏️ Posicionamiento del paciente — {titulo}")
-
-    col_form, col_img = st.columns([1.05, 1], gap="large")
-
-    with col_form:
-        r1 = st.columns(2, gap="medium")
-        with r1[0]:
-            posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, f"{prefix}_posicion_paciente")
-        with r1[1]:
-            entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, f"{prefix}_entrada_paciente")
-
-        r2 = st.columns(2, gap="medium")
-        with r2[0]:
-            tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, f"{prefix}_posicion_tubo")
-        with r2[1]:
-            extremidades = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, f"{prefix}_posicion_extremidades")
-
-        st.markdown(
-            """
-            <div style="
-                min-height:120px;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                text-align:center;
-                border-radius:12px;
-                border:1px dashed #2c2c2c;
-                padding:16px;
-                margin-top:12px;
-            ">
-                Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col_img:
-        st.markdown(f"### 🖼️ {titulo}")
-        ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, tubo) if (posicion and entrada and tubo) else None
-
-        with st.container(border=True):
-            if ruta_pos is not None:
-                st.image(str(ruta_pos), use_container_width=True)
-                st.caption(f"Proyección: AP · Tubo: {tubo}")
-            else:
-                st.markdown(
-                    """
-                    <div style="
-                        min-height:320px;
-                        display:flex;
-                        flex-direction:column;
-                        align-items:center;
-                        justify-content:center;
-                        text-align:center;
-                    ">
-                        <div style="font-size:42px;">☢️</div>
-                        <div style="margin-top:12px;">Proyección: AP · Tubo: None</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-    return posicion, entrada, tubo, extremidades
-
-
-def _render_bloque_parametros(prefix, titulo, examen, posicion, entrada, tubo, extremidades, df):
-    st.markdown(f"### 📡 Parámetros {titulo}")
-
-    row1 = st.columns(5, gap="medium")
-    with row1[0]:
-        inicio = selectbox_con_placeholder(f"Inicio {titulo}", INICIO_TOPO_OPCIONES, f"{prefix}_inicio")
-    with row1[1]:
-        fin = selectbox_con_placeholder(f"Fin {titulo}", FIN_TOPO_OPCIONES, f"{prefix}_fin")
-    with row1[2]:
-        st.markdown("kV")
-        st.text_input(
-            "kV",
-            value="100",
-            disabled=True,
-            label_visibility="collapsed",
-            key=f"widget_{prefix}_kv",
-        )
-    with row1[3]:
-        st.markdown("mA")
-        st.text_input(
-            "mA",
-            value="40",
-            disabled=True,
-            label_visibility="collapsed",
-            key=f"widget_{prefix}_ma",
-        )
-    with row1[4]:
-        centraje = selectbox_con_placeholder("Centraje inicio de topograma", ENTRADAS_PACIENTE, f"{prefix}_centraje_inicio")
-
-    row2 = st.columns(5, gap="medium")
-    with row2[0]:
-        st.markdown(f"mm inicio {titulo}")
-        mm_inicio = number_input_con_stepper(f"mm inicio {titulo}", f"{prefix}_mm_inicio")
-    with row2[1]:
-        st.markdown(f"mm fin {titulo}")
-        mm_fin = number_input_con_stepper(f"mm fin {titulo}", f"{prefix}_mm_fin")
-    with row2[2]:
-        longitud = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, f"{prefix}_longitud")
-    with row2[3]:
-        direccion = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, f"{prefix}_direccion")
-    with row2[4]:
-        voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, f"{prefix}_voz")
-
-    faltantes = []
-    if not examen:
-        faltantes.append("Examen")
-    if not posicion:
-        faltantes.append("Posición paciente")
-    if not entrada:
-        faltantes.append("Entrada")
-    if not tubo:
-        faltantes.append("Posición tubo")
-    if not longitud:
-        faltantes.append("Longitud")
-    if not direccion:
-        faltantes.append("Dirección")
-    if not voz:
-        faltantes.append("Instrucción de voz")
-
-    if faltantes:
-        st.warning("Completa todos los campos antes de iniciar:\n\n" + " · ".join(faltantes))
-
-    completos = all([examen, posicion, entrada, tubo, longitud, direccion, voz])
-
-    if st.button(
-        f"☢️ INICIAR {titulo.upper()}",
-        key=f"btn_iniciar_{prefix}",
-        use_container_width=True,
-        disabled=not completos,
-    ):
-        st.session_state[f"{prefix}_iniciado"] = True
-        _guardar_topograma_en_store(
-            prefix=prefix,
-            posicion=posicion,
-            entrada=entrada,
-            tubo=tubo,
-            extremidades=extremidades,
-            inicio=inicio,
-            fin=fin,
-            centraje=centraje,
-            mm_inicio=mm_inicio,
-            mm_fin=mm_fin,
-            longitud=longitud,
-            direccion=direccion,
-            voz=voz,
-        )
-
-    if st.session_state.get(f"{prefix}_iniciado", False):
-        st.markdown(f"#### {titulo} adquirido")
-
-        sel = df[
-            (df["examen_norm"] == norm(examen))
-            & (df["posicion_norm"] == norm(posicion))
-            & (df["entrada_norm"] == norm(entrada))
-            & (df["tubo_norm"] == norm(tubo))
-        ]
-
-        if not sel.empty:
-            nombre = sel.iloc[0]["nombre exacto de la imagen"]
-            img = get_image(nombre)
-
-            if img:
-                st.image(img, width=350)
-                st.success(f"{titulo} adquirido")
-            else:
-                st.error(f"No se encontró imagen: {nombre}")
-        else:
-            st.warning(
-                "No hay coincidencia en el Excel para esta combinación: "
-                f"examen='{examen}', posición='{posicion}', entrada='{entrada}', tubo='{tubo}'"
-            )
-
-        if st.button(f"↺ Repetir {titulo.lower()}", key=f"btn_reset_{prefix}", use_container_width=True):
-            st.session_state[f"{prefix}_iniciado"] = False
-            st.rerun()
+def selectbox_con_placeholder(label, options, key):
+    opciones = ["Seleccionar"] + list(options)
+    val = st.selectbox(label, opciones, key=key)
+    return None if val == "Seleccionar" else val
 
 
 def render_topograma_panel():
-    _init_state()
+
     df = load_excel()
-    store = st.session_state["topograma_store"]
 
     st.markdown("## 📡 Topograma")
 
-    st.markdown("### 🏥 Datos del Examen")
-    col_ex1, col_ex2 = st.columns([1, 1], gap="medium")
-    with col_ex1:
-        region = selectbox_con_placeholder("Región anatómica", list(REGIONES.keys()), "region_anatomica")
-    with col_ex2:
-        examenes = REGIONES.get(region, []) if region else []
-        examen = selectbox_con_placeholder("Examen", examenes, "examen")
+    # -------------------------
+    # 🔥 NUEVO LAYOUT
+    # -------------------------
+    col1, col2, col3 = st.columns([1, 1, 1.2], gap="large")
 
-    store["region_anatomica"] = region
-    store["examen"] = examen
+    # -------------------------
+    # DATOS EXAMEN
+    # -------------------------
+    with col1:
+        st.markdown("### 🧾 Datos del examen")
 
-    st.markdown("---")
-    posicion1, entrada1, tubo1, extremidades1 = _render_bloque_posicionamiento("t1", "Topograma 1")
-    _render_bloque_parametros("t1", "Topograma 1", examen, posicion1, entrada1, tubo1, extremidades1, df)
+        region = selectbox_con_placeholder("Región anatómica", REGIONES.keys(), "region")
+        examen = selectbox_con_placeholder("Examen", REGIONES.get(region, []), "examen")
 
-    aplica_t2 = st.checkbox(
-        "¿Aplica Topograma 2?",
-        key="widget_aplica_topograma_2",
-        value=bool(st.session_state.get("aplica_topograma_2", False)),
-    )
-    st.session_state["aplica_topograma_2"] = aplica_t2
-    store["aplica_topograma_2"] = aplica_t2
+        with st.container(border=True):
+            st.markdown("##### Vista anatómica")
 
-    if aplica_t2:
-        st.markdown("---")
-        posicion2, entrada2, tubo2, extremidades2 = _render_bloque_posicionamiento("t2", "Topograma 2")
-        _render_bloque_parametros("t2", "Topograma 2", examen, posicion2, entrada2, tubo2, extremidades2, df)
+            st.markdown(
+                """
+                <div style="height:160px; display:flex; align-items:center; justify-content:center;">
+                    <span style="opacity:0.5;">Imagen anatómica</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    return store
+    # -------------------------
+    # POSICIONAMIENTO
+    # -------------------------
+    with col2:
+        st.markdown("### 🛏️ Posicionamiento")
+
+        posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, "pos")
+        entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, "entrada")
+        tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, "tubo")
+        extremidades = selectbox_con_placeholder("Extremidades", POS_EXTREMIDADES, "ext")
+
+        with st.container(border=True):
+            st.markdown("##### Posicionamiento")
+
+            if posicion and entrada and tubo:
+                st.success("Posicionamiento definido")
+            else:
+                st.info("Completa los campos")
+
+    # -------------------------
+    # TOPOGRAMA
+    # -------------------------
+    with col3:
+        st.markdown("### ✅ Topograma adquirido")
+
+        if st.button("☢️ INICIAR TOPOGRAMA"):
+
+            sel = df[
+                (df["examen_norm"] == norm(examen))
+                & (df["posicion_norm"] == norm(posicion))
+                & (df["entrada_norm"] == norm(entrada))
+                & (df["tubo_norm"] == norm(tubo))
+            ]
+
+            if not sel.empty:
+                nombre = sel.iloc[0]["nombre exacto de la imagen"]
+                img = get_image(nombre)
+
+                if img:
+                    st.image(img, use_container_width=True)
+                    st.success("Topograma adquirido correctamente")
+                else:
+                    st.error("Imagen no encontrada")
+            else:
+                st.warning("No hay coincidencia en Excel")
+
+    return {
+        "examen": examen,
+        "t1_posicion_paciente": posicion,
+        "t1_entrada_paciente": entrada,
+        "t1_posicion_tubo": tubo,
+    }
