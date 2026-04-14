@@ -4,6 +4,7 @@ from ui.topograma import render_topograma
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
+
 def main():
     st.title("PlaniTC_v2")
 
@@ -38,6 +39,7 @@ def main():
     with tabs[5]:
         st.subheader("Inyectora")
         st.info("Pendiente de modularizar")
+
 
 if __name__ == "__main__":
     main()
