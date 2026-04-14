@@ -5,16 +5,8 @@ from ui.topograma import render_topograma_panel
 def _init_adquisicion_state():
     if "exploraciones_adq" not in st.session_state:
         st.session_state["exploraciones_adq"] = [
-            {
-                "id": "topo_1",
-                "tipo": "topograma",
-                "nombre": "Topograma",
-            },
-            {
-                "id": "exp_1",
-                "tipo": "adquisicion",
-                "nombre": "SIN CONTRASTE",
-            },
+            {"id": "topo_1", "tipo": "topograma", "nombre": "Topograma"},
+            {"id": "exp_1", "tipo": "adquisicion", "nombre": "SIN CONTRASTE"},
         ]
 
     if "exploracion_adq_activa" not in st.session_state:
@@ -41,11 +33,7 @@ def render_adquisicion():
 
         if st.button("＋ Agregar exploración", use_container_width=True):
             idx = sum(1 for e in st.session_state["exploraciones_adq"] if e["tipo"] == "adquisicion") + 1
-            nueva = {
-                "id": f"exp_{idx}",
-                "tipo": "adquisicion",
-                "nombre": "SIN CONTRASTE",
-            }
+            nueva = {"id": f"exp_{idx}", "tipo": "adquisicion", "nombre": "SIN CONTRASTE"}
             st.session_state["exploraciones_adq"].append(nueva)
             st.session_state["exploracion_adq_activa"] = nueva["id"]
             st.rerun()
