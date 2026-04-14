@@ -39,6 +39,7 @@ def norm(s):
 
 
 @st.cache_data
+
 def load_excel():
     df = pd.read_excel(EXCEL_PATH)
     df["examen_norm"] = df["examen"].apply(norm)
@@ -49,6 +50,7 @@ def load_excel():
 
 
 @st.cache_data
+
 def index_zip():
     idx = {}
     with zipfile.ZipFile(ZIP_PATH, "r") as z:
@@ -68,20 +70,21 @@ def get_image(nombre):
         return Image.open(io.BytesIO(data))
 
 
+
 def selectbox_con_placeholder(label, options, key):
     opciones = ["Seleccionar"] + list(options)
     val = st.selectbox(label, opciones, key=key)
     return None if val == "Seleccionar" else val
 
 
-def render_topograma_panel():
 
+def render_topograma_panel():
     df = load_excel()
 
     st.markdown("## 📡 Topograma")
 
     # -------------------------
-    # 🔥 NUEVO LAYOUT
+    # LAYOUT PRINCIPAL
     # -------------------------
     col1, col2, col3 = st.columns([1, 1, 1.2], gap="large")
 
@@ -96,7 +99,6 @@ def render_topograma_panel():
 
         with st.container(border=True):
             st.markdown("##### Vista anatómica")
-
             st.markdown(
                 """
                 <div style="height:160px; display:flex; align-items:center; justify-content:center;">
@@ -107,7 +109,7 @@ def render_topograma_panel():
             )
 
     # -------------------------
-    # POSICIONAMIENTO
+    # POSICIONAMIENTO + PARÁMETROS TOPOGRAMA
     # -------------------------
     with col2:
         st.markdown("### 🛏️ Posicionamiento")
@@ -125,6 +127,21 @@ def render_topograma_panel():
             else:
                 st.info("Completa los campos")
 
+        st.markdown("### ⚙️ Parámetros topograma")
+
+        col_p1, col_p2 = st.columns(2, gap="medium")
+
+        with col_p1:
+            longitud = selectbox_con_placeholder("Longitud (mm)", LONGITUDES_TOPO, "longitud_topo")
+            direccion = selectbox_con_placeholder("Dirección", DIRECCIONES, "direccion_topo")
+
+        with col_p2:
+            instruccion = selectbox_con_placeholder(
+                "Instrucción de voz",
+                INSTRUCCIONES_VOZ,
+                "voz_topo",
+            )
+
     # -------------------------
     # TOPOGRAMA
     # -------------------------
@@ -132,7 +149,6 @@ def render_topograma_panel():
         st.markdown("### ✅ Topograma adquirido")
 
         if st.button("☢️ INICIAR TOPOGRAMA"):
-
             sel = df[
                 (df["examen_norm"] == norm(examen))
                 & (df["posicion_norm"] == norm(posicion))
@@ -152,9 +168,16 @@ def render_topograma_panel():
             else:
                 st.warning("No hay coincidencia en Excel")
 
-    return {
+    store = {
         "examen": examen,
         "t1_posicion_paciente": posicion,
         "t1_entrada_paciente": entrada,
         "t1_posicion_tubo": tubo,
+        "t1_posicion_extremidades": extremidades,
+        "t1_longitud": longitud,
+        "t1_direccion": direccion,
+        "t1_instruccion_voz": instruccion,
     }
+
+    st.session_state["topograma_store"] = store
+    return store
