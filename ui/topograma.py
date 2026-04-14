@@ -311,6 +311,66 @@ input {
 
 </style>
 """, unsafe_allow_html=True)
+    st.markdown("### 📡 Topograma")
+
+# CSS 1 (el que ya tenías)
+st.markdown("""
+<style>
+...
+</style>
+""", unsafe_allow_html=True)
+
+# 👇 AQUÍ PEGAS EL NUEVO
+st.markdown("""
+<style>
+
+/* SELECTBOX */
+div[data-baseweb="select"] > div {
+    background-color: #1a1d24 !important;
+    color: white !important;
+    border: 1px solid #444 !important;
+    border-radius: 10px !important;
+}
+
+div[data-baseweb="select"] span {
+    color: white !important;
+}
+
+div[data-baseweb="popover"] {
+    background-color: #1a1d24 !important;
+    color: white !important;
+}
+
+/* INPUTS */
+.stNumberInput input,
+.stTextInput input,
+input[type="text"],
+input[type="number"] {
+    background-color: #1a1d24 !important;
+    color: white !important;
+    border: 1px solid #444 !important;
+    border-radius: 10px !important;
+    -webkit-text-fill-color: white !important;
+}
+
+/* LABELS */
+label, .stMarkdown, .stCaption, p, span, div {
+    color: white;
+}
+
+/* Checkbox */
+.stCheckbox label {
+    color: white !important;
+}
+
+/* Flecha */
+svg {
+    color: white !important;
+    fill: white !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
     left, middle, right = st.columns([1.15, 1.2, 1.2], gap="large")
 
