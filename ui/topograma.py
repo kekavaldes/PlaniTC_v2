@@ -184,7 +184,6 @@ def number_input_con_stepper(label, key, min_value=0, max_value=4000, step=1):
 @st.cache_data
 def load_excel():
     df = pd.read_excel(EXCEL_PATH)
-    # normalizados robustos
     df["examen_norm"] = df["examen"].apply(norm)
     df["posicion_norm"] = df["Posición paciente"].apply(norm)
     df["entrada_norm"] = df["entrada del paciente"].apply(norm)
@@ -258,119 +257,77 @@ def render_topograma_panel():
     df = load_excel()
 
     st.markdown("### 📡 Topograma")
+
     st.markdown("""
-<style>
+    <style>
+    .stApp {
+        background-color: #0e1117;
+        color: white;
+    }
 
-/* Fondo general */
-.stApp {
-    background-color: #0e1117;
-    color: white;
-}
+    h1, h2, h3, h4, h5, h6,
+    p, label, span, div {
+        color: white !important;
+    }
 
-/* Títulos */
-h1, h2, h3, h4 {
-    color: white !important;
-}
+    div[data-testid="stVerticalBlock"] > div {
+        background-color: #161b22;
+        border-radius: 12px;
+        padding: 12px;
+    }
 
-/* Cards / contenedores */
-div[data-testid="stVerticalBlock"] > div {
-    background-color: #1c1f26;
-    border-radius: 12px;
-    padding: 12px;
-}
+    div[data-baseweb="select"] > div {
+        background-color: #1a1d24 !important;
+        color: white !important;
+        border: 1px solid #444 !important;
+        border-radius: 10px !important;
+    }
 
-/* Selectbox */
-div[data-baseweb="select"] {
-    background-color: #2a2e36 !important;
-    color: white !important;
-}
+    div[data-baseweb="select"] span {
+        color: white !important;
+    }
 
-/* Inputs */
-input {
-    background-color: #2a2e36 !important;
-    color: white !important;
-}
+    div[data-baseweb="popover"] {
+        background-color: #1a1d24 !important;
+        color: white !important;
+    }
 
-/* Botón principal */
-.stButton button {
-    background-color: #2a2e36;
-    color: white;
-    border-radius: 10px;
-    border: 1px solid #444;
-}
+    .stNumberInput input,
+    .stTextInput input,
+    input[type="text"],
+    input[type="number"] {
+        background-color: #1a1d24 !important;
+        color: white !important;
+        border: 1px solid #444 !important;
+        border-radius: 10px !important;
+        -webkit-text-fill-color: white !important;
+    }
 
-/* Botón hover */
-.stButton button:hover {
-    background-color: #3a3f4b;
-}
+    .stButton button {
+        background-color: #1c1f26 !important;
+        color: white !important;
+        border-radius: 10px !important;
+        border: 1px solid #444 !important;
+    }
 
-/* Mensajes */
-.stAlert {
-    border-radius: 10px;
-}
+    .stButton button:hover {
+        background-color: #2a2e36 !important;
+    }
 
-</style>
-""", unsafe_allow_html=True)
-    st.markdown("### 📡 Topograma")
+    .stCheckbox label {
+        color: white !important;
+    }
 
-# CSS 1 (el que ya tenías)
-st.markdown("""
-<style>
-...
-</style>
-""", unsafe_allow_html=True)
+    svg {
+        color: white !important;
+        fill: white !important;
+    }
 
-# 👇 AQUÍ PEGAS EL NUEVO
-st.markdown("""
-<style>
-
-/* SELECTBOX */
-div[data-baseweb="select"] > div {
-    background-color: #1a1d24 !important;
-    color: white !important;
-    border: 1px solid #444 !important;
-    border-radius: 10px !important;
-}
-
-div[data-baseweb="select"] span {
-    color: white !important;
-}
-
-div[data-baseweb="popover"] {
-    background-color: #1a1d24 !important;
-    color: white !important;
-}
-
-/* INPUTS */
-.stNumberInput input,
-.stTextInput input,
-input[type="text"],
-input[type="number"] {
-    background-color: #1a1d24 !important;
-    color: white !important;
-    border: 1px solid #444 !important;
-    border-radius: 10px !important;
-    -webkit-text-fill-color: white !important;
-}
-
-/* LABELS */
-label, .stMarkdown, .stCaption, p, span, div {
-    color: white;
-}
-
-/* Checkbox */
-.stCheckbox label {
-    color: white !important;
-}
-
-/* Flecha */
-svg {
-    color: white !important;
-    fill: white !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
+    .stAlert {
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     left, middle, right = st.columns([1.15, 1.2, 1.2], gap="large")
 
