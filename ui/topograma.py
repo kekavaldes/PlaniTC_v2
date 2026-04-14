@@ -269,9 +269,18 @@ def _init_state():
 
 def _save_store_and_session(**kwargs):
     t = st.session_state["topograma_store"]
+    widget_keys = {
+        "region", "examen", "posicion", "entrada", "t1pt", "extremidades",
+        "t1_inicio_ref", "t1_fin_ref", "t1_ini_mm", "t1_fin_mm", "t1_centraje_inicio",
+        "t1l", "t1dir", "t1vz", "aplica_topo2",
+        "t2_posicion_paciente", "t2_entrada", "t2pt", "t2_extremidades",
+        "t2_inicio_ref", "t2_fin_ref", "t2_ini_mm", "t2_fin_mm", "t2_centraje_inicio",
+        "t2l", "t2dir", "t2vz",
+    }
     for k, v in kwargs.items():
-        st.session_state[k] = v
         t[k] = v
+        if k not in widget_keys:
+            st.session_state[k] = v
 
 
 def render_topograma_panel():
