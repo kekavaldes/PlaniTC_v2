@@ -3,6 +3,17 @@ import streamlit as st
 from ui.topograma import render_topograma_panel
 
 
+NOMBRES_EXPLORACION = [
+    "Seleccionar",
+    "SIN CONTRASTE",
+    "ARTERIAL",
+    "ANGIOGRÁFICA",
+    "BOLUS TEST",
+    "BOLUS TRACKING",
+    "VENOSA",
+    "TARDÍA",
+]
+
 TIPOS_EXPLORACION = [
     "HELICOIDAL",
     "SECUENCIAL",
@@ -177,9 +188,9 @@ def _init_adquisicion_state():
         st.session_state["exp_activa"] = "topograma"
 
 
-def _crear_exploracion_base(nombre="SIN CONTRASTE"):
+def _crear_exploracion_base():
     return {
-        "nombre": nombre,
+        "nombre": "Seleccionar",
         "tipo_item": "adquisicion",
         "tipo_exploracion": "HELICOIDAL",
         "modulacion_corriente": "SELECCIONAR",
@@ -205,7 +216,7 @@ def _crear_exploracion_base(nombre="SIN CONTRASTE"):
 def _asegurar_exploraciones():
     if st.session_state["exploraciones"]:
         return
-    st.session_state["exploraciones"] = [_crear_exploracion_base("SIN CONTRASTE")]
+    st.session_state["exploraciones"] = [_crear_exploracion_base()]
 
 
 def _calcular_cobertura(config_detectores, doble_muestreo):
@@ -246,6 +257,13 @@ def _topograma_tiene_minimo(store):
     )
 
 
+def _nombre_visible_exploracion(exp, idx):
+    nombre = exp.get("nombre", "Seleccionar")
+    if not nombre or nombre == "Seleccionar":
+        return f"EXPLORACIÓN {idx + 1}"
+    return nombre
+
+
 def _render_lista_exploraciones():
     st.markdown("### 📋 Exploraciones")
 
@@ -260,14 +278,13 @@ def _render_lista_exploraciones():
     )
 
     for idx, exp in enumerate(st.session_state["exploraciones"]):
-        etiqueta = exp.get("nombre", f"Exploración {idx+1}")
+        etiqueta = _nombre_visible_exploracion(exp, idx)
         if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{idx}", use_container_width=True):
             st.session_state["exp_activa"] = idx
 
     st.markdown(" ")
     if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
-        n = len(st.session_state["exploraciones"]) + 1
-        st.session_state["exploraciones"].append(_crear_exploracion_base(f"EXPLORACIÓN {n}"))
+        st.session_state["exploraciones"].append(_crear_exploracion_base())
         st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
         st.rerun()
 
@@ -279,7 +296,6 @@ def _render_lista_exploraciones():
             with col1:
                 if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
                     copia = dict(st.session_state["exploraciones"][idx])
-                    copia["nombre"] = f"{copia.get('nombre', 'Exploración')} copia"
                     st.session_state["exploraciones"].insert(idx + 1, copia)
                     st.session_state["exp_activa"] = idx + 1
                     st.rerun()
@@ -314,16 +330,32 @@ def _render_resumen_topograma(store):
         )
 
 
+def _ajustar_tipo_segun_nombre(exp):
+    nombre = exp.get("nombre", "Seleccionar")
+
+    if nombre == "BOLUS TEST":
+        exp["tipo_exploracion"] = "TEST BOLUS"
+    elif nombre == "BOLUS TRACKING":
+        exp["tipo_exploracion"] = "BOLUS TRACKING"
+    elif exp.get("tipo_exploracion") in ["TEST BOLUS", "BOLUS TRACKING"] and nombre not in ["BOLUS TEST", "BOLUS TRACKING"]:
+        exp["tipo_exploracion"] = "HELICOIDAL"
+
+
 def _render_parametros_adquisicion(exp, idx, store):
-    st.markdown(f"## ⚙️ {exp.get('nombre', f'Exploración {idx+1}')}")
+    titulo = _nombre_visible_exploracion(exp, idx)
+    st.markdown(f"## ⚙️ {titulo}")
 
     row_head = st.columns([2, 1], gap="medium")
     with row_head[0]:
-        exp["nombre"] = st.text_input(
+        exp["nombre"] = _selectbox_con_indice(
             "Nombre de la exploración",
-            value=exp.get("nombre", f"EXPLORACIÓN {idx+1}"),
+            NOMBRES_EXPLORACION,
+            exp.get("nombre", "Seleccionar"),
             key=f"nombre_exp_{idx}",
         )
+
+    _ajustar_tipo_segun_nombre(exp)
+
     with row_head[1]:
         exp["tipo_exploracion"] = _selectbox_con_indice(
             "Tipo exploración",
@@ -469,6 +501,8 @@ def _render_parametros_adquisicion(exp, idx, store):
 
     mensajes = []
 
+    if exp.get("nombre") == "Seleccionar":
+        mensajes.append("⚠️ Falta seleccionar el nombre de la exploración.")
     if exp.get("kv") == "SELECCIONAR":
         mensajes.append("⚠️ Falta seleccionar kV.")
     if exp.get("config_detectores") == "SELECCIONAR":
@@ -502,7 +536,7 @@ def render_adquisicion():
         activa = st.session_state.get("exp_activa", "topograma")
 
         if activa == "topograma":
-            store = render_topograma_panel()
+            render_topograma_panel()
         else:
             store = st.session_state.get("topograma_store", {})
 
