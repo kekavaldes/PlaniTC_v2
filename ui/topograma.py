@@ -112,10 +112,11 @@ def cargar_tabla_topogramas_adquiridos():
     if excel_path is None or not excel_path.exists():
         return pd.DataFrame()
 
-    try:
-        df = pd.read_excel(excel_path)
-    except Exception:
-        return pd.DataFrame()
+   try:
+    df = pd.read_excel(excel_path)
+except Exception as e:
+    st.error(f"Error leyendo Excel de topogramas: {e}")
+    return pd.DataFrame()
 
     columnas_norm = {_norm_topo_texto(c): c for c in df.columns}
 
