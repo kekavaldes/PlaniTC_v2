@@ -13,8 +13,12 @@ ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
 # Imágenes de posicionamiento subidas por la usuaria
-DIR_IMAGENES_TOPO_POS = BASE_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
-ZIP_IMAGENES_TOPO_POS = BASE_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
+# Ruta corregida para GitHub / Streamlit
+DIR_IMAGENES_TOPO_POS = BASE_DIR / "data/images/posicionamiento_topograma"
+
+# (opcional, si vuelves a usar zip más adelante)
+ZIP_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
+
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
 
 REGIONES = {
