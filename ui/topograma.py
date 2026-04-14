@@ -12,19 +12,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
 
-# Imágenes de posicionamiento subidas por la usuaria
-# Ruta corregida para GitHub / Streamlit
+# Imágenes de posicionamiento
 DIR_IMAGENES_TOPO_POS = BASE_DIR / "data/images/posicionamiento_topograma"
-
-# (opcional, si vuelves a usar zip más adelante)
 ZIP_IMAGENES_TOPO_POS = BASE_DIR / "data/images/IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
-
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
 
 # Imágenes de datos del examen por región anatómica
-DIR_IMAGENES_DATOS_EXAMEN = BASE_DIR / "data/images/datos_examen_topograma"
-ZIP_IMAGENES_DATOS_EXAMEN = BASE_DIR / "data/images/datos_examen_topograma.zip"
-CACHE_IMAGENES_DATOS_EXAMEN = BASE_DIR / "_cache_datos_examen_topograma"
+DIR_DATOS_EXAMEN_TOPO = BASE_DIR / "data/images/datos_examen_topograma"
+ZIP_DATOS_EXAMEN_TOPO = BASE_DIR / "data/images/datos_examen_topograma.zip"
+CACHE_DATOS_EXAMEN_TOPO = BASE_DIR / "_cache_datos_examen_topograma"
 
 REGIONES = {
     "CABEZA":   ["CEREBRO", "ORBITAS", "OIDOS", "SPN", "MAXILOFACIAL"],
@@ -36,8 +32,6 @@ REGIONES = {
     "ANGIO":    ["ATC CEREBRO", "ATC CUELLO", "ATC CEREBRO CUELLO", "ATC TORAX", "ATC ABDOMEN", "ATC ABDOMEN-PELVIS", "ATC TORAX-ABDOMEN-PELVIS", "EESS DERECHA", "EESS IZQUIERDA", "EEII"],
 }
 
-
-# Ampliadas para cubrir las combinaciones de las imágenes subidas.
 POSICIONES_PACIENTE = [
     "DECUBITO SUPINO",
     "DECUBITO PRONO",
@@ -170,14 +164,14 @@ def preparar_fuentes_imagenes_topograma():
 
 
 @st.cache_data
-def preparar_fuentes_imagenes_datos_examen():
+def preparar_fuentes_datos_examen():
     fuentes = []
-    if DIR_IMAGENES_DATOS_EXAMEN.exists():
-        fuentes.append(DIR_IMAGENES_DATOS_EXAMEN)
+    if DIR_DATOS_EXAMEN_TOPO.exists():
+        fuentes.append(DIR_DATOS_EXAMEN_TOPO)
 
-    if ZIP_IMAGENES_DATOS_EXAMEN.exists():
-        CACHE_IMAGENES_DATOS_EXAMEN.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(ZIP_IMAGENES_DATOS_EXAMEN, "r") as zf:
+    if ZIP_DATOS_EXAMEN_TOPO.exists():
+        CACHE_DATOS_EXAMEN_TOPO.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(ZIP_DATOS_EXAMEN_TOPO, "r") as zf:
             for member in zf.namelist():
                 if member.endswith("/"):
                     continue
@@ -185,33 +179,34 @@ def preparar_fuentes_imagenes_datos_examen():
                 base = Path(member_fixed).name
                 if base.startswith("._") or base == ".DS_Store" or "__MACOSX" in member:
                     continue
-                out = CACHE_IMAGENES_DATOS_EXAMEN / base
+                out = CACHE_DATOS_EXAMEN_TOPO / base
                 if not out.exists():
                     with zf.open(member) as src, open(out, "wb") as dst:
                         dst.write(src.read())
-        fuentes.append(CACHE_IMAGENES_DATOS_EXAMEN)
+        fuentes.append(CACHE_DATOS_EXAMEN_TOPO)
 
     return [f for f in fuentes if f.exists()]
 
 
-def obtener_imagen_region_topograma(region: str):
+def _normalizar_region_archivo(region: str) -> str:
+    nombre = norm(region).upper()
+    nombre = nombre.replace("Ñ", "N")
+    return nombre
+
+
+def obtener_imagen_region(region: str):
     if not region:
         return None
 
-    region_norm = norm(region)
+    region_norm = _normalizar_region_archivo(region)
     extensiones = {".png", ".jpg", ".jpeg", ".webp"}
 
-    for fuente in preparar_fuentes_imagenes_datos_examen():
+    for fuente in preparar_fuentes_datos_examen():
         for ruta in fuente.rglob("*"):
             if not ruta.is_file() or ruta.suffix.lower() not in extensiones:
                 continue
-            if ruta.name.startswith("._") or ruta.name == ".DS_Store":
-                continue
-
-            stem = norm(ruta.stem)
-
-            # Coincidencia flexible por nombre de región
-            if stem == region_norm or stem.startswith(region_norm + "_") or region_norm in stem.split("_"):
+            stem_norm = _normalizar_region_archivo(ruta.stem)
+            if stem_norm == region_norm:
                 return Image.open(ruta)
 
     return None
@@ -274,7 +269,6 @@ def normalizar_nombre_archivo_topograma(nombre: str) -> str:
 
 
 def obtener_imagen_posicionamiento_topograma(posicion: str, entrada: str, pos_tubo: str):
-
     if not posicion or not entrada or not pos_tubo:
         return None
 
@@ -290,9 +284,6 @@ def obtener_imagen_posicionamiento_topograma(posicion: str, entrada: str, pos_tu
                 continue
 
             nombre = norm(ruta.stem)
-
-            # DEBUG (puedes comentar después)
-            # st.write("Evaluando:", nombre)
 
             if (
                 entrada_norm in nombre
@@ -349,6 +340,25 @@ def _build_store(**kwargs):
     st.session_state["topograma_store"] = prev
 
 
+def _render_imagen_region(region: str, alto_px: int = 220, width_px: int = 180):
+    img_region = obtener_imagen_region(region)
+    if img_region is not None:
+        st.markdown(
+            f'<div style="height:{alto_px}px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">',
+            unsafe_allow_html=True,
+        )
+        st.image(img_region, width=width_px)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"""
+            <div style="height:{alto_px}px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                <span style="opacity:0.45;">Imagen anatómica no encontrada</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
 
 def render_topograma_panel():
     store = st.session_state.get("topograma_store", {})
@@ -368,26 +378,7 @@ def render_topograma_panel():
 
         with st.container(border=True):
             st.markdown("##### Vista anatómica")
-            img_region = obtener_imagen_region(region)
-
-if img_region:
-    with st.container(border=True):
-        st.markdown(
-            '<div style="height:220px; display:flex; align-items:center; justify-content:center;">',
-            unsafe_allow_html=True
-        )
-        st.image(img_region, width=180)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-            else:
-                st.markdown(
-                    """
-                    <div style="height:280px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                        <span style="opacity:0.45;">Imagen anatómica no encontrada</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            _render_imagen_region(region, alto_px=220, width_px=180)
 
     with col2:
         st.markdown("### 🛏️ Posicionamiento del paciente")
@@ -504,18 +495,7 @@ if img_region:
 
             with st.container(border=True):
                 st.markdown("##### Vista anatómica")
-                img_region_t2 = obtener_imagen_region_topograma(t2_region)
-                if img_region_t2 is not None:
-                    st.image(img_region_t2, use_container_width=True)
-                else:
-                    st.markdown(
-                        """
-                        <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                            <span style="opacity:0.45;">Imagen anatómica Topograma 2 no encontrada</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                _render_imagen_region(t2_region, alto_px=220, width_px=180)
 
         with mid_t2:
             st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
@@ -645,7 +625,6 @@ if img_region:
         t2_ini_ref=t2_ini_ref,
         t2_fin_ref=t2_fin_ref,
         t2_centraje_inicio=t2_centraje_inicio,
-        # aliases que espera adquisicion-2.py
         t1_posicion_paciente=posicion,
         t1_entrada_paciente=entrada,
         t1_posicion_tubo=tubo,
