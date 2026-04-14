@@ -1,4 +1,4 @@
-# topograma FINAL FIX
+# ui/topograma.py (VERSIÓN HÍBRIDA FUNCIONAL)
 
 import io
 import zipfile
@@ -22,8 +22,7 @@ def norm(s):
 
 @st.cache_data
 def load_excel():
-    df = pd.read_excel(EXCEL_PATH)
-    return df
+    return pd.read_excel(EXCEL_PATH)
 
 @st.cache_data
 def index_zip():
@@ -47,26 +46,38 @@ def get_image(nombre):
         return Image.open(io.BytesIO(data))
 
 def render_topograma_panel():
-    st.title("Topograma FINAL")
+    st.markdown("## 📡 Topograma")
 
     df = load_excel()
 
-    examen = st.selectbox("Examen", df["examen"].dropna().unique())
-    posicion = st.selectbox("Posición paciente", df["Posición paciente"].dropna().unique())
-    entrada = st.selectbox("Entrada", df["entrada del paciente"].dropna().unique())
-    tubo = st.selectbox("Posición tubo", df["Posición tubo"].dropna().unique())
+    examen = st.selectbox("Examen", sorted(df["examen"].dropna().unique()))
+    posicion = st.selectbox("Posición paciente", sorted(df["Posición paciente"].dropna().unique()))
+    entrada = st.selectbox("Entrada", sorted(df["entrada del paciente"].dropna().unique()))
+    tubo = st.selectbox("Posición tubo", sorted(df["Posición tubo"].dropna().unique()))
 
-    sel = df[
-        (df["examen"] == examen) &
-        (df["Posición paciente"] == posicion) &
-        (df["entrada del paciente"] == entrada) &
-        (df["Posición tubo"] == tubo)
-    ]
+    if "topograma_iniciado" not in st.session_state:
+        st.session_state.topograma_iniciado = False
 
-    if not sel.empty:
-        nombre = sel.iloc[0]["nombre exacto de la imagen"]
-        img = get_image(nombre)
-        if img:
-            st.image(img)
+    if st.button("☢️ INICIAR TOPOGRAMA", use_container_width=True):
+        st.session_state.topograma_iniciado = True
+
+    if st.session_state.topograma_iniciado:
+        st.success("Topograma adquirido")
+
+        sel = df[
+            (df["examen"] == examen) &
+            (df["Posición paciente"] == posicion) &
+            (df["entrada del paciente"] == entrada) &
+            (df["Posición tubo"] == tubo)
+        ]
+
+        if not sel.empty:
+            nombre = sel.iloc[0]["nombre exacto de la imagen"]
+            img = get_image(nombre)
+
+            if img:
+                st.image(img, width=350)
+            else:
+                st.error(f"No se encontró imagen: {nombre}")
         else:
-            st.error(f"No se encontró imagen: {nombre}")
+            st.warning("No hay coincidencia en el Excel para esta combinación")
