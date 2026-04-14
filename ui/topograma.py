@@ -120,10 +120,11 @@ def _init_state():
     defaults = {
         "region_anatomica": None,
         "examen": None,
-        "posicion_paciente": None,
-        "entrada_paciente": None,
-        "posicion_tubo": None,
-        "posicion_extremidades": None,
+
+        "t1_posicion_paciente": None,
+        "t1_entrada_paciente": None,
+        "t1_posicion_tubo": None,
+        "t1_posicion_extremidades": None,
         "t1_inicio": None,
         "t1_fin": None,
         "t1_kv": 100,
@@ -134,6 +135,14 @@ def _init_state():
         "t1_direccion": None,
         "t1_voz": None,
         "t1_centraje_inicio": None,
+        "t1_iniciado": False,
+
+        "aplica_topograma_2": False,
+
+        "t2_posicion_paciente": None,
+        "t2_entrada_paciente": None,
+        "t2_posicion_tubo": None,
+        "t2_posicion_extremidades": None,
         "t2_inicio": None,
         "t2_fin": None,
         "t2_kv": 100,
@@ -144,14 +153,14 @@ def _init_state():
         "t2_direccion": None,
         "t2_voz": None,
         "t2_centraje_inicio": None,
-        "aplica_topograma_2": False,
-        "topograma_1_iniciado": False,
-        "topograma_2_iniciado": False,
+        "t2_iniciado": False,
+
         "topograma_store": {},
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+
     if not isinstance(st.session_state["topograma_store"], dict):
         st.session_state["topograma_store"] = {}
 
@@ -245,6 +254,7 @@ def obtener_imagen_posicionamiento(posicion, entrada, tubo):
             with zipfile.ZipFile(ZIP_IMAGENES_TOPO_POS, "r") as zf:
                 zf.extractall(CACHE_IMAGENES_TOPO_POS)
             marker.write_text("ok", encoding="utf-8")
+
         interna = CACHE_IMAGENES_TOPO_POS / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
         if interna.exists():
             fuentes.append(interna)
@@ -260,126 +270,16 @@ def obtener_imagen_posicionamiento(posicion, entrada, tubo):
             stem = norm_file_name(ruta.stem)
             if stem in objetivos:
                 return ruta
+
     return None
 
 
-def aplicar_estilo_oscuro():
-    st.markdown(
-        """
-        <style>
-        .stApp {
-            background-color: #0e1117;
-            color: white;
-        }
-
-        h1, h2, h3, h4, h5, h6, p, label, span, div {
-            color: white !important;
-        }
-
-        section[data-testid="stSidebar"] * {
-            color: white !important;
-        }
-
-        div[data-baseweb="select"] > div {
-            background: #111111 !important;
-            color: white !important;
-            border: 1px solid #444 !important;
-            border-radius: 10px !important;
-        }
-
-        div[data-baseweb="select"] * {
-            color: white !important;
-        }
-
-        .stTextInput input,
-        .stNumberInput input,
-        .stDateInput input,
-        input[type="text"],
-        input[type="number"],
-        textarea {
-            background-color: #111111 !important;
-            color: white !important;
-            border: 1px solid #444 !important;
-            border-radius: 10px !important;
-            -webkit-text-fill-color: white !important;
-        }
-
-        div[data-baseweb="popover"] {
-            background-color: #111111 !important;
-            color: white !important;
-        }
-
-        div[data-baseweb="popover"] * {
-            color: white !important;
-        }
-
-        ul[role="listbox"] {
-            background-color: #111111 !important;
-            border: 1px solid #444 !important;
-        }
-
-        ul[role="listbox"] li {
-            background-color: #111111 !important;
-            color: white !important;
-        }
-
-        ul[role="listbox"] li:hover {
-            background-color: #222222 !important;
-            color: white !important;
-        }
-
-        ul[role="listbox"] li[aria-selected="true"] {
-            background-color: #2a2e36 !important;
-            color: white !important;
-        }
-
-        div[role="listbox"] {
-            background-color: #111111 !important;
-            color: white !important;
-            border: 1px solid #444 !important;
-        }
-
-        div[role="option"] {
-            background-color: #111111 !important;
-            color: white !important;
-        }
-
-        div[role="option"]:hover {
-            background-color: #222222 !important;
-            color: white !important;
-        }
-
-        .stButton button {
-            background-color: #1c1f26 !important;
-            color: white !important;
-            border-radius: 10px !important;
-            border: 1px solid #444 !important;
-        }
-
-        .stButton button:hover {
-            background-color: #2a2e36 !important;
-            color: white !important;
-        }
-
-        .stCheckbox label {
-            color: white !important;
-        }
-
-        .stAlert {
-            border-radius: 10px;
-        }
-
-        [data-testid="stMarkdownContainer"] p {
-            color: white !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def guardar_topograma_en_store(prefix, inicio, fin, centraje, mm_inicio, mm_fin, longitud, direccion, voz):
+def _guardar_topograma_en_store(prefix, posicion, entrada, tubo, extremidades, inicio, fin, centraje, mm_inicio, mm_fin, longitud, direccion, voz):
     store = st.session_state["topograma_store"]
+    store[f"{prefix}_posicion_paciente"] = posicion
+    store[f"{prefix}_entrada_paciente"] = entrada
+    store[f"{prefix}_posicion_tubo"] = tubo
+    store[f"{prefix}_posicion_extremidades"] = extremidades
     store[f"{prefix}_inicio"] = inicio
     store[f"{prefix}_fin"] = fin
     store[f"{prefix}_centraje_inicio"] = centraje
@@ -392,9 +292,74 @@ def guardar_topograma_en_store(prefix, inicio, fin, centraje, mm_inicio, mm_fin,
     store[f"{prefix}_ma"] = 40
 
 
-def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df):
-    st.markdown("---")
-    st.markdown(f"## 📡 {titulo}")
+def _render_bloque_posicionamiento(prefix, titulo):
+    st.markdown(f"### 🛏️ Posicionamiento del paciente — {titulo}")
+
+    col_form, col_img = st.columns([1.05, 1], gap="large")
+
+    with col_form:
+        r1 = st.columns(2, gap="medium")
+        with r1[0]:
+            posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, f"{prefix}_posicion_paciente")
+        with r1[1]:
+            entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, f"{prefix}_entrada_paciente")
+
+        r2 = st.columns(2, gap="medium")
+        with r2[0]:
+            tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, f"{prefix}_posicion_tubo")
+        with r2[1]:
+            extremidades = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, f"{prefix}_posicion_extremidades")
+
+        st.markdown(
+            """
+            <div style="
+                min-height:120px;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                text-align:center;
+                border-radius:12px;
+                border:1px dashed #2c2c2c;
+                padding:16px;
+                margin-top:12px;
+            ">
+                Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_img:
+        st.markdown(f"### 🖼️ {titulo}")
+        ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, tubo) if (posicion and entrada and tubo) else None
+
+        with st.container(border=True):
+            if ruta_pos is not None:
+                st.image(str(ruta_pos), use_container_width=True)
+                st.caption(f"Proyección: AP · Tubo: {tubo}")
+            else:
+                st.markdown(
+                    """
+                    <div style="
+                        min-height:320px;
+                        display:flex;
+                        flex-direction:column;
+                        align-items:center;
+                        justify-content:center;
+                        text-align:center;
+                    ">
+                        <div style="font-size:42px;">☢️</div>
+                        <div style="margin-top:12px;">Proyección: AP · Tubo: None</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    return posicion, entrada, tubo, extremidades
+
+
+def _render_bloque_parametros(prefix, titulo, examen, posicion, entrada, tubo, extremidades, df):
+    st.markdown(f"### 📡 Parámetros {titulo}")
 
     row1 = st.columns(5, gap="medium")
     with row1[0]:
@@ -420,11 +385,7 @@ def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df)
             key=f"widget_{prefix}_ma",
         )
     with row1[4]:
-        centraje = selectbox_con_placeholder(
-            "Centraje inicio de topograma",
-            ENTRADAS_PACIENTE,
-            f"{prefix}_centraje_inicio",
-        )
+        centraje = selectbox_con_placeholder("Centraje inicio de topograma", ENTRADAS_PACIENTE, f"{prefix}_centraje_inicio")
 
     row2 = st.columns(5, gap="medium")
     with row2[0]:
@@ -468,8 +429,12 @@ def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df)
         disabled=not completos,
     ):
         st.session_state[f"{prefix}_iniciado"] = True
-        guardar_topograma_en_store(
+        _guardar_topograma_en_store(
             prefix=prefix,
+            posicion=posicion,
+            entrada=entrada,
+            tubo=tubo,
+            extremidades=extremidades,
             inicio=inicio,
             fin=fin,
             centraje=centraje,
@@ -481,7 +446,7 @@ def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df)
         )
 
     if st.session_state.get(f"{prefix}_iniciado", False):
-        st.markdown(f"### {titulo} adquirido")
+        st.markdown(f"#### {titulo} adquirido")
 
         sel = df[
             (df["examen_norm"] == norm(examen))
@@ -505,77 +470,32 @@ def render_bloque_topograma(prefix, titulo, examen, posicion, entrada, tubo, df)
                 f"examen='{examen}', posición='{posicion}', entrada='{entrada}', tubo='{tubo}'"
             )
 
-        if st.button(
-            f"↺ Repetir {titulo.lower()}",
-            key=f"btn_reset_{prefix}",
-            use_container_width=True,
-        ):
+        if st.button(f"↺ Repetir {titulo.lower()}", key=f"btn_reset_{prefix}", use_container_width=True):
             st.session_state[f"{prefix}_iniciado"] = False
             st.rerun()
 
 
 def render_topograma_panel():
     _init_state()
-    aplicar_estilo_oscuro()
-
-    store = st.session_state["topograma_store"]
     df = load_excel()
+    store = st.session_state["topograma_store"]
 
-    st.markdown("### 📡 Topograma")
+    st.markdown("## 📡 Topograma")
 
-    left, middle, right = st.columns([1.15, 1.2, 1.2], gap="large")
-
-    with left:
-        st.markdown("#### 🏥 Datos del Examen")
+    st.markdown("### 🏥 Datos del Examen")
+    col_ex1, col_ex2 = st.columns([1, 1], gap="medium")
+    with col_ex1:
         region = selectbox_con_placeholder("Región anatómica", list(REGIONES.keys()), "region_anatomica")
+    with col_ex2:
         examenes = REGIONES.get(region, []) if region else []
         examen = selectbox_con_placeholder("Examen", examenes, "examen")
 
-        with st.container(border=True):
-            if region:
-                st.markdown(f"**Región seleccionada:** {region}")
-            else:
-                st.markdown("Selecciona una región anatómica")
-
-    with middle:
-        st.markdown("#### 🛏️ Posicionamiento del paciente")
-        posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, "posicion_paciente")
-        entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, "entrada_paciente")
-        tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, "posicion_tubo")
-        extremidades = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, "posicion_extremidades")
-
-        with st.container(border=True):
-            st.markdown("Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.")
-
-    with right:
-        st.markdown("#### 🖼️ Topograma")
-        ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, tubo) if (posicion and entrada and tubo) else None
-
-        with st.container(border=True):
-            if ruta_pos is not None:
-                st.image(str(ruta_pos), use_container_width=True)
-                st.caption(f"Proyección: AP · Tubo: {tubo}")
-            else:
-                st.markdown(" ")
-                st.markdown("☢️")
-                st.caption("Proyección: AP · Tubo:")
-
     store["region_anatomica"] = region
     store["examen"] = examen
-    store["posicion_paciente"] = posicion
-    store["entrada_paciente"] = entrada
-    store["posicion_tubo"] = tubo
-    store["posicion_extremidades"] = extremidades
 
-    render_bloque_topograma(
-        prefix="t1",
-        titulo="Topograma 1",
-        examen=examen,
-        posicion=posicion,
-        entrada=entrada,
-        tubo=tubo,
-        df=df,
-    )
+    st.markdown("---")
+    posicion1, entrada1, tubo1, extremidades1 = _render_bloque_posicionamiento("t1", "Topograma 1")
+    _render_bloque_parametros("t1", "Topograma 1", examen, posicion1, entrada1, tubo1, extremidades1, df)
 
     aplica_t2 = st.checkbox(
         "¿Aplica Topograma 2?",
@@ -586,14 +506,8 @@ def render_topograma_panel():
     store["aplica_topograma_2"] = aplica_t2
 
     if aplica_t2:
-        render_bloque_topograma(
-            prefix="t2",
-            titulo="Topograma 2",
-            examen=examen,
-            posicion=posicion,
-            entrada=entrada,
-            tubo=tubo,
-            df=df,
-        )
+        st.markdown("---")
+        posicion2, entrada2, tubo2, extremidades2 = _render_bloque_posicionamiento("t2", "Topograma 2")
+        _render_bloque_parametros("t2", "Topograma 2", examen, posicion2, entrada2, tubo2, extremidades2, df)
 
     return store
