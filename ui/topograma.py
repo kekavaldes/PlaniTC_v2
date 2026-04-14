@@ -20,12 +20,14 @@ DIR_IMAGENES_TOPO_POS = IMAGES_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
 ZIP_IMAGENES_TOPO_POS = IMAGES_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
 
+
+# Opciones adaptadas al Excel real
 REGIONES = {
-    "CABEZA": ["CEREBRO", "ORBITAS", "OIDOS", "SPN", "MAXILOFACIAL"],
+    "CABEZA": ["CEREBRO", "SPN", "MAXILOFACIAL", "ORBITAS", "OIDOS"],
     "CUELLO": ["CUELLO"],
+    "COLUMNA": ["CERVICAL", "DORSAL", "LUMBAR"],
+    "CUERPO": ["TORAX", "ABDOMEN", "PELVIS", "ABDOMEN-PELVIS", "PIELOTC", "TORAX-ABDOMEN-PELVIS"],
     "EESS": ["HOMBRO", "BRAZO", "CODO", "ANTEBRAZO", "MUÑECA", "MANO"],
-    "COLUMNA": ["CERVICAL", "DORSAL", "LUMBAR", "SACROCOXIS"],
-    "CUERPO": ["TORAX", "ABDOMEN", "PELVIS", "ABDOMEN-PELVIS", "TORAX-ABDOMEN-PELVIS"],
     "EEII": ["CADERA", "MUSLO", "RODILLA", "PIERNA", "TOBILLO", "PIE"],
     "ANGIO": [
         "ATC CEREBRO",
@@ -35,17 +37,17 @@ REGIONES = {
         "ATC ABDOMEN",
         "ATC ABDOMEN-PELVIS",
         "ATC TORAX-ABDOMEN-PELVIS",
-        "EESS DERECHA",
-        "EESS IZQUIERDA",
-        "EEII",
+        "ATC EESS DERECHA",
+        "ATC EESS IZQUIERDA",
+        "ATC EEII",
     ],
 }
 
 POSICIONES_PACIENTE = [
     "DECUBITO SUPINO",
     "DECUBITO PRONO",
-    "DECUBITO LATERAL DERECHO",
-    "DECUBITO LATERAL IZQUIERDO",
+    "LATERAL DERECHO",
+    "LATERAL IZQUIERDO",
 ]
 
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
@@ -175,7 +177,6 @@ def _norm_text(v):
 
 def _norm_file_name(v):
     s = _norm_text(v)
-    s = s.replace("decubito ", "")
     s = s.replace("lateral derecho", "lateral_derecho")
     s = s.replace("lateral izquierdo", "lateral_izquierdo")
     s = s.replace("cabeza primero", "cabeza_primero")
@@ -227,27 +228,39 @@ def cargar_tabla_topogramas():
                 return columnas_norm[nombre]
         return None
 
+    # Adaptado al Excel real de la usuaria
     col_examen = buscar_columna("examen", "tipo examen", "estudio", "exploracion")
-    col_posicion = buscar_columna("posicion", "posicion paciente", "posicion_paciente")
-    col_entrada = buscar_columna("entrada")
+    col_posicion = buscar_columna("posicion paciente", "posicion", "posicion_paciente")
+    col_entrada = buscar_columna("entrada del paciente", "entrada")
     col_tubo = buscar_columna("posicion tubo", "posicion_tubo", "tubo", "pos tubo")
-    col_imagen = buscar_columna("imagen", "nombre imagen", "nombre_imagen", "archivo", "archivo imagen")
+    col_imagen = buscar_columna("nombre exacto de la imagen", "nombre imagen", "nombre_imagen", "archivo", "archivo imagen", "imagen")
 
     if not all([col_examen, col_posicion, col_entrada, col_tubo, col_imagen]):
-        return pd.DataFrame(), "El Excel no tiene las columnas esperadas."
+        detalle = {
+            "columnas_en_excel": list(df.columns),
+            "detectadas": {
+                "examen": col_examen,
+                "posicion": col_posicion,
+                "entrada": col_entrada,
+                "tubo": col_tubo,
+                "imagen": col_imagen,
+            },
+        }
+        return pd.DataFrame(), f"El Excel no tiene las columnas esperadas. {detalle}"
 
     out = pd.DataFrame({
-        "examen": df[col_examen].fillna("").astype(str),
-        "posicion_paciente": df[col_posicion].fillna("").astype(str),
-        "entrada": df[col_entrada].fillna("").astype(str),
-        "pos_tubo": df[col_tubo].fillna("").astype(str),
-        "nombre_imagen": df[col_imagen].fillna("").astype(str),
+        "examen": df[col_examen].fillna("").astype(str).str.strip(),
+        "posicion_paciente": df[col_posicion].fillna("").astype(str).str.strip(),
+        "entrada": df[col_entrada].fillna("").astype(str).str.strip(),
+        "pos_tubo": df[col_tubo].fillna("").astype(str).str.strip(),
+        "nombre_imagen": df[col_imagen].fillna("").astype(str).str.strip(),
     })
 
     out["examen_norm"] = out["examen"].apply(_norm_text)
     out["posicion_norm"] = out["posicion_paciente"].apply(_norm_text)
     out["entrada_norm"] = out["entrada"].apply(_norm_text)
     out["pos_tubo_norm"] = out["pos_tubo"].apply(_norm_text)
+    out["nombre_imagen_norm"] = out["nombre_imagen"].apply(_norm_text)
     return out, None
 
 
