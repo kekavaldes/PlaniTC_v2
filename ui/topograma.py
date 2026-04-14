@@ -1,18 +1,74 @@
 import streamlit as st
 
 
+REGIONES_EXAMENES = {
+    "Cráneo": [
+        "TC Cráneo",
+        "AngioTC Cerebral",
+        "Perfusión cerebral",
+    ],
+    "Cuello": [
+        "TC Cuello",
+        "AngioTC Cuello",
+    ],
+    "Tórax": [
+        "TC Tórax",
+        "AngioTC Tórax",
+        "AngioTC coronario",
+    ],
+    "Abdomen": [
+        "TC Abdomen",
+        "AngioTC Abdomen",
+    ],
+    "Pelvis": [
+        "TC Pelvis",
+        "AngioTC Pelvis",
+    ],
+    "Columna": [
+        "TC Columna cervical",
+        "TC Columna dorsal",
+        "TC Columna lumbar",
+    ],
+    "EESS": [
+        "TC Hombro",
+        "TC Brazo",
+        "TC Codo",
+        "TC Antebrazo",
+        "TC Muñeca",
+        "TC Mano",
+    ],
+    "EEII": [
+        "TC Cadera",
+        "TC Muslo",
+        "TC Rodilla",
+        "TC Pierna",
+        "TC Tobillo",
+        "TC Pie",
+    ],
+    "Cuerpo completo": [
+        "Body TC",
+        "Politraumatizado",
+    ],
+}
+
+
 def _init_topograma_state():
     if "topograma_store" not in st.session_state or not isinstance(st.session_state["topograma_store"], dict):
         st.session_state["topograma_store"] = {}
 
-    if "topograma_iniciado" not in st.session_state:
-        st.session_state["topograma_iniciado"] = False
+    defaults = {
+        "topograma_iniciado": False,
+        "topograma2_iniciado": False,
+        "aplica_topo2": False,
+        "region_anatomica": "",
+        "examen": "",
+        "posicion": "",
+        "entrada": "",
+    }
 
-    if "topograma2_iniciado" not in st.session_state:
-        st.session_state["topograma2_iniciado"] = False
-
-    if "aplica_topo2" not in st.session_state:
-        st.session_state["aplica_topo2"] = False
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
 
 def _selectbox_placeholder(label, options, key):
@@ -30,22 +86,42 @@ def render_topograma_panel():
     _init_topograma_state()
     store = st.session_state["topograma_store"]
 
-    posicion = st.session_state.get("posicion", "")
-    entrada = st.session_state.get("entrada", "")
-    examen = st.session_state.get("examen", "")
+    st.markdown("#### Datos del examen")
 
+    r1, r2 = st.columns(2)
+    with r1:
+        region = _selectbox_placeholder(
+            "Región anatómica",
+            list(REGIONES_EXAMENES.keys()),
+            "region_anatomica",
+        )
+
+    examenes = REGIONES_EXAMENES.get(region, []) if region else []
+    with r2:
+        examen = _selectbox_placeholder(
+            "Examen",
+            examenes,
+            "examen",
+        )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        posicion = _selectbox_placeholder(
+            "Posición",
+            ["Decúbito supino", "Decúbito prono", "Decúbito lateral"],
+            "posicion",
+        )
+    with c2:
+        entrada = _selectbox_placeholder(
+            "Entrada",
+            ["Cabeza", "Pies"],
+            "entrada",
+        )
+
+    store["region_anatomica"] = region
+    store["examen"] = examen
     store["posicion"] = posicion
     store["entrada"] = entrada
-    store["examen"] = examen
-
-    st.markdown("#### Datos del examen")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.text_input("Examen", value=examen, disabled=True)
-    with c2:
-        st.text_input("Posición", value=posicion, disabled=True)
-    with c3:
-        st.text_input("Entrada", value=entrada, disabled=True)
 
     st.markdown("---")
     st.markdown("## Topograma 1")
@@ -84,7 +160,8 @@ def render_topograma_panel():
             "t1vz",
         )
 
-    completos_t1 = all([topo1_pos, topo1_inicio, topo1_long, topo1_dir, topo1_voz])
+    completos_datos = all([region, examen, posicion, entrada])
+    completos_t1 = all([topo1_pos, topo1_inicio, topo1_long, topo1_dir, topo1_voz, completos_datos])
 
     if st.button("☢️  INICIAR TOPOGRAMA 1", key="btn_iniciar_topo1", use_container_width=True, disabled=not completos_t1):
         st.session_state["topograma_iniciado"] = True
@@ -141,7 +218,7 @@ def render_topograma_panel():
                 "t2vz",
             )
 
-        completos_t2 = all([topo2_pos, topo2_inicio, topo2_long, topo2_dir, topo2_voz])
+        completos_t2 = all([topo2_pos, topo2_inicio, topo2_long, topo2_dir, topo2_voz, completos_datos])
 
         if st.button("☢️  INICIAR TOPOGRAMA 2", key="btn_iniciar_topo2", use_container_width=True, disabled=not completos_t2):
             st.session_state["topograma2_iniciado"] = True
