@@ -399,34 +399,106 @@ def render_topograma_panel():
             st.session_state["topograma_iniciado"] = False
             st.rerun()
 
+    t2_region = t2_examen = None
     t2_pos = t2_entrada = t2_tubo = t2_ext = t2_long = t2_dir = t2_voz = None
     t2_ini_ref = t2_fin_ref = t2_centraje_inicio = None
 
     if aplica_topo2:
         st.markdown("---")
-        left_t2, right_t2 = st.columns([1.05, 1], gap="large")
+        left_t2, mid_t2, right_t2 = st.columns([1.0, 1.05, 1.0], gap="large")
+
         with left_t2:
+            st.markdown("### 🧾 Datos del examen — Topograma 2")
+            t2_region = selectbox_con_placeholder(
+                "Región anatómica",
+                list(REGIONES.keys()),
+                "t2_region_widget",
+                value=store.get("t2_region_anat")
+            )
+            t2_examen = selectbox_con_placeholder(
+                "Examen",
+                REGIONES.get(t2_region, []),
+                "t2_examen_widget",
+                value=store.get("t2_examen")
+            )
+
+            with st.container(border=True):
+                st.markdown("##### Vista anatómica")
+                st.markdown(
+                    """
+                    <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                        <span style="opacity:0.45;">Imagen anatómica Topograma 2 pendiente</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        with mid_t2:
             st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
             a, b = st.columns(2)
             with a:
-                t2_pos = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, "t2_pos_widget", value=store.get("t2_posicion"))
+                t2_pos = selectbox_con_placeholder(
+                    "Posición paciente",
+                    POSICIONES_PACIENTE,
+                    "t2_pos_widget",
+                    value=store.get("t2_posicion")
+                )
             with b:
-                t2_entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, "t2_entrada_widget", value=store.get("t2_entrada"))
+                t2_entrada = selectbox_con_placeholder(
+                    "Entrada",
+                    ENTRADAS_PACIENTE,
+                    "t2_entrada_widget",
+                    value=store.get("t2_entrada")
+                )
             with a:
-                t2_tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, "t2_tubo_widget", value=store.get("t2pt"))
+                t2_tubo = selectbox_con_placeholder(
+                    "Posición tubo",
+                    POS_TUBO,
+                    "t2_tubo_widget",
+                    value=store.get("t2pt")
+                )
             with b:
-                t2_ext = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, "t2_ext_widget", value=store.get("t2_extremidades"))
+                t2_ext = selectbox_con_placeholder(
+                    "Posición extremidades",
+                    POS_EXTREMIDADES,
+                    "t2_ext_widget",
+                    value=store.get("t2_extremidades")
+                )
+
+            with st.container(border=True):
+                st.markdown("##### Posicionamiento")
+                img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
+                if img_pos2 is not None:
+                    st.image(img_pos2, use_container_width=True)
+                else:
+                    st.markdown(
+                        """
+                        <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
+                            <span style="opacity:0.45;">Imagen de posicionamiento no encontrada</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
         with right_t2:
-            st.markdown("### 🖼️ Topograma 2")
-            img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
-            if img_pos2 is not None:
-                st.image(img_pos2, use_container_width=True)
+            st.markdown("### ✅ Topograma adquirido — Topograma 2")
+            if st.session_state.get("topograma2_iniciado", False):
+                img_topo2, err2 = obtener_imagen_topograma_adquirido(
+                    t2_examen or "",
+                    t2_pos or "",
+                    t2_entrada or "",
+                    t2_tubo or "",
+                )
+                if img_topo2 is not None:
+                    st.image(img_topo2, use_container_width=True)
+                    st.success("Topograma 2 adquirido correctamente.")
+                else:
+                    st.warning(err2 or "Imagen de Topograma 2 no encontrada")
             else:
                 st.markdown(
                     """
-                    <div style="height:240px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
-                        <span style="opacity:0.45;">Imagen de Topograma 2 no encontrada</span>
+                    <div style="height:240px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
+                        <span style="opacity:0.35;">Topograma 2 no iniciado</span>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -477,6 +549,8 @@ def render_topograma_panel():
         t1_centraje_inicio=t1_centraje_inicio,
         aplica_topograma_2=aplica_topo2,
         aplica_topo2=aplica_topo2,
+        t2_region_anat=t2_region,
+        t2_examen=t2_examen,
         t2_posicion=t2_pos,
         t2_entrada=t2_entrada,
         t2_extremidades=t2_ext,
