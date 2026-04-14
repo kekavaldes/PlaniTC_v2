@@ -20,10 +20,6 @@ DIR_IMAGENES_TOPO_POS = IMAGES_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA"
 ZIP_IMAGENES_TOPO_POS = IMAGES_DIR / "IMAGENES POSICIONAMIENTO TOPOGRAMA.zip"
 CACHE_IMAGENES_TOPO_POS = BASE_DIR / "_cache_imagenes_topograma"
 
-
-# ─────────────────────────────────────────────────────────────
-# Opciones más cercanas a tu original
-# ─────────────────────────────────────────────────────────────
 REGIONES = {
     "CABEZA": ["CEREBRO", "ORBITAS", "OIDOS", "SPN", "MAXILOFACIAL"],
     "CUELLO": ["CUELLO"],
@@ -53,7 +49,6 @@ POSICIONES_PACIENTE = [
 ]
 
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
-
 POS_TUBO = ["ARRIBA 0°", "ABAJO 180°", "DERECHA 90°", "IZQUIERDA 90°"]
 
 POS_EXTREMIDADES = [
@@ -92,45 +87,56 @@ FIN_TOPO_OPCIONES = [
     "SOBRE SACRO",
 ]
 
-KV_TOPO = [100]
-MA_TOPO = [40]
 LONGITUDES_TOPO = [128, 256, 512, 768, 1020, 1560]
 DIRECCIONES = ["CAUDO-CRANEAL", "CRANEO-CAUDAL"]
 INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN", "NO TRAGAR", "VALSALVA", "NO RESPIRE"]
 
 
-# ─────────────────────────────────────────────────────────────
-# Helpers UI
-# ─────────────────────────────────────────────────────────────
-def selectbox_con_placeholder(label, options, value=None, key=None, placeholder_text="Seleccionar", **kwargs):
-    opciones = list(options)
-    opciones_sin_placeholder = [
-        opt for opt in opciones
-        if not ((opt is None) or (isinstance(opt, str) and opt == placeholder_text))
-    ]
-    opciones_finales = [None] + opciones_sin_placeholder
+def _init_topograma_state():
+    defaults = {
+        "topograma_store": {},
+        "topograma_iniciado": False,
+        "topograma2_iniciado": False,
+        "aplica_topo2": False,
+        "region_anatomica": None,
+        "examen": None,
+        "posicion": None,
+        "entrada": None,
+        "pos_tubo": None,
+        "pos_extremidades": None,
+        "t1_inicio": None,
+        "t1_fin": None,
+        "t1_kv": 100,
+        "t1_ma": 40,
+        "t1_mm_inicio": 0,
+        "t1_mm_fin": 400,
+        "t1_longitud": None,
+        "t1_dir": None,
+        "t1_voz": None,
+        "t1_inicio_ref": None,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+    if not isinstance(st.session_state["topograma_store"], dict):
+        st.session_state["topograma_store"] = {}
 
-    if value in opciones_finales and value is not None:
-        indice = opciones_finales.index(value)
+
+def selectbox_con_placeholder(label, options, state_key, placeholder_text="Seleccionar", **kwargs):
+    opciones = [placeholder_text] + list(options)
+    actual = st.session_state.get(state_key)
+    if actual is None or actual not in options:
+        index = 0
     else:
-        indice = 0
+        index = opciones.index(actual)
 
-    return st.selectbox(
-        label,
-        opciones_finales,
-        index=indice,
-        key=key,
-        format_func=lambda x: placeholder_text if (x is None or x == placeholder_text) else str(x),
-        placeholder=placeholder_text,
-        **kwargs,
-    )
+    valor = st.selectbox(label, opciones, index=index, key=f"widget_{state_key}", **kwargs)
+    st.session_state[state_key] = None if valor == placeholder_text else valor
+    return st.session_state[state_key]
 
 
-def numero_con_botones(label, key, default=0, min_value=0, max_value=4000, step=1):
-    if key not in st.session_state:
-        st.session_state[key] = default
-
-    st.markdown(label)
+def numero_con_botones(label, state_key, default=0, min_value=0, max_value=4000, step=1):
+    current = int(st.session_state.get(state_key, default))
     c1, c2, c3 = st.columns([4, 1, 1])
     with c1:
         valor = st.number_input(
@@ -138,26 +144,23 @@ def numero_con_botones(label, key, default=0, min_value=0, max_value=4000, step=
             min_value=min_value,
             max_value=max_value,
             step=step,
-            key=f"input_{key}",
-            label_visibility="collapsed",
-            value=int(st.session_state[key]),
+            value=current,
+            key=f"widget_{state_key}",
         )
-        st.session_state[key] = valor
     with c2:
-        if st.button("−", key=f"minus_{key}", use_container_width=True):
-            st.session_state[key] = max(min_value, int(st.session_state[key]) - step)
-            st.rerun()
+        menos = st.button("−", key=f"minus_{state_key}", use_container_width=True)
     with c3:
-        if st.button("+", key=f"plus_{key}", use_container_width=True):
-            st.session_state[key] = min(max_value, int(st.session_state[key]) + step)
-            st.rerun()
+        mas = st.button("+", key=f"plus_{state_key}", use_container_width=True)
 
-    return st.session_state[key]
+    if menos:
+        valor = max(min_value, int(valor) - step)
+    if mas:
+        valor = min(max_value, int(valor) + step)
+
+    st.session_state[state_key] = int(valor)
+    return st.session_state[state_key]
 
 
-# ─────────────────────────────────────────────────────────────
-# Helpers de normalización / imágenes
-# ─────────────────────────────────────────────────────────────
 def _norm_text(v):
     if v is None:
         return ""
@@ -305,7 +308,6 @@ def obtener_imagen_topograma_adquirido(examen, posicion_paciente, entrada, pos_t
 
 def preparar_fuentes_posicionamiento():
     fuentes = []
-
     if DIR_IMAGENES_TOPO_POS.exists():
         fuentes.append(DIR_IMAGENES_TOPO_POS)
 
@@ -349,71 +351,20 @@ def obtener_imagen_posicionamiento(posicion, entrada, pos_tubo):
     return None
 
 
-# ─────────────────────────────────────────────────────────────
-# Estado
-# ─────────────────────────────────────────────────────────────
-def _init_topograma_state():
-    if "topograma_store" not in st.session_state or not isinstance(st.session_state["topograma_store"], dict):
-        st.session_state["topograma_store"] = {}
-
-    defaults = {
-        "topograma_iniciado": False,
-        "topograma2_iniciado": False,
-        "aplica_topo2": False,
-        "region_anatomica": None,
-        "examen": None,
-        "posicion": None,
-        "entrada": None,
-        "pos_tubo": None,
-        "pos_extremidades": None,
-        "t1_inicio": None,
-        "t1_fin": None,
-        "t1_kv": 100,
-        "t1_ma": 40,
-        "t1_mm_inicio": 0,
-        "t1_mm_fin": 400,
-        "t1_longitud": None,
-        "t1_dir": None,
-        "t1_voz": None,
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-
-# ─────────────────────────────────────────────────────────────
-# Render
-# ─────────────────────────────────────────────────────────────
 def render_topograma_panel():
     _init_topograma_state()
     store = st.session_state["topograma_store"]
 
-    # Encabezado superior similar al original
     st.markdown("### 📡 Topograma")
 
-    # Fila de paneles
     c_exam, c_pos, c_img = st.columns([1.2, 1.3, 1.3], gap="large")
 
     with c_exam:
         st.markdown("#### 🏥 Datos del Examen")
-        region = selectbox_con_placeholder(
-            "Región anatómica",
-            list(REGIONES.keys()),
-            value=st.session_state.get("region_anatomica"),
-            key="region_anatomica",
-        )
-        st.session_state["region_anatomica"] = region
-
+        region = selectbox_con_placeholder("Región anatómica", list(REGIONES.keys()), "region_anatomica")
         examenes = REGIONES.get(region, []) if region else []
-        examen = selectbox_con_placeholder(
-            "Examen",
-            examenes,
-            value=st.session_state.get("examen"),
-            key="examen",
-        )
-        st.session_state["examen"] = examen
+        examen = selectbox_con_placeholder("Examen", examenes, "examen")
 
-        st.markdown("")
         with st.container(border=True):
             if region:
                 st.markdown(f"**Región seleccionada:** {region}")
@@ -422,47 +373,17 @@ def render_topograma_panel():
 
     with c_pos:
         st.markdown("#### 🛏️ Posicionamiento del paciente")
-        posicion = selectbox_con_placeholder(
-            "Posición paciente",
-            POSICIONES_PACIENTE,
-            value=st.session_state.get("posicion"),
-            key="posicion",
-        )
-        st.session_state["posicion"] = posicion
-
-        entrada = selectbox_con_placeholder(
-            "Entrada",
-            ENTRADAS_PACIENTE,
-            value=st.session_state.get("entrada"),
-            key="entrada",
-        )
-        st.session_state["entrada"] = entrada
-
-        pos_tubo = selectbox_con_placeholder(
-            "Posición tubo",
-            POS_TUBO,
-            value=st.session_state.get("pos_tubo"),
-            key="pos_tubo",
-        )
-        st.session_state["pos_tubo"] = pos_tubo
-
-        pos_ext = selectbox_con_placeholder(
-            "Posición extremidades",
-            POS_EXTREMIDADES,
-            value=st.session_state.get("pos_extremidades"),
-            key="pos_extremidades",
-        )
-        st.session_state["pos_extremidades"] = pos_ext
+        posicion = selectbox_con_placeholder("Posición paciente", POSICIONES_PACIENTE, "posicion")
+        entrada = selectbox_con_placeholder("Entrada", ENTRADAS_PACIENTE, "entrada")
+        pos_tubo = selectbox_con_placeholder("Posición tubo", POS_TUBO, "pos_tubo")
+        pos_ext = selectbox_con_placeholder("Posición extremidades", POS_EXTREMIDADES, "pos_extremidades")
 
         with st.container(border=True):
             st.markdown("Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.")
 
     with c_img:
         st.markdown("#### 🖼️ Topograma")
-        ruta_pos = None
-        if posicion and entrada and pos_tubo:
-            ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, pos_tubo)
-
+        ruta_pos = obtener_imagen_posicionamiento(posicion, entrada, pos_tubo) if (posicion and entrada and pos_tubo) else None
         with st.container(border=True):
             if ruta_pos is not None:
                 st.image(str(ruta_pos), use_container_width=True)
@@ -472,7 +393,6 @@ def render_topograma_panel():
                 st.markdown("☢️")
                 st.caption("Proyección: AP · Tubo:")
 
-    # Guardado de estado base
     store["region_anatomica"] = region
     store["examen"] = examen
     store["posicion"] = posicion
@@ -485,61 +405,32 @@ def render_topograma_panel():
 
     f1, f2, f3, f4, f5 = st.columns(5, gap="medium")
     with f1:
-        t1_inicio = selectbox_con_placeholder(
-            "Inicio Topograma 1",
-            INICIO_TOPO_OPCIONES,
-            value=st.session_state.get("t1_inicio"),
-            key="t1_inicio",
-        )
+        t1_inicio = selectbox_con_placeholder("Inicio Topograma 1", INICIO_TOPO_OPCIONES, "t1_inicio")
     with f2:
-        t1_fin = selectbox_con_placeholder(
-            "Fin Topograma 1",
-            FIN_TOPO_OPCIONES,
-            value=st.session_state.get("t1_fin"),
-            key="t1_fin",
-        )
+        t1_fin = selectbox_con_placeholder("Fin Topograma 1", FIN_TOPO_OPCIONES, "t1_fin")
     with f3:
         st.markdown("kV")
-        st.text_input("kV", value="100", disabled=True, label_visibility="collapsed")
+        st.text_input("kV", value="100", disabled=True, label_visibility="collapsed", key="widget_kv_display")
     with f4:
         st.markdown("mA")
-        st.text_input("mA", value="40", disabled=True, label_visibility="collapsed")
+        st.text_input("mA", value="40", disabled=True, label_visibility="collapsed", key="widget_ma_display")
     with f5:
-        t1_inicio_ref = selectbox_con_placeholder(
-            "Centraje inicio de topograma",
-            ENTRADAS_PACIENTE,
-            value=st.session_state.get("t1_inicio_ref"),
-            key="t1_inicio_ref",
-        )
+        t1_inicio_ref = selectbox_con_placeholder("Centraje inicio de topograma", ENTRADAS_PACIENTE, "t1_inicio_ref")
 
     g1, g2, g3, g4, g5 = st.columns(5, gap="medium")
     with g1:
-        mm_inicio = numero_con_botones("mm inicio Topograma 1", "t1_mm_inicio", default=0, min_value=0, max_value=4000, step=1)
+        mm_inicio = numero_con_botones("mm inicio Topograma 1", "t1_mm_inicio", default=0)
     with g2:
-        mm_fin = numero_con_botones("mm fin Topograma 1", "t1_mm_fin", default=400, min_value=0, max_value=4000, step=1)
+        mm_fin = numero_con_botones("mm fin Topograma 1", "t1_mm_fin", default=400)
     with g3:
-        t1_longitud = selectbox_con_placeholder(
-            "Longitud de topograma (mm)",
-            LONGITUDES_TOPO,
-            value=st.session_state.get("t1_longitud"),
-            key="t1_longitud",
-        )
+        t1_longitud = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, "t1_longitud")
     with g4:
-        t1_dir = selectbox_con_placeholder(
-            "Dirección topograma",
-            DIRECCIONES,
-            value=st.session_state.get("t1_dir"),
-            key="t1_dir",
-        )
+        t1_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, "t1_dir")
     with g5:
-        t1_voz = selectbox_con_placeholder(
-            "Instrucción de voz",
-            INSTRUCCIONES_VOZ,
-            value=st.session_state.get("t1_voz"),
-            key="t1_voz",
-        )
+        t1_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, "t1_voz")
 
-    aplicar_t2 = st.checkbox("¿Aplica Topograma 2?", key="aplica_topo2")
+    aplicar_t2 = st.checkbox("¿Aplica Topograma 2?", key="widget_aplica_topo2", value=bool(st.session_state.get("aplica_topo2", False)))
+    st.session_state["aplica_topo2"] = aplicar_t2
     store["aplica_topo2"] = aplicar_t2
 
     faltantes = []
@@ -555,9 +446,7 @@ def render_topograma_panel():
     if faltantes:
         st.warning("Completa todos los campos antes de iniciar:\n\n" + " · ".join(faltantes))
 
-    completos_t1 = all([
-        region, examen, posicion, entrada, pos_tubo, t1_longitud, t1_dir, t1_voz
-    ])
+    completos_t1 = all([region, examen, posicion, entrada, pos_tubo, t1_longitud, t1_dir, t1_voz])
 
     if st.button("☢️ INICIAR TOPOGRAMA", key="btn_iniciar_topo1", use_container_width=True, disabled=not completos_t1):
         st.session_state["topograma_iniciado"] = True
@@ -578,13 +467,7 @@ def render_topograma_panel():
     if st.session_state.get("topograma_iniciado", False):
         st.markdown("---")
         st.markdown("### Topograma 1 adquirido")
-        img1, err1 = obtener_imagen_topograma_adquirido(
-            examen or "",
-            posicion or "",
-            entrada or "",
-            pos_tubo or "",
-        )
-
+        img1, err1 = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", pos_tubo or "")
         if img1 is not None:
             st.image(img1, width=360)
             st.success("Topograma 1 adquirido correctamente.")
