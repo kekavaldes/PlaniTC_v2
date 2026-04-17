@@ -686,8 +686,8 @@ def render_topograma_panel():
                     t2_tubo or "",
                 )
                 if img_topo2 is not None:
-                    # Topograma grande: llena todo el alto del contenedor y queda
-                    # pegado al borde INFERIOR → alinea con el scanner de la izquierda.
+                    # Ajuste visual: subir levemente la imagen para alinear bordes inferiores
+                    st.markdown('<div style="margin-top:-14px;">', unsafe_allow_html=True)
                     _render_imagen_alineada_abajo(
                         img_topo2,
                         altura_contenedor_px=H_IMG_TOPOGRAMA_T2,
@@ -695,6 +695,7 @@ def render_topograma_panel():
                         align="end",
                         fill_height=True,
                     )
+                    st.markdown('</div>', unsafe_allow_html=True)
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
                     _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "", alto_px=H_IMG_TOPOGRAMA_T2)
