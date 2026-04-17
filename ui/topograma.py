@@ -383,14 +383,13 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
-def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_pct: int = 100):
+def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_pct: int = 100, align: str = "end"):
     """
-    Renderiza una imagen PIL dentro de un contenedor de altura fija con la
-    imagen alineada al borde inferior (flex-end). Esto permite que múltiples
-    columnas tengan sus imágenes con el mismo borde inferior alineado.
+    Renderiza una imagen PIL dentro de un contenedor de altura fija.
 
-    - altura_contenedor_px: altura del contenedor (incluye la imagen centrada al fondo)
-    - max_width_pct: ancho máximo de la imagen como % del contenedor (para achicarla)
+    - altura_contenedor_px: altura del contenedor en px.
+    - max_width_pct: ancho máximo de la imagen como % del contenedor.
+    - align: "start" (pegada arriba), "center" (centrada), "end" (pegada al borde inferior).
     """
     buf = io.BytesIO()
     formato = "PNG"
@@ -402,12 +401,14 @@ def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_
     b64 = base64.b64encode(buf.getvalue()).decode()
     mime = "image/png" if formato == "PNG" else "image/jpeg"
 
+    align_items = {"start": "flex-start", "center": "center", "end": "flex-end"}.get(align, "flex-end")
+
     st.markdown(
         f"""
         <div style="
             height:{altura_contenedor_px}px;
             display:flex;
-            align-items:flex-end;
+            align-items:{align_items};
             justify-content:center;
             width:100%;
         ">
@@ -608,41 +609,16 @@ def render_topograma_panel():
         t2_region = region
         t2_examen = examen
 
-        # Banner informativo: deja claro qué datos se están reutilizando.
-        region_label = region or "—"
-        examen_label = examen or "—"
-        st.markdown(
-            f"""
-            <div style="
-                background:#0E2A44;
-                border:1px solid #164463;
-                border-radius:10px;
-                padding:0.75rem 1rem;
-                margin-bottom:1rem;
-                display:flex;
-                align-items:center;
-                gap:0.6rem;
-            ">
-                <span style="font-size:1.05rem;">📋</span>
-                <span style="color:#DCEEFF; font-size:0.92rem;">
-                    <strong>Topograma 2</strong> usa los datos del examen del Topograma 1 —
-                    Región: <strong>{region_label}</strong> · Examen: <strong>{examen_label}</strong>
-                </span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
         mid_t2, right_t2 = st.columns([1, 1], gap="large")
 
         # Alineación de bordes inferiores en Topograma 2:
-        # - Col izq (mid_t2) tiene 2 filas de dropdowns (~170 px) antes de la imagen
-        # - Col der (right_t2) solo tiene el header
-        # Por eso el contenedor del topograma es ~170 px más alto que el del scanner,
-        # para que ambos bordes inferiores queden al mismo nivel.
-        H_IMG_LATERAL_T2 = 320     # scanner (con dropdowns arriba)
-        H_IMG_TOPOGRAMA_T2 = 490   # topograma (solo header arriba) → + ~170 px
-        MAX_W_SCANNER_T2 = 50      # scanner achicado, referencial
+        # - Col izq (mid_t2): header + 4 dropdowns en 2×2 (~170 px) + scanner pegado ARRIBA
+        # - Col der (right_t2): header + topograma grande, pegado al borde INFERIOR
+        # El contenedor del topograma es ~170 px más alto que el del scanner,
+        # para compensar los dropdowns y que ambos bordes inferiores coincidan.
+        H_IMG_LATERAL_T2 = 240     # alto del contenedor del scanner (pegado arriba)
+        H_IMG_TOPOGRAMA_T2 = 410   # alto del contenedor del topograma (pegado abajo)
+        MAX_W_SCANNER_T2 = 55      # scanner achicado, referencial
         MAX_W_TOPOGRAMA_T2 = 100   # topograma ocupa todo el ancho de su columna
 
         with mid_t2:
@@ -679,7 +655,13 @@ def render_topograma_panel():
 
             img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
             if img_pos2 is not None:
-                _render_imagen_alineada_abajo(img_pos2, altura_contenedor_px=H_IMG_LATERAL_T2, max_width_pct=MAX_W_SCANNER_T2)
+                # Scanner pegado ARRIBA (justo después de los dropdowns, sin espacio vacío)
+                _render_imagen_alineada_abajo(
+                    img_pos2,
+                    altura_contenedor_px=H_IMG_LATERAL_T2,
+                    max_width_pct=MAX_W_SCANNER_T2,
+                    align="start",
+                )
             else:
                 _placeholder_info(
                     "Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.",
@@ -696,7 +678,13 @@ def render_topograma_panel():
                     t2_tubo or "",
                 )
                 if img_topo2 is not None:
-                    _render_imagen_alineada_abajo(img_topo2, altura_contenedor_px=H_IMG_TOPOGRAMA_T2, max_width_pct=MAX_W_TOPOGRAMA_T2)
+                    # Topograma grande, pegado al borde INFERIOR → alinea con el scanner
+                    _render_imagen_alineada_abajo(
+                        img_topo2,
+                        altura_contenedor_px=H_IMG_TOPOGRAMA_T2,
+                        max_width_pct=MAX_W_TOPOGRAMA_T2,
+                        align="end",
+                    )
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
                     _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "", alto_px=H_IMG_TOPOGRAMA_T2)
