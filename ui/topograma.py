@@ -635,11 +635,15 @@ def render_topograma_panel():
 
         mid_t2, right_t2 = st.columns([1, 1], gap="large")
 
-        # Topograma 2: scanner (posicionamiento) más chico; cráneo (topograma) más grande.
-        H_IMG_LATERAL_T2 = 300
-        H_IMG_TOPOGRAMA_T2 = 420
-        MAX_W_SCANNER_T2 = 50     # scanner achicado
-        MAX_W_TOPOGRAMA_T2 = 85   # topograma cráneo un poco más grande
+        # Alineación de bordes inferiores en Topograma 2:
+        # - Col izq (mid_t2) tiene 2 filas de dropdowns (~170 px) antes de la imagen
+        # - Col der (right_t2) solo tiene el header
+        # Por eso el contenedor del topograma es ~170 px más alto que el del scanner,
+        # para que ambos bordes inferiores queden al mismo nivel.
+        H_IMG_LATERAL_T2 = 320     # scanner (con dropdowns arriba)
+        H_IMG_TOPOGRAMA_T2 = 490   # topograma (solo header arriba) → + ~170 px
+        MAX_W_SCANNER_T2 = 50      # scanner achicado, referencial
+        MAX_W_TOPOGRAMA_T2 = 100   # topograma ocupa todo el ancho de su columna
 
         with mid_t2:
             _panel_header("🛏️", "Posicionamiento del paciente — Topograma 2")
