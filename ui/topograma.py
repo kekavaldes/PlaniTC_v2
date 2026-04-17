@@ -357,15 +357,117 @@ def _render_imagen_region(region: str, alto_px: int = 220):
         )
 
 
+def _panel_header(emoji: str, titulo: str):
+    """Header tipo 'banner' oscuro que ocupa el ancho completo de la columna."""
+    st.markdown(
+        f"""
+        <div style="
+            background:#1A1A1A;
+            border:1px solid #2E2E2E;
+            border-radius:10px;
+            padding:0.75rem 1rem;
+            margin-bottom:0.9rem;
+            display:flex;
+            align-items:center;
+            gap:0.55rem;
+            font-weight:600;
+            font-size:1rem;
+            color:#FFFFFF;
+        ">
+            <span style="font-size:1.15rem;">{emoji}</span>
+            <span>{titulo}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _placeholder_dashed(mensaje: str, alto_px: int = 220):
+    """Caja con borde punteado y mensaje centrado (estilo 'Selecciona una región anatómica')."""
+    st.markdown(
+        f"""
+        <div style="
+            height:{alto_px}px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:transparent;
+            border:1.5px dashed #3A3A3A;
+            border-radius:10px;
+            padding:1rem;
+            text-align:center;
+        ">
+            <span style="color:#BFBFBF; font-size:0.95rem;">{mensaje}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _placeholder_info(mensaje: str, alto_px: int = 180):
+    """Caja destacada (fondo azul oscuro) para mensaje de posicionamiento."""
+    st.markdown(
+        f"""
+        <div style="
+            min-height:{alto_px}px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background:#0E2A44;
+            border:1px solid #164463;
+            border-radius:10px;
+            padding:1.25rem 1.5rem;
+            text-align:center;
+        ">
+            <span style="color:#FFFFFF; font-size:0.95rem; line-height:1.45;">{mensaje}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _placeholder_topograma(proyeccion: str = "AP", tubo: str = ""):
+    """Placeholder central con ícono de radiación y etiqueta 'Proyección: AP · Tubo:'."""
+    st.markdown(
+        f"""
+        <div style="
+            height:420px;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            background:transparent;
+            border:1px solid #2A2A2A;
+            border-radius:10px;
+            gap:1.25rem;
+        ">
+            <div style="
+                width:72px;
+                height:72px;
+                border-radius:50%;
+                background:#1C1C1C;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                font-size:2rem;
+                opacity:0.85;
+            ">☢️</div>
+            <span style="color:#BFBFBF; font-size:0.9rem;">
+                Proyección: {proyeccion} · Tubo: {tubo}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_topograma_panel():
     store = st.session_state.get("topograma_store", {})
-
-    st.markdown("## 📡 Topograma")
 
     col1, col2, col3 = st.columns([1, 1, 1], gap="large")
 
     with col1:
-        st.markdown("### 🧾 Datos del examen")
+        _panel_header("🧾", "Datos del Examen")
         region = selectbox_con_placeholder(
             "Región anatómica", list(REGIONES.keys()), "region_widget", value=store.get("region_anat")
         )
@@ -373,12 +475,16 @@ def render_topograma_panel():
             "Examen", REGIONES.get(region, []), "examen_widget", value=store.get("examen")
         )
 
-        with st.container(border=True):
-            st.markdown("##### Vista anatómica")
-            _render_imagen_region(region, alto_px=220)
+        img_region = obtener_imagen_region(region) if region else None
+        if img_region is not None:
+            c1, c2, c3 = st.columns([1, 1.15, 1])
+            with c2:
+                st.image(img_region, use_container_width=True)
+        else:
+            _placeholder_dashed("Selecciona una región anatómica", alto_px=180)
 
     with col2:
-        st.markdown("### 🛏️ Posicionamiento del paciente")
+        _panel_header("🛏️", "Posicionamiento del paciente")
         c2a, c2b = st.columns(2)
         with c2a:
             posicion = selectbox_con_placeholder(
@@ -397,25 +503,17 @@ def render_topograma_panel():
                 "Posición extremidades", POS_EXTREMIDADES, "ext_widget", value=store.get("extremidades")
             )
 
-        with st.container(border=True):
-            st.markdown("##### Posicionamiento")
-            img_pos = obtener_imagen_posicionamiento_topograma(posicion or "", entrada or "", tubo or "")
-            if img_pos is not None:
-                st.image(img_pos, use_container_width=True)
-            else:
-                st.markdown(
-                    """
-                    <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
-                        <span style="opacity:0.45;">Imagen de posicionamiento no encontrada</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+        img_pos = obtener_imagen_posicionamiento_topograma(posicion or "", entrada or "", tubo or "")
+        if img_pos is not None:
+            st.image(img_pos, use_container_width=True)
+        else:
+            _placeholder_info(
+                "Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.",
+                alto_px=180,
+            )
 
     with col3:
-        st.markdown("### ✅ Topograma adquirido")
-        if st.button("☢️ INICIAR TOPOGRAMA", key="btn_iniciar_topo1", use_container_width=True):
-            st.session_state["topograma_iniciado"] = True
+        _panel_header("🖼️", "Topograma")
 
         if st.session_state.get("topograma_iniciado", False):
             img_topo, err = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", tubo or "")
@@ -424,15 +522,9 @@ def render_topograma_panel():
                 st.success("Topograma adquirido correctamente. Continúa a ⚡ Adquisición.")
             else:
                 st.warning(err or "Imagen no encontrada")
+                _placeholder_topograma(proyeccion="AP", tubo=tubo or "")
         else:
-            st.markdown(
-                """
-                <div style="height:420px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                    <span style="opacity:0.35;">Topograma no iniciado</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            _placeholder_topograma(proyeccion="AP", tubo=tubo or "")
 
     st.markdown("---")
     st.markdown("### 📡 Topograma 1")
@@ -476,7 +568,7 @@ def render_topograma_panel():
         left_t2, mid_t2, right_t2 = st.columns([1, 1, 1], gap="large")
 
         with left_t2:
-            st.markdown("### 🧾 Datos del examen — Topograma 2")
+            _panel_header("🧾", "Datos del Examen — Topograma 2")
             t2_region = selectbox_con_placeholder(
                 "Región anatómica",
                 list(REGIONES.keys()),
@@ -490,12 +582,16 @@ def render_topograma_panel():
                 value=store.get("t2_examen")
             )
 
-            with st.container(border=True):
-                st.markdown("##### Vista anatómica")
-                _render_imagen_region(t2_region, alto_px=220)
+            img_region2 = obtener_imagen_region(t2_region) if t2_region else None
+            if img_region2 is not None:
+                c1, c2, c3 = st.columns([1, 1.15, 1])
+                with c2:
+                    st.image(img_region2, use_container_width=True)
+            else:
+                _placeholder_dashed("Selecciona una región anatómica", alto_px=180)
 
         with mid_t2:
-            st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
+            _panel_header("🛏️", "Posicionamiento del paciente — Topograma 2")
             a, b = st.columns(2)
             with a:
                 t2_pos = selectbox_con_placeholder(
@@ -526,23 +622,17 @@ def render_topograma_panel():
                     value=store.get("t2_extremidades")
                 )
 
-            with st.container(border=True):
-                st.markdown("##### Posicionamiento")
-                img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
-                if img_pos2 is not None:
-                    st.image(img_pos2, use_container_width=True)
-                else:
-                    st.markdown(
-                        """
-                        <div style="height:220px; display:flex; align-items:center; justify-content:center; background:#0b1020; border-radius:12px;">
-                            <span style="opacity:0.45;">Imagen de posicionamiento no encontrada</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+            img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
+            if img_pos2 is not None:
+                st.image(img_pos2, use_container_width=True)
+            else:
+                _placeholder_info(
+                    "Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.",
+                    alto_px=180,
+                )
 
         with right_t2:
-            st.markdown("### ✅ Topograma adquirido — Topograma 2")
+            _panel_header("🖼️", "Topograma 2")
             if st.session_state.get("topograma2_iniciado", False):
                 img_topo2, err2 = obtener_imagen_topograma_adquirido(
                     t2_examen or "",
@@ -555,15 +645,9 @@ def render_topograma_panel():
                     st.success("Topograma 2 adquirido correctamente.")
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
+                    _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "")
             else:
-                st.markdown(
-                    """
-                    <div style="height:240px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">
-                        <span style="opacity:0.35;">Topograma 2 no iniciado</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "")
 
         st.markdown("### 📡 Parámetros Topograma 2")
         t2a, t2b, t2c, t2d, t2e = st.columns(5, gap="medium")
