@@ -1,5 +1,6 @@
 import io
 import re
+import base64
 import zipfile
 import unicodedata
 from pathlib import Path
@@ -382,6 +383,42 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
+def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_pct: int = 100):
+    """
+    Renderiza una imagen PIL dentro de un contenedor de altura fija con la
+    imagen alineada al borde inferior (flex-end). Esto permite que múltiples
+    columnas tengan sus imágenes con el mismo borde inferior alineado.
+
+    - altura_contenedor_px: altura del contenedor (incluye la imagen centrada al fondo)
+    - max_width_pct: ancho máximo de la imagen como % del contenedor (para achicarla)
+    """
+    buf = io.BytesIO()
+    formato = "PNG"
+    try:
+        img_pil.save(buf, format=formato)
+    except Exception:
+        img_pil.convert("RGB").save(buf, format="JPEG")
+        formato = "JPEG"
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    mime = "image/png" if formato == "PNG" else "image/jpeg"
+
+    st.markdown(
+        f"""
+        <div style="
+            height:{altura_contenedor_px}px;
+            display:flex;
+            align-items:flex-end;
+            justify-content:center;
+            width:100%;
+        ">
+            <img src="data:{mime};base64,{b64}"
+                 style="max-width:{max_width_pct}%; max-height:100%; object-fit:contain; display:block;" />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _placeholder_dashed(mensaje: str, alto_px: int = 220):
     """Caja con borde punteado y mensaje centrado (estilo 'Selecciona una región anatómica')."""
     st.markdown(
@@ -409,7 +446,7 @@ def _placeholder_info(mensaje: str, alto_px: int = 180):
     st.markdown(
         f"""
         <div style="
-            min-height:{alto_px}px;
+            height:{alto_px}px;
             display:flex;
             align-items:center;
             justify-content:center;
@@ -426,12 +463,12 @@ def _placeholder_info(mensaje: str, alto_px: int = 180):
     )
 
 
-def _placeholder_topograma(proyeccion: str = "AP", tubo: str = ""):
+def _placeholder_topograma(proyeccion: str = "AP", tubo: str = "", alto_px: int = 420):
     """Placeholder central con ícono de radiación y etiqueta 'Proyección: AP · Tubo:'."""
     st.markdown(
         f"""
         <div style="
-            height:420px;
+            height:{alto_px}px;
             display:flex;
             flex-direction:column;
             align-items:center;
@@ -464,6 +501,13 @@ def _placeholder_topograma(proyeccion: str = "AP", tubo: str = ""):
 def render_topograma_panel():
     store = st.session_state.get("topograma_store", {})
 
+    # Alturas de los contenedores de imagen, pensadas para que los bordes
+    # inferiores de las 3 columnas queden alineados:
+    # - Col 1 y Col 2 tienen 2 filas de dropdowns arriba → contenedor más corto
+    # - Col 3 solo tiene el header → contenedor más alto (compensa la ausencia de dropdowns)
+    H_IMG_LATERAL = 280   # datos del examen + posicionamiento
+    H_IMG_TOPOGRAMA = 440  # topograma adquirido
+
     col1, col2, col3 = st.columns([1, 1, 1], gap="large")
 
     with col1:
@@ -477,11 +521,10 @@ def render_topograma_panel():
 
         img_region = obtener_imagen_region(region) if region else None
         if img_region is not None:
-            c1, c2, c3 = st.columns([1, 1.15, 1])
-            with c2:
-                st.image(img_region, use_container_width=True)
+            # Silueta achicada al 55% del ancho, centrada y alineada al fondo
+            _render_imagen_alineada_abajo(img_region, altura_contenedor_px=H_IMG_LATERAL, max_width_pct=55)
         else:
-            _placeholder_dashed("Selecciona una región anatómica", alto_px=180)
+            _placeholder_dashed("Selecciona una región anatómica", alto_px=H_IMG_LATERAL)
 
     with col2:
         _panel_header("🛏️", "Posicionamiento del paciente")
@@ -505,11 +548,11 @@ def render_topograma_panel():
 
         img_pos = obtener_imagen_posicionamiento_topograma(posicion or "", entrada or "", tubo or "")
         if img_pos is not None:
-            st.image(img_pos, use_container_width=True)
+            _render_imagen_alineada_abajo(img_pos, altura_contenedor_px=H_IMG_LATERAL, max_width_pct=100)
         else:
             _placeholder_info(
                 "Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.",
-                alto_px=180,
+                alto_px=H_IMG_LATERAL,
             )
 
     with col3:
@@ -518,12 +561,12 @@ def render_topograma_panel():
         if st.session_state.get("topograma_iniciado", False):
             img_topo, err = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", tubo or "")
             if img_topo is not None:
-                st.image(img_topo, use_container_width=True)
+                _render_imagen_alineada_abajo(img_topo, altura_contenedor_px=H_IMG_TOPOGRAMA, max_width_pct=100)
             else:
                 st.warning(err or "Imagen no encontrada")
-                _placeholder_topograma(proyeccion="AP", tubo=tubo or "")
+                _placeholder_topograma(proyeccion="AP", tubo=tubo or "", alto_px=H_IMG_TOPOGRAMA)
         else:
-            _placeholder_topograma(proyeccion="AP", tubo=tubo or "")
+            _placeholder_topograma(proyeccion="AP", tubo=tubo or "", alto_px=H_IMG_TOPOGRAMA)
 
     st.markdown("---")
     st.markdown("### 📡 Topograma 1")
@@ -596,6 +639,13 @@ def render_topograma_panel():
 
         mid_t2, right_t2 = st.columns([1, 1], gap="large")
 
+        # Alturas de contenedores para Topograma 2. Como el layout es de 2 columnas
+        # (más anchas que las de Topograma 1), achicamos el ancho de las imágenes
+        # al ~65% para que se vean proporcionales a las del Topograma 1.
+        H_IMG_LATERAL_T2 = 280
+        H_IMG_TOPOGRAMA_T2 = 340
+        MAX_W_T2 = 65
+
         with mid_t2:
             _panel_header("🛏️", "Posicionamiento del paciente — Topograma 2")
             a, b = st.columns(2)
@@ -630,11 +680,11 @@ def render_topograma_panel():
 
             img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
             if img_pos2 is not None:
-                st.image(img_pos2, use_container_width=True)
+                _render_imagen_alineada_abajo(img_pos2, altura_contenedor_px=H_IMG_LATERAL_T2, max_width_pct=MAX_W_T2)
             else:
                 _placeholder_info(
                     "Selecciona posición paciente, entrada y posición del tubo para ver la imagen correspondiente.",
-                    alto_px=180,
+                    alto_px=H_IMG_LATERAL_T2,
                 )
 
         with right_t2:
@@ -647,12 +697,12 @@ def render_topograma_panel():
                     t2_tubo or "",
                 )
                 if img_topo2 is not None:
-                    st.image(img_topo2, use_container_width=True)
+                    _render_imagen_alineada_abajo(img_topo2, altura_contenedor_px=H_IMG_TOPOGRAMA_T2, max_width_pct=MAX_W_T2)
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
-                    _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "")
+                    _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "", alto_px=H_IMG_TOPOGRAMA_T2)
             else:
-                _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "")
+                _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "", alto_px=H_IMG_TOPOGRAMA_T2)
 
         st.markdown("### 📡 Parámetros Topograma 2")
         t2a, t2b, t2c, t2d, t2e = st.columns(5, gap="medium")
