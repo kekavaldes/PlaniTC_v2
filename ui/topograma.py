@@ -515,10 +515,10 @@ def render_topograma_panel():
         img_region = obtener_imagen_region(region) if region else None
         if img_region is not None:
             # Silueta achicada y alineada al borde inferior del contenedor,
-            # para que acompañe visualmente la altura de la imagen del topograma (col 3).
-            _render_imagen_alineada_abajo(img_region, altura_contenedor_px=460, max_width_pct=50)
+            # para que su borde inferior coincida con el de las imágenes de las col 2 y 3.
+            _render_imagen_alineada_abajo(img_region, altura_contenedor_px=220, max_width_pct=50)
         else:
-            _placeholder_dashed("Selecciona una región anatómica", alto_px=260)
+            _placeholder_dashed("Selecciona una región anatómica", alto_px=220)
 
     with col2:
         _panel_header("🛏️", "Posicionamiento del paciente")
