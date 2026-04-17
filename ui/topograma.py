@@ -383,13 +383,15 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
-def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_pct: int = 100, align: str = "end"):
+def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_pct: int = 100, align: str = "end", fill_height: bool = False):
     """
     Renderiza una imagen PIL dentro de un contenedor de altura fija.
 
     - altura_contenedor_px: altura del contenedor en px.
     - max_width_pct: ancho máximo de la imagen como % del contenedor.
     - align: "start" (pegada arriba), "center" (centrada), "end" (pegada al borde inferior).
+    - fill_height: si True, la imagen ocupa TODO el alto del contenedor (manteniendo
+      proporción). Útil cuando queremos que la imagen llene vertical sin espacio vacío.
     """
     buf = io.BytesIO()
     formato = "PNG"
@@ -403,6 +405,13 @@ def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_
 
     align_items = {"start": "flex-start", "center": "center", "end": "flex-end"}.get(align, "flex-end")
 
+    if fill_height:
+        # La imagen ocupa el 100% del alto; el ancho se ajusta automáticamente
+        # manteniendo la proporción (puede superar max_width_pct si hace falta).
+        img_style = "height:100%; width:auto; object-fit:contain; display:block;"
+    else:
+        img_style = f"max-width:{max_width_pct}%; max-height:100%; object-fit:contain; display:block;"
+
     st.markdown(
         f"""
         <div style="
@@ -412,8 +421,7 @@ def _render_imagen_alineada_abajo(img_pil, altura_contenedor_px: int, max_width_
             justify-content:center;
             width:100%;
         ">
-            <img src="data:{mime};base64,{b64}"
-                 style="max-width:{max_width_pct}%; max-height:100%; object-fit:contain; display:block;" />
+            <img src="data:{mime};base64,{b64}" style="{img_style}" />
         </div>
         """,
         unsafe_allow_html=True,
@@ -678,12 +686,14 @@ def render_topograma_panel():
                     t2_tubo or "",
                 )
                 if img_topo2 is not None:
-                    # Topograma grande, pegado al borde INFERIOR → alinea con el scanner
+                    # Topograma grande: llena todo el alto del contenedor y queda
+                    # pegado al borde INFERIOR → alinea con el scanner de la izquierda.
                     _render_imagen_alineada_abajo(
                         img_topo2,
                         altura_contenedor_px=H_IMG_TOPOGRAMA_T2,
                         max_width_pct=MAX_W_TOPOGRAMA_T2,
                         align="end",
+                        fill_height=True,
                     )
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
