@@ -130,6 +130,43 @@ def aplicar_css_global():
         .stAlert {
             border-radius: 10px;
         }
+
+        /* Ocultar la barra decorativa superior de Streamlit para que las pestañas queden pegadas arriba */
+        [data-testid="stDecoration"] { display: none !important; }
+        [data-testid="stToolbar"] { display: none !important; }
+
+        /* Reducir el padding superior del contenedor principal */
+        .stApp > header { background: transparent !important; }
+        .block-container {
+            padding-top: 1.5rem !important;
+        }
+
+        /* Pestañas: más espaciadas, con mejor estilo */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.5rem;
+            background: transparent;
+            border-bottom: 1px solid #2A2A2A;
+        }
+        .stTabs [data-baseweb="tab"] {
+            background: transparent !important;
+            color: #BFBFBF !important;
+            padding: 0.7rem 1.2rem !important;
+            font-weight: 500 !important;
+            font-size: 1rem !important;
+            border-radius: 8px 8px 0 0;
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            background: #1A1A1A !important;
+            color: #FFFFFF !important;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #FFFFFF !important;
+            font-weight: 600 !important;
+        }
+
+        /* Ocultar íconos de anchor (🔗) que Streamlit pone al lado de headers */
+        .stApp a.anchor-link,
+        [data-testid="stHeaderActionElements"] { display: none !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -139,14 +176,12 @@ def aplicar_css_global():
 def main():
     aplicar_css_global()
 
-    st.title("PlaniTC_v2")
-
     tabs = st.tabs([
-        "Inicio",
-        "Ingreso",
-        "Adquisición",
-        "Reconstrucción",
-        "Inyectora",
+        "🏠  Inicio",
+        "📋  Ingreso",
+        "⚡  Adquisición",
+        "🧩  Reconstrucción",
+        "💉  Inyectora",
     ])
 
     with tabs[0]:
