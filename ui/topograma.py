@@ -519,7 +519,6 @@ def render_topograma_panel():
             img_topo, err = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", tubo or "")
             if img_topo is not None:
                 st.image(img_topo, use_container_width=True)
-                st.success("Topograma adquirido correctamente. Continúa a ⚡ Adquisición.")
             else:
                 st.warning(err or "Imagen no encontrada")
                 _placeholder_topograma(proyeccion="AP", tubo=tubo or "")
@@ -649,7 +648,6 @@ def render_topograma_panel():
                 )
                 if img_topo2 is not None:
                     st.image(img_topo2, use_container_width=True)
-                    st.success("Topograma 2 adquirido correctamente.")
                 else:
                     st.warning(err2 or "Imagen de Topograma 2 no encontrada")
                     _placeholder_topograma(proyeccion="AP", tubo=t2_tubo or "")
