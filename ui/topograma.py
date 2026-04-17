@@ -340,15 +340,12 @@ def _build_store(**kwargs):
     st.session_state["topograma_store"] = prev
 
 
-def _render_imagen_region(region: str, alto_px: int = 220, width_px: int = 180):
+def _render_imagen_region(region: str, alto_px: int = 220):
     img_region = obtener_imagen_region(region)
     if img_region is not None:
-        st.markdown(
-            f'<div style="height:{alto_px}px; display:flex; align-items:center; justify-content:center; background:#050505; border-radius:12px;">',
-            unsafe_allow_html=True,
-        )
-        st.image(img_region, width=width_px)
-        st.markdown("</div>", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1, 1.15, 1])
+        with c2:
+            st.image(img_region, use_container_width=True)
     else:
         st.markdown(
             f"""
@@ -365,7 +362,7 @@ def render_topograma_panel():
 
     st.markdown("## 📡 Topograma")
 
-    col1, col2, col3 = st.columns([1.05, 1.15, 1.1], gap="large")
+    col1, col2, col3 = st.columns([1, 1, 1], gap="large")
 
     with col1:
         st.markdown("### 🧾 Datos del examen")
@@ -378,7 +375,7 @@ def render_topograma_panel():
 
         with st.container(border=True):
             st.markdown("##### Vista anatómica")
-            _render_imagen_region(region, alto_px=220, width_px=180)
+            _render_imagen_region(region, alto_px=220)
 
     with col2:
         st.markdown("### 🛏️ Posicionamiento del paciente")
@@ -476,7 +473,7 @@ def render_topograma_panel():
 
     if aplica_topo2:
         st.markdown("---")
-        left_t2, mid_t2, right_t2 = st.columns([1.0, 1.05, 1.0], gap="large")
+        left_t2, mid_t2, right_t2 = st.columns([1, 1, 1], gap="large")
 
         with left_t2:
             st.markdown("### 🧾 Datos del examen — Topograma 2")
@@ -495,7 +492,7 @@ def render_topograma_panel():
 
             with st.container(border=True):
                 st.markdown("##### Vista anatómica")
-                _render_imagen_region(t2_region, alto_px=220, width_px=180)
+                _render_imagen_region(t2_region, alto_px=220)
 
         with mid_t2:
             st.markdown("### 🛏️ Posicionamiento del paciente — Topograma 2")
