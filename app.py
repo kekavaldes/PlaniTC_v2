@@ -131,14 +131,15 @@ def aplicar_css_global():
             border-radius: 10px;
         }
 
-        /* Ocultar la barra decorativa superior de Streamlit para que las pestañas queden pegadas arriba */
-        [data-testid="stDecoration"] { display: none !important; }
-        [data-testid="stToolbar"] { display: none !important; }
+        /* Header de Streamlit transparente pero SIN ocultar (para que no se corten las pestañas arriba) */
+        .stApp > header,
+        [data-testid="stHeader"] {
+            background: transparent !important;
+        }
 
-        /* Reducir el padding superior del contenedor principal */
-        .stApp > header { background: transparent !important; }
+        /* Dar respiro arriba para que las pestañas no queden pegadas al borde */
         .block-container {
-            padding-top: 1.5rem !important;
+            padding-top: 3.5rem !important;
         }
 
         /* Pestañas: más espaciadas, con mejor estilo */
