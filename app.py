@@ -1,7 +1,6 @@
 import streamlit as st
 
 from ui.ingreso import render_ingreso
-from ui.topograma import render_topograma_panel
 from ui.adquisicion import render_adquisicion
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
@@ -187,7 +186,6 @@ def main():
     tabs = st.tabs([
         "🏠  Inicio",
         "📋  Ingreso",
-        "🖼️  Topograma",
         "⚡  Adquisición",
         "🧩  Reconstrucción",
         "💉  Inyectora",
@@ -201,16 +199,13 @@ def main():
         render_ingreso()
 
     with tabs[2]:
-        render_topograma_panel()
-
-    with tabs[3]:
         render_adquisicion()
 
-    with tabs[4]:
+    with tabs[3]:
         st.subheader("Reconstrucción")
         st.info("Pendiente de modularizar")
 
-    with tabs[5]:
+    with tabs[4]:
         st.subheader("Inyectora")
         st.info("Pendiente de modularizar")
 
