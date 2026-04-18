@@ -133,18 +133,18 @@ def aplicar_css_global():
             border-radius: 10px;
         }
 
-        /* Header transparente */
+        /* Header de Streamlit transparente pero SIN ocultar */
         .stApp > header,
         [data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        /* Espacio arriba */
+        /* Dar respiro arriba */
         .block-container {
             padding-top: 3.5rem !important;
         }
 
-        /* Tabs */
+        /* Pestañas */
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.5rem;
             background: transparent;
@@ -170,7 +170,7 @@ def aplicar_css_global():
             font-weight: 600 !important;
         }
 
-        /* Ocultar anchors */
+        /* Ocultar íconos de anchor */
         .stApp a.anchor-link,
         [data-testid="stHeaderActionElements"] {
             display: none !important;
@@ -203,8 +203,7 @@ def main():
         render_adquisicion()
 
     with tabs[3]:
-        st.subheader("Reconstrucción")
-        st.info("Pendiente de modularizar")
+        render_reconstruccion()
 
     with tabs[4]:
         st.subheader("Inyectora")
