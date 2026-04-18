@@ -1252,8 +1252,18 @@ def _render_normales(exp):
         )
         exp["cobertura_tabla"] = cobertura
 
+        # NOTA: escribimos en session_state ANTES de renderizar porque
+        # st.text_input con key= ignora el parámetro value= después del primer render.
+        # Este es el patrón usado en el PlaniTC original.
+        st.session_state[f"cobertura_{eid}"] = str(cobertura)
+
         def _render_cob():
-            _text_disabled("Cobertura", cobertura, key=f"cobertura_{eid}")
+            st.text_input(
+                "Cobertura",
+                key=f"cobertura_{eid}",
+                disabled=True,
+                label_visibility="collapsed",
+            )
         _adq_pair(c4, "Cobertura", _render_cob)
 
         grosor_opciones = [str(g) for g in GROSOR_PROSP]
