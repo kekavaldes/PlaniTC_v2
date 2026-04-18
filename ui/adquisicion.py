@@ -1535,10 +1535,6 @@ def render_adquisicion():
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
         _render_topogramas_adq(exp, es_bolus)
 
-        # Título grande con la exploración activa
-        titulo = exp.get("nombre") or f"EXPLORACIÓN {idx+1}"
-        st.markdown(f"## ⚙️ {titulo}")
-
         # Filas de parámetros
         if es_bolus:
             _render_bolus(exp)
