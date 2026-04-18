@@ -32,7 +32,13 @@ from pathlib import Path
 import streamlit as st
 from PIL import Image
 
-from ui.topograma import obtener_imagen_topograma_adquirido, render_topograma_panel
+from ui.topograma import (
+    obtener_imagen_topograma_adquirido,
+    render_topograma_panel,
+    _init_topograma_sets,
+    _agregar_set_topograma,
+    _eliminar_set_topograma,
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DIR_POSICION_CORTE_BOLUS = BASE_DIR / "data" / "images" / "posicion_corte_bolus"
@@ -1029,33 +1035,25 @@ def _name_visible(exp, idx):
 def _render_sidebar():
     st.markdown("### 📋 Exploraciones")
 
-    # Asegurar que exista al menos un set (defensivo: la pestaña Topograma
-    # normalmente ya lo creó)
-    sets = st.session_state.setdefault("topograma_sets", [])
-    if not sets:
-        sets.append({
-            "label": "Topograma 1",
-            "topograma_iniciado": False,
-            "topograma2_iniciado": False,
-        })
-        st.session_state.setdefault("topograma_set_activo", 0)
+    _init_topograma_sets()
+    sets = st.session_state["topograma_sets"]
+    set_activo = st.session_state.get("topograma_set_activo", 0)
+    viendo_topo = st.session_state.get("exp_activa") == "topograma"
 
     for i, s in enumerate(sets):
         lbl = s.get("label") or f"Topograma {i+1}"
         reg = s.get("region_anat") or "sin región"
 
-        # Header del set
-        st.markdown(
-            f"<div style='margin-top:10px;margin-bottom:4px;padding:8px 10px;"
-            f"background:#1a1a1a;border:1px solid #333;border-radius:8px;"
-            f"font-weight:600;font-size:0.92rem;'>"
-            f"📡 {lbl}<br>"
-            f"<span style='font-size:0.78rem;opacity:0.75;font-weight:400;'>{reg}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-        if st.button("Ver topograma", key=f"btn_topograma_sidebar_{i}", use_container_width=True):
+        # Header del set: botón grande clickable, "primary" si es el que
+        # estamos viendo en la pestaña Topograma
+        es_activo_topo = (viendo_topo and set_activo == i)
+        tipo = "primary" if es_activo_topo else "secondary"
+        if st.button(
+            f"📡 {lbl}  \n{reg}",
+            key=f"btn_topograma_sidebar_{i}",
+            type=tipo,
+            use_container_width=True,
+        ):
             st.session_state["topograma_set_activo"] = i
             st.session_state["exp_activa"] = "topograma"
             st.rerun()
@@ -1064,26 +1062,47 @@ def _render_sidebar():
         for idx_exp, exp in enumerate(st.session_state["exploraciones"]):
             if exp.get("topo_set_idx", 0) != i:
                 continue
+            es_exp_activa = (st.session_state.get("exp_activa") == idx_exp)
+            tipo_exp = "primary" if es_exp_activa else "secondary"
             if st.button(
                 f"⚡ {_name_visible(exp, idx_exp)}",
                 key=f"btn_sidebar_exp_{exp['id']}",
+                type=tipo_exp,
                 use_container_width=True,
             ):
                 st.session_state["exp_activa"] = idx_exp
+                st.rerun()
 
-        if st.button("➕ Exploración", key=f"btn_add_exp_s{i}", use_container_width=True):
-            st.session_state["exploraciones"].append(_crear_exploracion_base(topo_set_idx=i))
-            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-            st.rerun()
+        # Acciones del set: nueva exploración + eliminar topograma
+        if len(sets) > 1:
+            c_add, c_del = st.columns(2, gap="small")
+            with c_add:
+                if st.button("➕ Exp.", key=f"btn_add_exp_s{i}", use_container_width=True):
+                    st.session_state["exploraciones"].append(
+                        _crear_exploracion_base(topo_set_idx=i)
+                    )
+                    st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+                    st.rerun()
+            with c_del:
+                if st.button("🗑️ Topo", key=f"del_set_sidebar_{i}",
+                             help="Eliminar este topograma",
+                             use_container_width=True):
+                    _eliminar_set_topograma(i)
+                    st.rerun()
+        else:
+            if st.button("➕ Exploración", key=f"btn_add_exp_s{i}", use_container_width=True):
+                st.session_state["exploraciones"].append(
+                    _crear_exploracion_base(topo_set_idx=i)
+                )
+                st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+                st.rerun()
 
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # Botón para crear un nuevo set (otra región)
+    st.markdown("---")
     if st.button("➕ Nuevo topograma", key="btn_add_set_sidebar", use_container_width=True):
-        sets.append({
-            "label": f"Topograma {len(sets) + 1}",
-            "topograma_iniciado": False,
-            "topograma2_iniciado": False,
-        })
-        st.session_state["topograma_set_activo"] = len(sets) - 1
+        _agregar_set_topograma()
         st.session_state["exp_activa"] = "topograma"
         st.rerun()
 
@@ -1091,6 +1110,7 @@ def _render_sidebar():
     if isinstance(st.session_state.get("exp_activa"), int):
         idx = st.session_state["exp_activa"]
         if 0 <= idx < len(st.session_state["exploraciones"]):
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
             c1, c2 = st.columns(2, gap="small")
             with c1:
                 if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
