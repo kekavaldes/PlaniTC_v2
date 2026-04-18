@@ -30,7 +30,6 @@ import base64
 from pathlib import Path
 
 import streamlit as st
-from PIL import Image
 
 from ui.topograma import obtener_imagen_topograma_adquirido, render_topograma_panel
 
@@ -1454,35 +1453,10 @@ def _img_file_to_b64(path: Path) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-def _img_file_to_b64_recortada(path: Path) -> str:
-    """Recorta bordes negros/oscursos para aprovechar mejor el espacio visual."""
-    img = Image.open(path).convert("RGB")
-    gray = img.convert("L")
-
-    # Detecta contenido que no sea casi negro.
-    mask = gray.point(lambda p: 255 if p > 12 else 0)
-    bbox = mask.getbbox()
-
-    if bbox:
-        left, top, right, bottom = bbox
-        pad_x = max(6, int((right - left) * 0.02))
-        pad_y = max(6, int((bottom - top) * 0.02))
-        left = max(0, left - pad_x)
-        top = max(0, top - pad_y)
-        right = min(img.width, right + pad_x)
-        bottom = min(img.height, bottom + pad_y)
-        img = img.crop((left, top, right, bottom))
-
-    import io
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
 def _render_imagen_posicion_corte(exp, alto=430):
     """Muestra la imagen asociada a la posición de corte en exploraciones bolus.
-    Mantiene la altura del bloque de topogramas, pero recorta márgenes negros
-    del archivo original para que la imagen se vea más ancha y mejor alineada.
+    Se renderiza con la misma altura visual que el bloque de topogramas para
+    que quede alineada en la parte superior.
     """
     posicion = exp.get("posicion_corte")
     if not posicion:
@@ -1513,7 +1487,7 @@ def _render_imagen_posicion_corte(exp, alto=430):
     ruta = IMG_POSICION_CORTE_DIR / f"{posicion}.png"
     if ruta.exists():
         mime = "image/png"
-        img_b64 = _img_file_to_b64_recortada(ruta)
+        img_b64 = _img_file_to_b64(ruta)
         st.markdown(
             f"""
             <div style="
@@ -1522,9 +1496,9 @@ def _render_imagen_posicion_corte(exp, alto=430):
                 border-radius:12px;
                 background:#000000;
                 display:flex;
-                align-items:center;
+                align-items:flex-start;
                 justify-content:center;
-                padding:6px;
+                padding:8px;
                 box-sizing:border-box;
                 overflow:hidden;
                 margin-top: 2.25rem;
@@ -1673,7 +1647,7 @@ def render_adquisicion():
 
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
         if es_bolus:
-            col_topos, col_imagen = st.columns([3.15, 1.65], gap="medium")
+            col_topos, col_imagen = st.columns([3.45, 1.35], gap="medium")
             with col_topos:
                 _render_topogramas_adq(exp, es_bolus)
             with col_imagen:
