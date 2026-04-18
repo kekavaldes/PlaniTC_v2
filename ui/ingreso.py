@@ -9,7 +9,7 @@ from pathlib import Path
 import streamlit as st
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-IMAGEN_INGRESO_PATH = BASE_DIR / "assets" / "portada_ingreso.jpg"
+IMAGEN_INGRESO_PATH = BASE_DIR / "data" / "images" / "portada_ingreso.png"
 
 
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
