@@ -1,14 +1,42 @@
+"""
+ui/adquisicion.py
+Módulo de Adquisición para PlaniTC_v2.
 
+Cubre la TAB 2 del simulador. Reemplaza a `adquisicion-3.py` con:
+- Eliminación del "Resumen de referencia" (tarjetas azules de arriba).
+- Visualización de los topogramas 1/2 con caja DFOV arrastrable / redimensionable
+  (canvas HTML interactivo), igual que en el PlaniTC original.
+- Lógica de parámetros igual al PlaniTC original:
+  * MODULACION_CORRIENTE dinámica: "MANUAL" → mAs, "AUTO mA" → Rango mA + Índice ruido,
+    "CARE DOSE 4D" → mAs REF + Índice calidad.
+  * CONF. DETECCIÓN con opciones según tipo_exp + doble_muestreo.
+  * COBERTURA calculada por tabla (COBERTURA_TABLA), no por fórmula.
+  * Métricas de dosis al final (CTDIvol, duración, ruido estimado).
+
+Entrypoint: render_adquisicion()
+
+NOTA: este archivo es grande (~1200 líneas) porque incluye el canvas JS
+interactivo (~570 líneas). Cuando tengas `core/canvas.py`, mover allí:
+  - POSICIONES_Y, get_y_position, get_y_position_with_offset
+  - _pil_to_b64_jpeg
+  - render_topogramas_independientes_interactivos
+"""
+
+import io
+import json
+import math
 import uuid
+import base64
+
 import streamlit as st
 
-from ui.topograma import render_topograma_panel
+from ui.topograma import obtener_imagen_topograma_adquirido, render_topograma_panel
 
-# ───────────────────────────────────────────────────────────────
-# Catálogos
-# ───────────────────────────────────────────────────────────────
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONSTANTES DE ADQUISICIÓN (del PlaniTC original)
+# ═══════════════════════════════════════════════════════════════════════════
 NOMBRES_EXPLORACION = [
-    "Seleccionar",
     "SIN CONTRASTE",
     "ARTERIAL",
     "ANGIOGRÁFICA",
@@ -18,45 +46,887 @@ NOMBRES_EXPLORACION = [
     "TARDÍA",
 ]
 
-TIPOS_EXPLORACION = ["Seleccionar", "HELICOIDAL", "SECUENCIAL", "VOLUMETRICA"]
+TIPOS_EXPLORACION = ["HELICOIDAL", "SECUENCIAL CONTIGUO", "SECUENCIAL ESPACIADO"]
 
-MODULACION_CORRIENTE = ["Seleccionar", "NO", "CARE DOSE", "AUTOMATICA"]
-MAS_OPCIONES = ["Seleccionar", "20", "40", "50", "80", "100", "120", "150", "180", "200", "220", "250", "300"]
-INDICE_RUIDO_OPCIONES = ["Seleccionar", "6", "8", "10", "12", "14", "16", "18", "20"]
-KV_OPCIONES = ["Seleccionar", "80", "100", "110", "120", "130", "140"]
-DOBLE_MUESTREO_OPCIONES = ["Seleccionar", "NO", "SI"]
-CONFIG_DETECTORES = ["Seleccionar", "16 x 0,6", "16 x 1,2", "32 x 0,6", "32 x 1,2", "64 x 0,6", "64 x 1,2", "80 x 0,6", "80 x 1,2", "128 x 0,6"]
-GROSOR_PROSPECTIVO_OPCIONES = ["Seleccionar", "0,6", "0,75", "1", "1,2", "1,5", "2", "3", "5"]
-SFOV_OPCIONES = ["Seleccionar", "CABEZA", "CUELLO", "PEQUEÑO", "MEDIANO", "GRANDE", "MAXIMO"]
-INSTRUCCION_VOZ_OPCIONES = ["Seleccionar", "NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN", "NO TRAGAR", "VALSALVA", "NO RESPIRE"]
-RETARDO_OPCIONES = ["Seleccionar", "0 sg", "2 sg", "3 sg", "4 sg", "5 sg", "6 sg", "8 sg", "10 sg", "12 sg", "15 sg", "20 sg", "25 sg", "30 sg"]
-PITCH_OPCIONES = ["Seleccionar", "0,5", "0,6", "0,8", "1", "1,2", "1,5", "1,8"]
-ROTACION_TUBO_OPCIONES = ["Seleccionar", "0,25 sg.", "0,28 sg.", "0,33 sg.", "0,35 sg.", "0,5 sg.", "0,75 sg.", "1 sg."]
-PERIODO_TEST_BOLUS = ["Seleccionar", "0,9 sg", "1 sg", "1,5 sg", "2 sg"]
-N_IMAGENES_TEST_BOLUS = ["Seleccionar", "10", "15", "20", "25", "30"]
-POSICION_CORTE_TEST_BOLUS = ["Seleccionar", "BOTON AORTICO", "BAJO CARINA"]
-UMBRAL_TRACKING = ["Seleccionar", "80 UH", "100 UH", "120 UH", "150 UH", "180 UH"]
+MODULACION_CORRIENTE = ["MANUAL", "AUTO mA", "CARE DOSE 4D"]
 
+KVP_OPCIONES = [70, 80, 90, 100, 110, 120, 140]
+
+MAS_OPCIONES = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500]
+
+RANGO_MA = ["30 - 400", "40 - 300", "60 - 500", "130 - 400", "140 - 500"]
+
+INDICE_RUIDO = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+INDICE_CALIDAD = [80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300]
+
+CONF_DETECTORES = [
+    "8 x 1,25 mm", "16 x 0,625 mm", "32 x 0.6 mm",
+    "32 x 0,625 mm", "32 x 1,2 mm", "32 x 1,25 mm",
+    "64 x 0,6 mm", "64 x 0,625 mm",
+]
+
+SFOV_OPCIONES = ["SMALL (200 mm)", "HEAD (300 mm)", "LARGE (500 mm)"]
+
+PITCH_OPCIONES = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
+
+ROT_TUBO = [0.3, 0.5, 0.7, 1.0]
+
+GROSOR_PROSP = [0.6, 0.625, 1.0, 1.2, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0]
+
+INSTRUCCIONES_VOZ = ["NINGUNA", "INSPIRACIÓN", "ESPIRACIÓN", "NO TRAGAR", "VALSALVA", "NO RESPIRE"]
+
+RETARDOS = ["2 sg", "3 sg", "4 sg", "5 sg", "6 sg"]
+
+# Específicas de BOLUS
+PERIODO_TEST_BOLUS = ["0,9 sg", "1 sg", "1,5 sg", "2 sg"]
+N_IMAGENES_TEST_BOLUS = ["10", "15", "20", "25", "30"]
+POSICION_CORTE_BOLUS = ["BOTON AORTICO", "BAJO CARINA", "CUPULAS DIAFRAGMATICAS"]
+UMBRAL_TRACKING = ["80 UH", "100 UH", "120 UH", "150 UH", "180 UH"]
+
+# Cobertura por tabla (no por fórmula)
+COBERTURA_TABLA = {
+    "SECUENCIAL CONTIGUO": {
+        "8 x 1,25 mm": "10",
+        "16 x 0,625 mm": "10",
+        "32 x 0.6 mm": "19,2",
+        "32 x 0,625 mm": "20",
+        "32 x 1,2 mm": "38,4",
+        "32 x 1,25 mm": "40",
+        "64 x 0,6 mm": "38,4",
+        "64 x 0,625 mm": "40",
+    },
+    "HELICOIDAL": {
+        "8 x 1,25 mm": "10",
+        "16 x 0,625 mm": "10",
+        "32 x 0.6 mm": "19,2",
+        "32 x 0,625 mm": "20",
+        "32 x 1,2 mm": "38,4",
+        "32 x 1,25 mm": "40",
+        "64 x 0,6 mm": "38,4",
+        "64 x 0,625 mm": "40",
+    },
+    "DOBLE MUESTREO": {
+        "16 x 0,625 mm": "5",
+        "32 x 0.6 mm": "9,6",
+        "32 x 0,625 mm": "10",
+        "64 x 0,6 mm": "19,2",
+    },
+    "SECUENCIAL ESPACIADO": {
+        "1 x 1,25 mm": "1,25 - 20 mm",
+        "2 x 0,625 mm": "1,25 - 10 mm",
+    }
+}
+
+CONF_DETECTORES_POR_TIPO = {
+    "SECUENCIAL CONTIGUO": list(COBERTURA_TABLA["SECUENCIAL CONTIGUO"].keys()),
+    "HELICOIDAL": list(COBERTURA_TABLA["HELICOIDAL"].keys()),
+    "SECUENCIAL ESPACIADO": list(COBERTURA_TABLA["SECUENCIAL ESPACIADO"].keys()),
+}
+
+CONF_DETECTORES_DOBLE_MUESTREO = list(COBERTURA_TABLA["DOBLE MUESTREO"].keys())
+
+# Referencias anatómicas por grupo (inicio y fin de exploración)
 REFS_INICIO = {
-    "CABEZA":  ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE", "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR", "BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO"],
+    "CABEZA":  ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE",
+                "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR",
+                "BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO"],
     "CUELLO":  ["TECHO ORBITARIO", "CAE", "ARCO AÓRTICO"],
-    "EESS":    ["SOBRE ART. ACROMIOCLAV.", "BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL RADIO-CUBITO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
+    "EESS":    ["SOBRE ART. ACROMIOCLAV.", "BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO",
+                "TERCIO PROXIMAL RADIO-CUBITO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
     "COLUMNA": ["CAE", "SOBRE BASE DE CRÁNEO", "C6-C7", "T1-T2", "T11-T12", "L1-L2", "L4-L5", "S1-S2"],
-    "CUERPO":  ["SOBRE ÁPICES PULMONARES", "SOBRE CÚPULAS DIAF.", "ARCO AÓRTICO", "BAJO ANGULOS COSTOFR.", "L5-S1"],
-    "EEII":    ["EIAS", "TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR", "TERCIO PROXIMAL TIBIA-PERONÉ", "TERCIO DISTAL TIBIA-PERONÉ", "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS"],
-    "ANGIO":   ["SOBRE ÁPICES PULMONARES", "ARCO AÓRTICO", "SOBRE CÚPULAS DIAF.", "BAJO ANGULOS COSTOFR.", "L5-S1", "COMPLETAR FALANGE DISTAL"],
+    "CUERPO":  ["SOBRE ÁPICES PULMONARES", "SOBRE CÚPULAS DIAF.", "ARCO AÓRTICO",
+                "BAJO ANGULOS COSTOFR.", "L5-S1"],
+    "EEII":    ["EIAS", "TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+                "TERCIO PROXIMAL TIBIA-PERONÉ", "TERCIO DISTAL TIBIA-PERONÉ",
+                "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS"],
+    "ANGIO":   ["SOBRE ÁPICES PULMONARES", "ARCO AÓRTICO", "SOBRE CÚPULAS DIAF.",
+                "BAJO ANGULOS COSTOFR.", "L5-S1", "COMPLETAR FALANGE DISTAL"],
 }
+
 REFS_FIN = {
-    "CABEZA":  ["BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO", "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR"],
+    "CABEZA":  ["BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO", "PISO ORBITARIO",
+                "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR"],
     "CUELLO":  ["CAE", "ARCO AÓRTICO", "MENTON"],
-    "EESS":    ["BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
-    "COLUMNA": ["SOBRE BASE DE CRÁNEO", "T1-T2", "T11-T12", "L4-L5", "S1-S2", "1 CM BAJO COXIS", "L5-S1"],
+    "EESS":    ["BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL MTC",
+                "COMPLETAR FALANGES DISTALES"],
+    "COLUMNA": ["SOBRE BASE DE CRÁNEO", "T1-T2", "T11-T12", "L4-L5", "S1-S2",
+                "1 CM BAJO COXIS", "L5-S1"],
     "CUERPO":  ["SOBRE CÚPULAS DIAF.", "BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA"],
-    "EEII":    ["TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR", "TERCIO PROXIMAL TIBIA-PERONÉ", "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS", "COMPLETAR ORTEJOS"],
-    "ANGIO":   ["BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA", "COMPLETAR FALANGE DISTAL", "COMPLETAR ORTEJOS"],
+    "EEII":    ["TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+                "TERCIO PROXIMAL TIBIA-PERONÉ", "BAJO CALCÁNEO",
+                "HASTA COMPLETAR ORTEJOS", "COMPLETAR ORTEJOS"],
+    "ANGIO":   ["BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA",
+                "COMPLETAR FALANGE DISTAL", "COMPLETAR ORTEJOS"],
+}
+
+# Posiciones Y relativas para el recuadro DFOV (0=arriba, 1=abajo)
+POSICIONES_Y = {
+    "VERTEX":                   0.05,
+    "SOBRE SENO FRONTAL":       0.12,
+    "TECHO ORBITARIO":          0.22,
+    "CAE":                      0.35,
+    "PISO ORBITARIO":           0.28,
+    "SOBRE REGION PETROSA":     0.38,
+    "ARCADA DENTARIA SUPERIOR": 0.42,
+    "BAJO BASE DE CRÁNEO":      0.48,
+    "MENTON":                   0.55,
+    "ARCO AÓRTICO":             0.85,
+    "SOBRE ÁPICES PULMONARES":  0.05,
+    "SOBRE CÚPULAS DIAF.":      0.22,
+    "BAJO ANGULOS COSTOFR.":    0.38,
+    "L5-S1":                    0.72,
+    "BAJO PELVIS OSEA":         0.88,
+    "SOBRE CRESTA ILIACA":      0.65,
+    "L4-L5":                    0.68,
+    "L1-L2":                    0.55,
+    "T11-T12":                  0.40,
+    "T1-T2":                    0.18,
+    "C6-C7":                    0.10,
 }
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# HELPERS DE NEGOCIO (cálculos, tablas)
+# ═══════════════════════════════════════════════════════════════════════════
+def obtener_opciones_conf_det(tipo_exp, doble_muestreo):
+    """Devuelve la lista de configuraciones de detectores válida para el tipo actual."""
+    if tipo_exp == "HELICOIDAL" and doble_muestreo == "SI":
+        return CONF_DETECTORES_DOBLE_MUESTREO
+    return CONF_DETECTORES_POR_TIPO.get(tipo_exp, CONF_DETECTORES)
+
+
+def obtener_cobertura_tabla(tipo_exp, conf_det, doble_muestreo):
+    """Devuelve la cobertura en mm según la tabla (no se calcula por fórmula)."""
+    if not tipo_exp or not conf_det:
+        return "—"
+    tabla = "DOBLE MUESTREO" if tipo_exp == "HELICOIDAL" and doble_muestreo == "SI" else tipo_exp
+    return COBERTURA_TABLA.get(tabla, {}).get(conf_det, "—")
+
+
+def calcular_cobertura_helical(conf_det, pitch):
+    """Cobertura en mm/rotación para exploración helicoidal."""
+    try:
+        partes = conf_det.replace(",", ".").split("x")
+        n_det = int(partes[0].strip())
+        ancho = float(partes[1].strip().replace(" mm", ""))
+        return round(n_det * ancho * float(pitch), 2)
+    except Exception:
+        return "—"
+
+
+def calcular_duracion(inicio_mm, fin_mm, cobertura_rot, rot_tubo):
+    """Duración estimada del scan en segundos."""
+    try:
+        longitud = abs(float(fin_mm) - float(inicio_mm))
+        if cobertura_rot and float(cobertura_rot) > 0 and float(rot_tubo) > 0:
+            return round(longitud / float(cobertura_rot) * float(rot_tubo), 1)
+        return "—"
+    except Exception:
+        return "—"
+
+
+def estimar_dosis_ctdi(kvp, mas, conf_det):
+    """Estimación simplificada de CTDIvol en mGy."""
+    try:
+        partes = conf_det.replace(",", ".").split("x")
+        n_det = int(partes[0].strip())
+        ancho = float(partes[1].strip().replace(" mm", ""))
+        col = n_det * ancho
+        base = (float(mas) / 200) * ((float(kvp) / 120) ** 2) * (col / 20) * 8
+        return round(base, 1)
+    except Exception:
+        return "—"
+
+
+def nivel_ruido_estimado(mas, kvp, grosor_mm):
+    """Nivel relativo de ruido (menor es mejor)."""
+    try:
+        return round(100 / math.sqrt(float(mas)) * (120 / float(kvp)) * (1 / math.sqrt(float(grosor_mm))), 1)
+    except Exception:
+        return "—"
+
+
+def get_y_position(ref):
+    """Posición Y (0-1) en el topograma para una referencia anatómica."""
+    return POSICIONES_Y.get(ref, 0.5)
+
+
+def get_y_position_with_offset(ref, offset_mm=0, total_mm=600):
+    """Combina referencia anatómica + desplazamiento en mm para ubicar la línea."""
+    try:
+        offset_mm = float(offset_mm or 0)
+    except Exception:
+        offset_mm = 0.0
+    base = get_y_position(ref)
+    y = base + (offset_mm / float(total_mm))
+    return max(0.01, min(0.99, y))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CONVERSIÓN DE IMAGEN PIL A BASE64 (para canvas HTML)
+# ═══════════════════════════════════════════════════════════════════════════
+def _pil_to_b64_jpeg(img, max_width=900):
+    """Convierte una imagen PIL a base64 JPEG para usarla en canvas HTML."""
+    if img is None:
+        return None
+    try:
+        im = img.copy()
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        elif im.mode == "L":
+            im = im.convert("RGB")
+        if max_width and im.width > max_width:
+            ratio = max_width / float(im.width)
+            im = im.resize((int(im.width * ratio), int(im.height * ratio)))
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=92)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+    except Exception:
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CANVAS HTML INTERACTIVO PARA TOPOGRAMAS (DFOV / línea de corte / ROI)
+# Copiado verbatim del PlaniTC original.
+# ═══════════════════════════════════════════════════════════════════════════
+def render_topogramas_independientes_interactivos(
+    topos,
+    width=760,
+    modo="rect",
+    storage_key=None,
+    color="#00D2FF",
+    show_labels=False,
+    roi_label="ROI",
+    canvas_css_width=None,
+    canvas_css_height=None,
+    canvas_width=None,
+    canvas_height=None,
+):
+    """
+    Renderiza uno o más canvas interactivos.
+    modo="rect"  -> rectángulo movible y redimensionable (DFOV)
+    modo="line"  -> línea horizontal única movible (corte de bolus)
+    modo="roi"   -> círculo movible y redimensionable para ROI
+    """
+    if not topos:
+        return None
+
+    if modo == "roi":
+        default_canvas_css_width = 360
+        default_canvas_css_height = 500
+        default_canvas_width = 520
+        default_canvas_height = 760
+    else:
+        default_canvas_css_width = 227 if len(topos) > 1 else 307
+        default_canvas_css_height = 333 if len(topos) > 1 else 387
+        default_canvas_width = 420
+        default_canvas_height = 640
+
+    canvas_css_width = canvas_css_width or default_canvas_css_width
+    canvas_css_height = canvas_css_height or default_canvas_css_height
+    canvas_width = canvas_width or default_canvas_width
+    canvas_height = canvas_height or default_canvas_height
+    min_col_width = canvas_css_width
+
+    cols_html = []
+    topo_payload = []
+
+    for i, topo in enumerate(topos):
+        img_b64 = topo.get("img_b64")
+        if not img_b64:
+            continue
+
+        titulo = topo.get("titulo", f"Topograma {i+1}")
+        subtitulo = topo.get("subtitulo", "")
+        inicio_ref = topo.get("inicio_ref", "—")
+        fin_ref = topo.get("fin_ref", "—")
+        inicio_mm = topo.get("inicio_mm", 0)
+        fin_mm = topo.get("fin_mm", 0)
+        y_ini = topo.get("y_ini", get_y_position_with_offset(inicio_ref, inicio_mm))
+        y_fin = topo.get("y_fin", get_y_position_with_offset(fin_ref, fin_mm))
+
+        y1 = max(0.05, min(y_ini, y_fin))
+        y2 = min(0.95, max(y_ini, y_fin))
+        rect_h = max(0.10, y2 - y1)
+        rect_y = max(0.02, min(0.98 - rect_h, y1))
+        rect_x = 0.22
+        rect_w = 0.56
+        line_y = (y1 + y2) / 2.0
+        circle_x = 0.50
+        circle_y = 0.50
+        circle_r = 0.12
+
+        labels_html = ""
+        if show_labels:
+            labels_html = f'''
+          <div style="margin-top:4px; font-size:13px; color:#fff; text-align:center; line-height:1.45;">
+            Campo: <b id="lblSizeInd{i}">—</b>
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            Centro: <b id="lblCenterInd{i}">—</b>
+            <br>
+            Alto aprox.: <b id="lblHeightInd{i}">—</b> mm
+            &nbsp;&nbsp;|&nbsp;&nbsp;
+            Ancho aprox.: <b id="lblWidthInd{i}">—</b> %
+          </div>
+            '''
+
+        cols_html.append(f'''
+        <div style="flex:0 0 {canvas_css_width}px; width:{canvas_css_width}px; min-width:{min_col_width}px; max-width:{canvas_css_width}px;">
+          <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
+          <canvas id="topoCanvasInd{i}" width="{canvas_width}" height="{canvas_height}"
+            style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+          <div style="margin-top:6px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
+          {labels_html}
+        </div>
+        ''')
+
+        topo_payload.append({
+            "img_b64": img_b64,
+            "rect_x": rect_x,
+            "rect_y": rect_y,
+            "rect_w": rect_w,
+            "rect_h": rect_h,
+            "line_y": line_y,
+            "circle_x": circle_x,
+            "circle_y": circle_y,
+            "circle_r": circle_r,
+        })
+
+    if not cols_html:
+        return None
+
+    help_text = {
+        "rect": "Arrastra el recuadro para moverlo. Usa cualquiera de sus bordes o esquinas para cambiar su tamaño.",
+        "line": "Arrastra la línea para ubicar el corte de planificación.",
+        "roi": "Arrastra el círculo para mover el ROI. Usa el control lateral para ajustar su tamaño.",
+    }.get(modo, "")
+
+    html = f'''
+<div style="text-align:center; margin:0 0 0 0;">
+  <div style="display:inline-block; font-size:11px; color:#aaa; margin-bottom:2px;">
+    {help_text}
+  </div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start; justify-content:center; margin-bottom:0;">
+    {''.join(cols_html)}
+  </div>
+</div>
+<script>
+(function() {{
+  var topoData = {json.dumps(topo_payload)};
+  var modo = {json.dumps(modo)};
+  var baseStorageKey = {json.dumps(storage_key or '')};
+  var strokeColor = {json.dumps(color)};
+  var showLabels = {json.dumps(show_labels)};
+  var roiLabel = {json.dumps(roi_label)};
+
+  function rgbaFromHex(hex, alpha) {{
+    if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
+    var h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(function(c) {{ return c + c; }}).join('');
+    if (h.length !== 6) return 'rgba(0,210,255,' + alpha + ')';
+    var r = parseInt(h.substring(0,2), 16);
+    var g = parseInt(h.substring(2,4), 16);
+    var b = parseInt(h.substring(4,6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }}
+
+  topoData.forEach(function(data, idx) {{
+    var canvas = document.getElementById('topoCanvasInd' + idx);
+    if (!canvas) return;
+
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    var storageKey = baseStorageKey ? ('planitc_' + baseStorageKey + '_' + modo + '_' + idx) : '';
+
+    var rectState = {{ x: data.rect_x, y: data.rect_y, w: data.rect_w, h: data.rect_h }};
+    var lineState = {{ y: data.line_y }};
+    var circleState = {{ x: data.circle_x, y: data.circle_y, r: data.circle_r }};
+
+    try {{
+      if (storageKey) {{
+        var saved = localStorage.getItem(storageKey);
+        if (saved) {{
+          var parsed = JSON.parse(saved);
+          if (modo === 'rect' && parsed && parsed.rectState) rectState = parsed.rectState;
+          if (modo === 'line' && parsed && parsed.lineState) lineState = parsed.lineState;
+          if (modo === 'roi' && parsed && parsed.circleState) circleState = parsed.circleState;
+        }}
+      }}
+    }} catch (e) {{}}
+
+    var dragMode = null;
+    var dragOffsetX = 0;
+    var dragOffsetY = 0;
+    var handleSize = 6;
+    var minW = 0.12;
+    var minH = 0.10;
+    var minR = modo === 'roi' ? 0.004 : 0.05;
+    var roiMoveHitMinPx = 18;
+    var roiHandleHitExtraPx = 12;
+    var roiVisualMinPx = 10;
+    var img = new Image();
+    img.src = 'data:image/jpeg;base64,' + data.img_b64;
+
+    function saveState() {{
+      try {{
+        if (!storageKey) return;
+        localStorage.setItem(storageKey, JSON.stringify({{
+          rectState: rectState,
+          lineState: lineState,
+          circleState: circleState
+        }}));
+      }} catch (e) {{}}
+    }}
+
+    function clampRect() {{
+      rectState.w = Math.max(minW, Math.min(0.92, rectState.w));
+      rectState.h = Math.max(minH, Math.min(0.92, rectState.h));
+      rectState.x = Math.max(0.02, Math.min(0.98 - rectState.w, rectState.x));
+      rectState.y = Math.max(0.02, Math.min(0.98 - rectState.h, rectState.y));
+    }}
+
+    function clampLine() {{
+      lineState.y = Math.max(0.03, Math.min(0.97, lineState.y));
+    }}
+
+    function clampCircle() {{
+      circleState.r = Math.max(minR, Math.min(0.35, circleState.r));
+      circleState.x = Math.max(circleState.r + 0.02, Math.min(0.98 - circleState.r, circleState.x));
+      circleState.y = Math.max(circleState.r + 0.02, Math.min(0.98 - circleState.r, circleState.y));
+    }}
+
+    function getRectPx() {{
+      return {{ x: rectState.x * W, y: rectState.y * H, w: rectState.w * W, h: rectState.h * H }};
+    }}
+
+    function getLinePx() {{
+      return {{ y: lineState.y * H }};
+    }}
+
+    function getCirclePx() {{
+      return {{ x: circleState.x * W, y: circleState.y * H, r: circleState.r * Math.min(W, H) }};
+    }}
+
+    function getRectResizeMode(mx, my, rp) {{
+      var edgeHit = Math.max(12, handleSize + 4);
+      var onLeft = Math.abs(mx - rp.x) <= edgeHit && my >= rp.y - edgeHit && my <= rp.y + rp.h + edgeHit;
+      var onRight = Math.abs(mx - (rp.x + rp.w)) <= edgeHit && my >= rp.y - edgeHit && my <= rp.y + rp.h + edgeHit;
+      var onTop = Math.abs(my - rp.y) <= edgeHit && mx >= rp.x - edgeHit && mx <= rp.x + rp.w + edgeHit;
+      var onBottom = Math.abs(my - (rp.y + rp.h)) <= edgeHit && mx >= rp.x - edgeHit && mx <= rp.x + rp.w + edgeHit;
+
+      if (onLeft && onTop) return 'resize-rect-nw';
+      if (onRight && onTop) return 'resize-rect-ne';
+      if (onLeft && onBottom) return 'resize-rect-sw';
+      if (onRight && onBottom) return 'resize-rect-se';
+      if (onLeft) return 'resize-rect-w';
+      if (onRight) return 'resize-rect-e';
+      if (onTop) return 'resize-rect-n';
+      if (onBottom) return 'resize-rect-s';
+      return null;
+    }}
+
+    function isInsideRect(mx, my, rp) {{
+      return mx >= rp.x && mx <= rp.x + rp.w && my >= rp.y && my <= rp.y + rp.h;
+    }}
+
+    function isOnLine(my, lp) {{
+      return Math.abs(my - lp.y) <= 14;
+    }}
+
+    function isInsideCircle(mx, my, cp) {{
+      var dx = mx - cp.x;
+      var dy = my - cp.y;
+      var hitRadius = Math.max(cp.r, roiMoveHitMinPx);
+      return Math.sqrt(dx*dx + dy*dy) <= hitRadius;
+    }}
+
+    function isOnCircleHandle(mx, my, cp) {{
+      var dx = mx - cp.x;
+      var dy = my - cp.y;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      var visualRadius = Math.max(cp.r, roiVisualMinPx);
+      var edgeTolerance = Math.max(10, roiHandleHitExtraPx);
+      return Math.abs(dist - visualRadius) <= edgeTolerance;
+    }}
+
+    function updateLabels() {{
+      if (!showLabels) return;
+      var lblSize = document.getElementById('lblSizeInd' + idx);
+      var lblCenter = document.getElementById('lblCenterInd' + idx);
+      var lblHeight = document.getElementById('lblHeightInd' + idx);
+      var lblWidth = document.getElementById('lblWidthInd' + idx);
+      if (!lblSize || !lblCenter || !lblHeight || !lblWidth) return;
+
+      if (modo === 'rect') {{
+        var centerX = Math.round((rectState.x + rectState.w / 2) * 100);
+        var centerY = Math.round((rectState.y + rectState.h / 2) * 100);
+        var widthPct = Math.round(rectState.w * 100);
+        var heightMm = Math.round(rectState.h * 600);
+        lblSize.textContent = widthPct + '% × ' + Math.round(rectState.h * 100) + '%';
+        lblCenter.textContent = 'X ' + centerX + '% · Y ' + centerY + '%';
+        lblHeight.textContent = heightMm;
+        lblWidth.textContent = widthPct;
+      }} else if (modo === 'line') {{
+        lblSize.textContent = 'Corte único';
+        lblCenter.textContent = 'Y ' + Math.round(lineState.y * 100) + '%';
+        lblHeight.textContent = '—';
+        lblWidth.textContent = '—';
+      }} else if (modo === 'roi') {{
+        lblSize.textContent = 'ROI';
+        lblCenter.textContent = 'X ' + Math.round(circleState.x * 100) + '% · Y ' + Math.round(circleState.y * 100) + '%';
+        lblHeight.textContent = Math.round(circleState.r * 2 * 600);
+        lblWidth.textContent = Math.round((circleState.r * 2) * 100);
+      }}
+    }}
+
+    function drawBaseImage() {{
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+      if (img.width && img.height) {{
+        var scale = (modo === 'roi')
+          ? Math.max(W / img.width, H / img.height)
+          : Math.min(W / img.width, H / img.height);
+        var drawW = img.width * scale;
+        var drawH = img.height * scale;
+        var dx = (W - drawW) / 2;
+        var dy = (H - drawH) / 2;
+        ctx.drawImage(img, dx, dy, drawW, drawH);
+      }}
+    }}
+
+    function drawRect() {{
+      clampRect();
+      var rp = getRectPx();
+      ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
+      ctx.fillRect(rp.x, rp.y, rp.w, rp.h);
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 6]);
+      ctx.strokeRect(rp.x, rp.y, rp.w, rp.h);
+      ctx.setLineDash([]);
+      ctx.fillStyle = strokeColor;
+      ctx.font = 'bold 12px sans-serif';
+    }}
+
+    function drawLine() {{
+      clampLine();
+      var lp = getLinePx();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(28, lp.y);
+      ctx.lineTo(W - 28, lp.y);
+      ctx.stroke();
+      ctx.fillStyle = strokeColor;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('CORTE', 28, Math.max(18, lp.y - 10));
+    }}
+
+    function drawCircle() {{
+      clampCircle();
+      var cp = getCirclePx();
+      var visualRadius = Math.max(cp.r, roiVisualMinPx);
+      ctx.fillStyle = rgbaFromHex(strokeColor, 0.18);
+      ctx.beginPath();
+      ctx.arc(cp.x, cp.y, visualRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cp.x, cp.y, visualRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = strokeColor;
+      ctx.beginPath();
+      ctx.arc(cp.x + visualRadius, cp.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = strokeColor;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(roiLabel, Math.max(10, cp.x - visualRadius), Math.max(18, cp.y - visualRadius - 8));
+    }}
+
+    function draw() {{
+      drawBaseImage();
+      if (modo === 'line') drawLine();
+      else if (modo === 'roi') drawCircle();
+      else drawRect();
+      updateLabels();
+      saveState();
+    }}
+
+    function getMousePos(e) {{
+      var rect = canvas.getBoundingClientRect();
+      var scaleX = W / rect.width;
+      var scaleY = H / rect.height;
+      return {{ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }};
+    }}
+
+    function updateCursor(mx, my) {{
+      if (modo === 'line') {{
+        var lp = getLinePx();
+        canvas.style.cursor = isOnLine(my, lp) ? 'ns-resize' : 'default';
+        return;
+      }}
+      if (modo === 'roi') {{
+        var cp = getCirclePx();
+        if (isOnCircleHandle(mx, my, cp)) canvas.style.cursor = 'nwse-resize';
+        else if (isInsideCircle(mx, my, cp)) canvas.style.cursor = 'grab';
+        else canvas.style.cursor = 'default';
+        return;
+      }}
+      var rp = getRectPx();
+      var resizeMode = getRectResizeMode(mx, my, rp);
+      if (resizeMode === 'resize-rect-n' || resizeMode === 'resize-rect-s') canvas.style.cursor = 'ns-resize';
+      else if (resizeMode === 'resize-rect-e' || resizeMode === 'resize-rect-w') canvas.style.cursor = 'ew-resize';
+      else if (resizeMode === 'resize-rect-ne' || resizeMode === 'resize-rect-sw') canvas.style.cursor = 'nesw-resize';
+      else if (resizeMode === 'resize-rect-nw' || resizeMode === 'resize-rect-se') canvas.style.cursor = 'nwse-resize';
+      else if (isInsideRect(mx, my, rp)) canvas.style.cursor = 'grab';
+      else canvas.style.cursor = 'default';
+    }}
+
+    canvas.addEventListener('mousedown', function(e) {{
+      var pos = getMousePos(e);
+      if (modo === 'line') {{
+        var lp = getLinePx();
+        if (isOnLine(pos.y, lp)) dragMode = 'move-line';
+        return;
+      }}
+      if (modo === 'roi') {{
+        var cp = getCirclePx();
+        if (isOnCircleHandle(pos.x, pos.y, cp)) {{
+          dragMode = 'resize-circle';
+        }} else if (isInsideCircle(pos.x, pos.y, cp)) {{
+          dragMode = 'move-circle';
+          dragOffsetX = pos.x - cp.x;
+          dragOffsetY = pos.y - cp.y;
+          canvas.style.cursor = 'grabbing';
+        }}
+        return;
+      }}
+      var rp = getRectPx();
+      var rectResizeMode = getRectResizeMode(pos.x, pos.y, rp);
+      if (rectResizeMode) {{
+        dragMode = rectResizeMode;
+        if (rectResizeMode === 'resize-rect-n' || rectResizeMode === 'resize-rect-s') canvas.style.cursor = 'ns-resize';
+        else if (rectResizeMode === 'resize-rect-e' || rectResizeMode === 'resize-rect-w') canvas.style.cursor = 'ew-resize';
+        else if (rectResizeMode === 'resize-rect-ne' || rectResizeMode === 'resize-rect-sw') canvas.style.cursor = 'nesw-resize';
+        else canvas.style.cursor = 'nwse-resize';
+      }} else if (isInsideRect(pos.x, pos.y, rp)) {{
+        dragMode = 'move-rect';
+        dragOffsetX = pos.x - rp.x;
+        dragOffsetY = pos.y - rp.y;
+        canvas.style.cursor = 'grabbing';
+      }}
+    }});
+
+    canvas.addEventListener('mousemove', function(e) {{
+      var pos = getMousePos(e);
+      updateCursor(pos.x, pos.y);
+      if (!dragMode) return;
+
+      if (dragMode === 'move-line') {{
+        lineState.y = pos.y / H;
+        clampLine();
+      }} else if (dragMode === 'move-circle') {{
+        circleState.x = (pos.x - dragOffsetX) / W;
+        circleState.y = (pos.y - dragOffsetY) / H;
+        clampCircle();
+      }} else if (dragMode === 'resize-circle') {{
+        var cp = getCirclePx();
+        var dx = pos.x - cp.x;
+        var dy = pos.y - cp.y;
+        circleState.r = Math.max(minR, Math.sqrt(dx*dx + dy*dy) / Math.min(W, H));
+        clampCircle();
+      }} else if (dragMode === 'move-rect') {{
+        rectState.x = (pos.x - dragOffsetX) / W;
+        rectState.y = (pos.y - dragOffsetY) / H;
+        clampRect();
+      }} else if (dragMode && dragMode.indexOf('resize-rect') === 0) {{
+        var left = rectState.x;
+        var top = rectState.y;
+        var right = rectState.x + rectState.w;
+        var bottom = rectState.y + rectState.h;
+        var px = pos.x / W;
+        var py = pos.y / H;
+
+        if (dragMode === 'resize-rect-e' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-se') right = px;
+        if (dragMode === 'resize-rect-w' || dragMode === 'resize-rect-nw' || dragMode === 'resize-rect-sw') left = px;
+        if (dragMode === 'resize-rect-s' || dragMode === 'resize-rect-se' || dragMode === 'resize-rect-sw') bottom = py;
+        if (dragMode === 'resize-rect-n' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-nw') top = py;
+
+        if (right - left < minW) {{
+          if (dragMode === 'resize-rect-w' || dragMode === 'resize-rect-nw' || dragMode === 'resize-rect-sw') left = right - minW;
+          else right = left + minW;
+        }}
+        if (bottom - top < minH) {{
+          if (dragMode === 'resize-rect-n' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-nw') top = bottom - minH;
+          else bottom = top + minH;
+        }}
+
+        rectState.x = left;
+        rectState.y = top;
+        rectState.w = right - left;
+        rectState.h = bottom - top;
+        clampRect();
+      }}
+      draw();
+    }});
+
+    function endDrag() {{
+      dragMode = null;
+      canvas.style.cursor = 'grab';
+      saveState();
+    }}
+
+    canvas.addEventListener('mouseup', endDrag);
+    canvas.addEventListener('mouseleave', endDrag);
+    canvas.addEventListener('touchstart', function(e) {{
+      e.preventDefault();
+      var t = e.touches[0];
+      var pos = getMousePos(t);
+      if (modo === 'line') {{
+        var lp = getLinePx();
+        if (isOnLine(pos.y, lp)) dragMode = 'move-line';
+        return;
+      }}
+      if (modo === 'roi') {{
+        var cp = getCirclePx();
+        if (isOnCircleHandle(pos.x, pos.y, cp)) {{
+          dragMode = 'resize-circle';
+        }} else if (isInsideCircle(pos.x, pos.y, cp)) {{
+          dragMode = 'move-circle';
+          dragOffsetX = pos.x - cp.x;
+          dragOffsetY = pos.y - cp.y;
+        }}
+        return;
+      }}
+      var rp = getRectPx();
+      var rectResizeMode = getRectResizeMode(pos.x, pos.y, rp);
+      if (rectResizeMode) {{
+        dragMode = rectResizeMode;
+      }} else if (isInsideRect(pos.x, pos.y, rp)) {{
+        dragMode = 'move-rect';
+        dragOffsetX = pos.x - rp.x;
+        dragOffsetY = pos.y - rp.y;
+      }}
+    }}, {{passive:false}});
+
+    canvas.addEventListener('touchmove', function(e) {{
+      e.preventDefault();
+      if (!dragMode) return;
+      var t = e.touches[0];
+      var pos = getMousePos(t);
+      if (dragMode === 'move-line') {{
+        lineState.y = pos.y / H;
+        clampLine();
+      }} else if (dragMode === 'move-circle') {{
+        circleState.x = (pos.x - dragOffsetX) / W;
+        circleState.y = (pos.y - dragOffsetY) / H;
+        clampCircle();
+      }} else if (dragMode === 'resize-circle') {{
+        var cp = getCirclePx();
+        var dx = pos.x - cp.x;
+        var dy = pos.y - cp.y;
+        circleState.r = Math.max(minR, Math.sqrt(dx*dx + dy*dy) / Math.min(W, H));
+        clampCircle();
+      }} else if (dragMode === 'move-rect') {{
+        rectState.x = (pos.x - dragOffsetX) / W;
+        rectState.y = (pos.y - dragOffsetY) / H;
+        clampRect();
+      }} else if (dragMode && dragMode.indexOf('resize-rect') === 0) {{
+        var left = rectState.x;
+        var top = rectState.y;
+        var right = rectState.x + rectState.w;
+        var bottom = rectState.y + rectState.h;
+        var px = pos.x / W;
+        var py = pos.y / H;
+
+        if (dragMode === 'resize-rect-e' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-se') right = px;
+        if (dragMode === 'resize-rect-w' || dragMode === 'resize-rect-nw' || dragMode === 'resize-rect-sw') left = px;
+        if (dragMode === 'resize-rect-s' || dragMode === 'resize-rect-se' || dragMode === 'resize-rect-sw') bottom = py;
+        if (dragMode === 'resize-rect-n' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-nw') top = py;
+
+        if (right - left < minW) {{
+          if (dragMode === 'resize-rect-w' || dragMode === 'resize-rect-nw' || dragMode === 'resize-rect-sw') left = right - minW;
+          else right = left + minW;
+        }}
+        if (bottom - top < minH) {{
+          if (dragMode === 'resize-rect-n' || dragMode === 'resize-rect-ne' || dragMode === 'resize-rect-nw') top = bottom - minH;
+          else bottom = top + minH;
+        }}
+
+        rectState.x = left;
+        rectState.y = top;
+        rectState.w = right - left;
+        rectState.h = bottom - top;
+        clampRect();
+      }}
+      draw();
+    }}, {{passive:false}});
+
+    canvas.addEventListener('touchend', endDrag);
+    img.onload = function() {{ draw(); }};
+    if (img.complete) draw();
+  }});
+}})();
+</script>
+'''
+    return html
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# HELPERS DE UI
+# ═══════════════════════════════════════════════════════════════════════════
+def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible", disabled=False, format_func=None):
+    """Selectbox con 'Seleccionar' al inicio; devuelve None si no hay selección."""
+    opciones = ["Seleccionar"] + list(options)
+    if value in options and value is not None:
+        idx = opciones.index(value)
+    else:
+        idx = 0
+    if format_func is None:
+        def _fmt(x):
+            return "Seleccionar" if x == "Seleccionar" else str(x)
+        format_func = _fmt
+    val = st.selectbox(
+        label,
+        opciones,
+        index=idx,
+        key=key,
+        label_visibility=label_visibility,
+        disabled=disabled,
+        format_func=format_func,
+    )
+    return None if val == "Seleccionar" else val
+
+
+def _number(label, value, key, min_value=0, max_value=4000, step=10, disabled=False):
+    try:
+        value = int(value)
+    except Exception:
+        value = min_value
+    return st.number_input(
+        label, min_value=min_value, max_value=max_value,
+        step=step, value=value, key=key,
+        label_visibility="collapsed", disabled=disabled,
+    )
+
+
+def _text_disabled(label, value, key):
+    st.text_input(label, value=str(value), disabled=True, key=key, label_visibility="collapsed")
+
+
+def _adq_pair(col, etiqueta, render_fn):
+    """Renderiza una etiqueta arriba + un widget debajo dentro de una columna."""
+    with col:
+        st.markdown(f"**{etiqueta}**")
+        render_fn()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ESTADO: exploraciones
+# ═══════════════════════════════════════════════════════════════════════════
 def _new_id() -> str:
     return f"exp_{uuid.uuid4().hex[:8]}"
 
@@ -64,40 +934,33 @@ def _new_id() -> str:
 def _crear_exploracion_base():
     return {
         "id": _new_id(),
-        "tipo": "adquisicion",
-        "tipo_item": "adquisicion",
-        "nombre": "Seleccionar",
-        "tipo_exploracion": "Seleccionar",
-        "tipo_exp": "Seleccionar",
-        "modulacion_corriente": "Seleccionar",
-        "mod_corriente": "Seleccionar",
-        "mas": "Seleccionar",
-        "mas_val": "Seleccionar",
-        "indice_ruido": "Seleccionar",
-        "ind_ruido": "Seleccionar",
-        "kv": "Seleccionar",
-        "kvp": "Seleccionar",
-        "doble_muestreo": "Seleccionar",
-        "config_detectores": "Seleccionar",
-        "conf_det": "Seleccionar",
-        "cobertura": "—",
-        "grosor_prospectivo": "Seleccionar",
-        "grosor_prosp": "Seleccionar",
-        "sfov": "Seleccionar",
-        "instruccion_voz": "Seleccionar",
-        "retardo": "Seleccionar",
-        "pitch": "Seleccionar",
-        "rotacion_tubo": "Seleccionar",
-        "rot_tubo": "Seleccionar",
-        "periodo": "Seleccionar",
-        "n_imagenes": "Seleccionar",
-        "posicion_corte": "Seleccionar",
-        "umbral_tracking": "Seleccionar",
-        "inicio_ref": "Seleccionar",
+        "nombre": None,
+        "tipo_exp": None,
+        "mod_corriente": "MANUAL",
+        "mas_val": None,
+        "ind_ruido": None,
+        "ind_cal": None,
+        "rango_ma": None,
+        "kvp": None,
+        "doble_muestreo": "NO",
+        "conf_det": None,
+        "cobertura_tabla": "—",
+        "grosor_prosp": None,
+        "sfov": None,
+        "voz_adq": None,
+        "retardo": None,
+        "pitch": None,
+        "rot_tubo": None,
+        "inicio_ref": None,
         "ini_mm": 0,
-        "fin_ref": "Seleccionar",
+        "fin_ref": None,
         "fin_mm": 400,
         "observaciones": "",
+        # BOLUS
+        "periodo": None,
+        "n_imagenes": None,
+        "posicion_corte": None,
+        "umbral_tracking": None,
     }
 
 
@@ -106,93 +969,38 @@ def _init_state():
     st.session_state.setdefault("exp_activa", "topograma")
     if not st.session_state["exploraciones"]:
         st.session_state["exploraciones"] = [_crear_exploracion_base()]
-    _sync_adq()
 
 
-def _sync_adq():
-    exps = st.session_state.get("exploraciones", [])
-    for i, exp in enumerate(exps, start=1):
-        exp.setdefault("id", _new_id())
-        exp["tipo"] = "adquisicion"
-        exp["tipo_item"] = "adquisicion"
-        exp["tipo_exp"] = exp.get("tipo_exploracion", "Seleccionar")
-        exp["mod_corriente"] = exp.get("modulacion_corriente", "Seleccionar")
-        exp["mas_val"] = exp.get("mas", "Seleccionar")
-        exp["ind_ruido"] = exp.get("indice_ruido", "Seleccionar")
-        exp["kvp"] = exp.get("kv", "Seleccionar")
-        exp["conf_det"] = exp.get("config_detectores", "Seleccionar")
-        exp["grosor_prosp"] = exp.get("grosor_prospectivo", "Seleccionar")
-        exp["rot_tubo"] = exp.get("rotacion_tubo", "Seleccionar")
-        if not exp.get("nombre") or exp.get("nombre") == "Seleccionar":
-            exp["titulo_sidebar"] = f"EXPLORACIÓN {i}"
-        else:
-            exp["titulo_sidebar"] = exp["nombre"]
-    st.session_state["exploraciones_adq"] = [dict(e) for e in exps]
-
-
-def _calcular_cobertura(config_detectores, doble_muestreo):
-    if not config_detectores or config_detectores == "Seleccionar":
-        return "—"
-    texto = config_detectores.replace(" ", "").replace(",", ".")
-    if "x" not in texto:
-        return "—"
-    try:
-        filas_txt, colim_txt = texto.split("x")
-        cobertura = float(filas_txt) * float(colim_txt)
-        if doble_muestreo == "SI":
-            cobertura *= 2
-        return f"{int(cobertura) if cobertura.is_integer() else round(cobertura, 1)}"
-    except Exception:
-        return "—"
-
-
-def _select(label, options, value, key, label_visibility="visible", disabled=False):
-    vals = list(options)
-    if value not in vals:
-        value = vals[0]
-    idx = vals.index(value)
-    return st.selectbox(label, vals, index=idx, key=key, label_visibility=label_visibility, disabled=disabled)
-
-
-def _number(label, value, key, min_value=0, max_value=4000, step=1, disabled=False):
-    try:
-        value = int(value)
-    except Exception:
-        value = min_value
-    return st.number_input(label, min_value=min_value, max_value=max_value, step=step, value=value, key=key, label_visibility="collapsed", disabled=disabled)
-
-
-def _text_disabled(label, value, key):
-    st.text_input(label, value=str(value), disabled=True, key=key, label_visibility="collapsed")
-
-
-def _name_visible(exp, idx):
-    return exp.get("titulo_sidebar") or f"EXPLORACIÓN {idx+1}"
-
-
-def _ajustar_tipo_segun_nombre(exp):
-    nombre = exp.get("nombre", "Seleccionar")
-    if nombre == "BOLUS TEST":
-        exp["tipo_exploracion"] = "SECUENCIAL"
-        exp["tipo_exp"] = "SECUENCIAL"
-        exp["mas"] = "20"
-        exp["kv"] = "100"
-    elif nombre == "BOLUS TRACKING":
-        exp["tipo_exploracion"] = "SECUENCIAL"
-        exp["tipo_exp"] = "SECUENCIAL"
-        exp["mas"] = "20"
-        exp["kv"] = "100"
-
-
-def _region_grupo(store):
-    region = (store.get("region_anatomica") or store.get("region") or "").upper()
-    examen = (store.get("examen") or "").upper()
+def _region_grupo():
+    """Determina el grupo anatómico para REFS_INICIO/REFS_FIN a partir del topograma."""
+    store = st.session_state.get("topograma_store", {})
+    region = (store.get("region_anat") or store.get("region") or st.session_state.get("region_anat", "") or "").upper()
+    examen = (store.get("examen") or st.session_state.get("examen", "") or "").upper()
     if "ANGIO" in region or examen.startswith("ATC"):
         return "ANGIO"
     for key in REFS_INICIO:
         if key in region:
             return key
     return "CUERPO"
+
+
+def _ajustar_por_nombre(exp):
+    """Reglas automáticas al cambiar el nombre de la exploración."""
+    nombre = exp.get("nombre")
+    if nombre in ("BOLUS TEST", "BOLUS TRACKING"):
+        exp["tipo_exp"] = "SECUENCIAL CONTIGUO"
+        exp["mas_val"] = 20
+        exp["kvp"] = 100
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# SIDEBAR: lista de exploraciones
+# ═══════════════════════════════════════════════════════════════════════════
+def _name_visible(exp, idx):
+    n = exp.get("nombre")
+    if n and n != "Seleccionar":
+        return n
+    return f"EXPLORACIÓN {idx+1}"
 
 
 def _render_sidebar():
@@ -207,7 +1015,6 @@ def _render_sidebar():
     if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
         st.session_state["exploraciones"].append(_crear_exploracion_base())
         st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        _sync_adq()
         st.rerun()
     if isinstance(st.session_state.get("exp_activa"), int):
         idx = st.session_state["exp_activa"]
@@ -219,156 +1026,477 @@ def _render_sidebar():
                     copia["id"] = _new_id()
                     st.session_state["exploraciones"].insert(idx + 1, copia)
                     st.session_state["exp_activa"] = idx + 1
-                    _sync_adq()
                     st.rerun()
             with c2:
                 if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
                     if len(st.session_state["exploraciones"]) > 1:
                         st.session_state["exploraciones"].pop(idx)
                         st.session_state["exp_activa"] = min(idx, len(st.session_state["exploraciones"]) - 1)
-                        _sync_adq()
                         st.rerun()
 
 
-def _render_resumen_topograma(store):
-    st.markdown("## 📡 Resumen de referencia")
-    c1, c2, c3, c4 = st.columns(4, gap="medium")
-    c1.info(f"**Examen**\n\n{store.get('examen') or '—'}")
-    c2.info(f"**Topograma 1**\n\n{store.get('t1_posicion_paciente') or '—'}")
-    c3.info(f"**Entrada 1**\n\n{store.get('t1_entrada_paciente') or '—'}")
-    c4.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '—'}")
+# ═══════════════════════════════════════════════════════════════════════════
+# TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
+# ═══════════════════════════════════════════════════════════════════════════
+def _render_topogramas_adq(exp, es_bolus):
+    """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus)."""
+    tstore = st.session_state.get("topograma_store", {}) or {}
+    hay_topo1 = bool(st.session_state.get("topograma_iniciado", False))
+    hay_topo2 = bool(
+        tstore.get("aplica_topo2") and st.session_state.get("topograma2_iniciado", False)
+    )
+
+    topos = []
+
+    if hay_topo1:
+        img1, _err1 = obtener_imagen_topograma_adquirido(
+            tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("posicion") or "",
+            tstore.get("entrada") or "",
+            tstore.get("t1pt") or "",
+        )
+        if img1 is not None:
+            topos.append({
+                "titulo": "✅ Topograma 1",
+                "subtitulo": (
+                    f"Tubo: {tstore.get('t1pt') or '—'} · "
+                    f"{tstore.get('t1l') or '—'} mm · 100 kV · 40 mA"
+                ),
+                "img_b64": _pil_to_b64_jpeg(img1),
+            })
+
+    if hay_topo2:
+        img2, _err2 = obtener_imagen_topograma_adquirido(
+            tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
+            tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
+            tstore.get("t2_posicion_tubo") or tstore.get("t2pt") or "",
+        )
+        if img2 is not None:
+            topos.append({
+                "titulo": "✅ Topograma 2",
+                "subtitulo": (
+                    f"Tubo: {tstore.get('t2pt') or '—'} · "
+                    f"{tstore.get('t2l') or '—'} mm · 100 kV · 40 mA"
+                ),
+                "img_b64": _pil_to_b64_jpeg(img2),
+            })
+
+    if not topos:
+        st.info("Inicia el/los topograma(s) en la pestaña Topograma para verlos aquí con la caja DFOV.")
+        return
+
+    # Enriquecer con inicio/fin para posicionar la caja
+    grupo = _region_grupo()
+    refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
+    refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
+    ini_ref = exp.get("inicio_ref") or refs_ini[0]
+    fin_ref = exp.get("fin_ref") or refs_fin[0]
+    ini_mm = int(exp.get("ini_mm", 0) or 0)
+    fin_mm = int(exp.get("fin_mm", 400) or 400)
+
+    for t in topos:
+        t["inicio_ref"] = ini_ref
+        t["fin_ref"] = fin_ref
+        t["inicio_mm"] = ini_mm
+        t["fin_mm"] = fin_mm
+        t["y_ini"] = get_y_position_with_offset(ini_ref, ini_mm)
+        t["y_fin"] = get_y_position_with_offset(fin_ref, fin_mm)
+
+    modo = "line" if es_bolus else "rect"
+    html = render_topogramas_independientes_interactivos(
+        topos,
+        modo=modo,
+        storage_key=exp["id"],
+        color="#00D2FF",
+        show_labels=False,
+    )
+    if html:
+        alto = 430 if len(topos) > 1 else 470
+        st.components.v1.html(html, height=alto)
 
 
-def _adq_pair(col, title, render_fn):
-    with col:
-        st.markdown(f"**{title}**")
-        render_fn()
-
-
-def _render_normales(exp, store):
+# ═══════════════════════════════════════════════════════════════════════════
+# RENDERIZADO DE FILAS (lógica dinámica del PlaniTC original)
+# ═══════════════════════════════════════════════════════════════════════════
+def _render_normales(exp):
+    """Filas 1-4 para exploraciones que no son BOLUS."""
     eid = exp["id"]
-    row_title = st.columns([2.2, 1], gap="medium")
-    with row_title[0]:
-        exp["nombre"] = _select("Nombre de la exploración", NOMBRES_EXPLORACION, exp.get("nombre", "Seleccionar"), key=f"nombre_exp_{eid}")
-    _ajustar_tipo_segun_nombre(exp)
-    with row_title[1]:
-        disabled_tipo = exp.get("nombre") in {"BOLUS TEST", "BOLUS TRACKING"}
-        exp["tipo_exploracion"] = _select("Tipo exploración", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "Seleccionar"), key=f"tipo_exp_{eid}", disabled=disabled_tipo)
+    grupo = _region_grupo()
+    refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
+    refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
 
-    row1 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
-    with row1[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>☢️</div>", unsafe_allow_html=True)
-    _adq_pair(row1[1], "MODULACIÓN CORRIENTE", lambda: exp.__setitem__("modulacion_corriente", _select("Modulación corriente", MODULACION_CORRIENTE, exp.get("modulacion_corriente", "Seleccionar"), key=f"modcorr_{eid}", label_visibility="collapsed")))
-    _adq_pair(row1[2], "MAS", lambda: exp.__setitem__("mas", _select("mAs", MAS_OPCIONES, exp.get("mas", "Seleccionar"), key=f"mas_{eid}", label_visibility="collapsed", disabled=exp.get("nombre") in {"BOLUS TEST","BOLUS TRACKING"})))
-    _adq_pair(row1[3], "INDICE DE RUIDO", lambda: exp.__setitem__("indice_ruido", _select("Indice ruido", INDICE_RUIDO_OPCIONES, exp.get("indice_ruido", "Seleccionar"), key=f"indruido_{eid}", label_visibility="collapsed")))
-    _adq_pair(row1[4], "KV", lambda: exp.__setitem__("kv", _select("kV", KV_OPCIONES, exp.get("kv", "Seleccionar"), key=f"kv_{eid}", label_visibility="collapsed", disabled=exp.get("nombre") in {"BOLUS TEST","BOLUS TRACKING"})))
+    # ── FILA 1: modulación / mAs / índice / kV (dinámica) ──
+    r1_icon, r1_body = st.columns([0.12, 1], gap="small")
+    with r1_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>☢️</div>", unsafe_allow_html=True)
+    with r1_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
 
-    helicoidal = exp.get("tipo_exploracion") == "HELICOIDAL"
-    exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo") if helicoidal else "NO")
+        def _render_mod():
+            exp["mod_corriente"] = selectbox_con_placeholder(
+                "Modulación corriente", MODULACION_CORRIENTE,
+                value=exp.get("mod_corriente"),
+                key=f"mod_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Modulación corriente", _render_mod)
 
-    row2 = st.columns([0.55, 1.2, 1, 1, 1, 1, 1], gap="medium")
-    with row2[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>⚙️</div>", unsafe_allow_html=True)
-    _adq_pair(row2[1], "TIPO EXPLORACIÓN", lambda: exp.__setitem__("tipo_exploracion", _select("Tipo exploración fila 2", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "Seleccionar"), key=f"tipo_exploracion_row_{eid}", label_visibility="collapsed", disabled=exp.get("nombre") in {"BOLUS TEST","BOLUS TRACKING"})))
-    if helicoidal:
-        _adq_pair(row2[2], "DOBLE MUESTREO", lambda: exp.__setitem__("doble_muestreo", _select("Doble muestreo", DOBLE_MUESTREO_OPCIONES, exp.get("doble_muestreo", "Seleccionar"), key=f"doble_{eid}", label_visibility="collapsed")))
-    else:
-        with row2[2]:
-            st.markdown("**DOBLE MUESTREO**")
-            _text_disabled("Doble muestreo no aplica", "No aplica", key=f"doble_na_{eid}")
+        mod = exp.get("mod_corriente")
+        if mod == "CARE DOSE 4D":
+            def _render_mas():
+                exp["mas_val"] = selectbox_con_placeholder(
+                    "mAs REF", MAS_OPCIONES,
+                    value=exp.get("mas_val"),
+                    key=f"masref_{eid}", label_visibility="collapsed",
+                )
+            def _render_indice():
+                exp["ind_cal"] = selectbox_con_placeholder(
+                    "Índice de calidad", INDICE_CALIDAD,
+                    value=exp.get("ind_cal"),
+                    key=f"indcal_{eid}", label_visibility="collapsed",
+                )
+            mas_label = "mAs REF"
+            indice_label = "Índice calidad"
+            exp["ind_ruido"] = None
+            exp["rango_ma"] = None
+        elif mod == "AUTO mA":
+            def _render_mas():
+                exp["rango_ma"] = selectbox_con_placeholder(
+                    "Rango mA", RANGO_MA,
+                    value=exp.get("rango_ma"),
+                    key=f"rangoma_{eid}", label_visibility="collapsed",
+                )
+                # Derivar mas_val del máximo del rango para cálculos de dosis
+                try:
+                    exp["mas_val"] = int(str(exp.get("rango_ma", "")).split("-")[1].strip())
+                except Exception:
+                    exp["mas_val"] = 200
+            def _render_indice():
+                exp["ind_ruido"] = selectbox_con_placeholder(
+                    "Índice de ruido", INDICE_RUIDO,
+                    value=exp.get("ind_ruido"),
+                    key=f"indruido_{eid}", label_visibility="collapsed",
+                )
+            mas_label = "Rango mA"
+            indice_label = "Índice ruido"
+            exp["ind_cal"] = None
+        else:  # MANUAL o sin seleccionar
+            def _render_mas():
+                exp["mas_val"] = selectbox_con_placeholder(
+                    "mAs", MAS_OPCIONES,
+                    value=exp.get("mas_val"),
+                    key=f"mas_{eid}", label_visibility="collapsed",
+                )
+            def _render_indice():
+                st.markdown("<div style='height: 2.45rem;'></div>", unsafe_allow_html=True)
+            mas_label = "mAs"
+            indice_label = ""
+            exp["ind_ruido"] = None
+            exp["ind_cal"] = None
+            exp["rango_ma"] = None
+
+        _adq_pair(c2, mas_label, _render_mas)
+        _adq_pair(c3, indice_label, _render_indice)
+
+        def _render_kv():
+            exp["kvp"] = selectbox_con_placeholder(
+                "kV", KVP_OPCIONES,
+                value=exp.get("kvp"),
+                key=f"kv_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c4, "kV", _render_kv)
+
+    # ── FILA 2: tipo / doble muestreo / conf.detección / cobertura / grosor / SFOV ──
+    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
+    with r2_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
+    with r2_body:
+        c1, c2, c3, c4, c5, c6 = st.columns(6, gap="small")
+
+        def _render_tipo():
+            exp["tipo_exp"] = selectbox_con_placeholder(
+                "Tipo exploración", TIPOS_EXPLORACION,
+                value=exp.get("tipo_exp"),
+                key=f"tipoexp_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Tipo exploración", _render_tipo)
+
+        tipo_exp = exp.get("tipo_exp")
+        if tipo_exp == "HELICOIDAL":
+            def _render_dm():
+                exp["doble_muestreo"] = selectbox_con_placeholder(
+                    "Doble muestreo", ["NO", "SI"],
+                    value=exp.get("doble_muestreo", "NO"),
+                    key=f"dm_{eid}", label_visibility="collapsed",
+                )
+        else:
             exp["doble_muestreo"] = "NO"
-    _adq_pair(row2[3], "CONF. DETECCIÓN", lambda: exp.__setitem__("config_detectores", _select("Config detectores", CONFIG_DETECTORES, exp.get("config_detectores", "Seleccionar"), key=f"confdet_{eid}", label_visibility="collapsed")))
-    with row2[4]:
-        st.markdown("**COBERTURA**")
-        _text_disabled("Cobertura", exp.get("cobertura", "—"), key=f"cobertura_{eid}")
-    _adq_pair(row2[5], "GROSOR PROSP.", lambda: exp.__setitem__("grosor_prospectivo", _select("Grosor prospectivo", GROSOR_PROSPECTIVO_OPCIONES, exp.get("grosor_prospectivo", "Seleccionar"), key=f"gpros_{eid}", label_visibility="collapsed")))
-    _adq_pair(row2[6], "SFOV", lambda: exp.__setitem__("sfov", _select("SFOV", SFOV_OPCIONES, exp.get("sfov", "Seleccionar"), key=f"sfov_{eid}", label_visibility="collapsed")))
+            def _render_dm():
+                _text_disabled("Doble muestreo", "No aplica", key=f"dm_na_{eid}")
+        _adq_pair(c2, "Doble muestreo", _render_dm)
 
-    row3 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
-    with row3[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>🕒</div>", unsafe_allow_html=True)
-    _adq_pair(row3[1], "INSTRUCCIÓN DE VOZ", lambda: exp.__setitem__("instruccion_voz", _select("Instrucción de voz", INSTRUCCION_VOZ_OPCIONES, exp.get("instruccion_voz", "Seleccionar"), key=f"voz_{eid}", label_visibility="collapsed")))
-    _adq_pair(row3[2], "RETARDO", lambda: exp.__setitem__("retardo", _select("Retardo", RETARDO_OPCIONES, exp.get("retardo", "Seleccionar"), key=f"delay_{eid}", label_visibility="collapsed")))
-    if helicoidal:
-        _adq_pair(row3[3], "PITCH", lambda: exp.__setitem__("pitch", _select("Pitch", PITCH_OPCIONES, exp.get("pitch", "Seleccionar"), key=f"pitch_{eid}", label_visibility="collapsed")))
-    else:
-        with row3[3]:
-            st.markdown("**PITCH**")
-            _text_disabled("Pitch no aplica", "No aplica", key=f"pitch_na_{eid}")
-            exp["pitch"] = "NO APLICA"
-    _adq_pair(row3[4], "TPO ROTACION TUBO", lambda: exp.__setitem__("rotacion_tubo", _select("Rotación tubo", ROTACION_TUBO_OPCIONES, exp.get("rotacion_tubo", "Seleccionar"), key=f"rot_{eid}", label_visibility="collapsed")))
+        opciones_conf = obtener_opciones_conf_det(tipo_exp, exp.get("doble_muestreo"))
+        if exp.get("conf_det") not in opciones_conf:
+            exp["conf_det"] = None
 
-    grupo = _region_grupo(store)
-    ini_opts = ["Seleccionar"] + REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
-    fin_opts = ["Seleccionar"] + REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
-    row4 = st.columns([0.55, 1.2, 1, 1.2, 1], gap="medium")
-    with row4[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>📏</div>", unsafe_allow_html=True)
-    _adq_pair(row4[1], "INICIO EXPLORACIÓN", lambda: exp.__setitem__("inicio_ref", _select("Inicio exploración", ini_opts, exp.get("inicio_ref", "Seleccionar"), key=f"iniref_{eid}", label_visibility="collapsed")))
-    with row4[2]:
-        st.markdown("**MM INICIO**")
-        exp["ini_mm"] = _number("mm inicio", exp.get("ini_mm", 0), key=f"inimm_{eid}")
-    _adq_pair(row4[3], "FIN EXPLORACIÓN", lambda: exp.__setitem__("fin_ref", _select("Fin exploración", fin_opts, exp.get("fin_ref", "Seleccionar"), key=f"finref_{eid}", label_visibility="collapsed")))
-    with row4[4]:
-        st.markdown("**MM FIN**")
-        exp["fin_mm"] = _number("mm fin", exp.get("fin_mm", 400), key=f"finmm_{eid}")
+        def _render_confdet():
+            exp["conf_det"] = selectbox_con_placeholder(
+                "Conf. detección", opciones_conf,
+                value=exp.get("conf_det"),
+                key=f"confdet_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c3, "Conf. detección", _render_confdet)
+
+        cobertura = obtener_cobertura_tabla(
+            tipo_exp, exp.get("conf_det"), exp.get("doble_muestreo")
+        )
+        exp["cobertura_tabla"] = cobertura
+
+        def _render_cob():
+            _text_disabled("Cobertura", cobertura, key=f"cobertura_{eid}")
+        _adq_pair(c4, "Cobertura", _render_cob)
+
+        grosor_opciones = [str(g) for g in GROSOR_PROSP]
+        def _render_grosor():
+            exp["grosor_prosp"] = selectbox_con_placeholder(
+                "Grosor prosp.", grosor_opciones,
+                value=exp.get("grosor_prosp"),
+                key=f"gpros_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c5, "Grosor prosp.", _render_grosor)
+
+        def _render_sfov():
+            exp["sfov"] = selectbox_con_placeholder(
+                "SFOV", SFOV_OPCIONES,
+                value=exp.get("sfov"),
+                key=f"sfov_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c6, "SFOV", _render_sfov)
+
+    # ── FILA 3: voz / retardo / pitch / rotación ──
+    r3_icon, r3_body = st.columns([0.12, 1], gap="small")
+    with r3_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>🕒</div>", unsafe_allow_html=True)
+    with r3_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+
+        def _render_voz():
+            exp["voz_adq"] = selectbox_con_placeholder(
+                "Instrucción de voz", INSTRUCCIONES_VOZ,
+                value=exp.get("voz_adq"),
+                key=f"voz_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Instrucción de voz", _render_voz)
+
+        def _render_delay():
+            exp["retardo"] = selectbox_con_placeholder(
+                "Retardo", RETARDOS,
+                value=exp.get("retardo"),
+                key=f"delay_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c2, "Retardo", _render_delay)
+
+        if tipo_exp == "HELICOIDAL":
+            def _render_pitch():
+                exp["pitch"] = selectbox_con_placeholder(
+                    "Pitch", PITCH_OPCIONES,
+                    value=exp.get("pitch"),
+                    key=f"pitch_{eid}", label_visibility="collapsed",
+                )
+        else:
+            exp["pitch"] = 1.0
+            def _render_pitch():
+                _text_disabled("Pitch", "No aplica", key=f"pitch_na_{eid}")
+        _adq_pair(c3, "Pitch", _render_pitch)
+
+        def _render_rot():
+            exp["rot_tubo"] = selectbox_con_placeholder(
+                "TPO ROTACION TUBO", ROT_TUBO,
+                value=exp.get("rot_tubo"),
+                key=f"rot_{eid}", label_visibility="collapsed",
+                format_func=lambda x: "Seleccionar" if x in (None, "Seleccionar") else f"{x} sg.",
+            )
+        _adq_pair(c4, "TPO ROTACION TUBO", _render_rot)
+
+    # ── FILA 4: rango de exploración ──
+    r4_icon, r4_body = st.columns([0.12, 1], gap="small")
+    with r4_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>📏</div>", unsafe_allow_html=True)
+    with r4_body:
+        r1, r2, r3, r4 = st.columns(4, gap="small")
+
+        def _render_iniref():
+            exp["inicio_ref"] = selectbox_con_placeholder(
+                "Inicio exploración", refs_ini,
+                value=exp.get("inicio_ref"),
+                key=f"iniref_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(r1, "Inicio exploración", _render_iniref)
+
+        def _render_inimm():
+            exp["ini_mm"] = _number("mm inicio", exp.get("ini_mm", 0), key=f"inimm_{eid}")
+        _adq_pair(r2, "mm inicio", _render_inimm)
+
+        def _render_finref():
+            exp["fin_ref"] = selectbox_con_placeholder(
+                "Fin exploración", refs_fin,
+                value=exp.get("fin_ref"),
+                key=f"finref_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(r3, "Fin exploración", _render_finref)
+
+        def _render_finmm():
+            exp["fin_mm"] = _number("mm fin", exp.get("fin_mm", 400), key=f"finmm_{eid}")
+        _adq_pair(r4, "mm fin", _render_finmm)
+
 
 def _render_bolus(exp):
+    """Filas específicas para BOLUS TEST / BOLUS TRACKING."""
     eid = exp["id"]
-    row_title = st.columns([2.2, 1], gap="medium")
-    with row_title[0]:
-        exp["nombre"] = _select("Nombre de la exploración", NOMBRES_EXPLORACION, exp.get("nombre", "Seleccionar"), key=f"nombre_exp_{eid}")
-    _ajustar_tipo_segun_nombre(exp)
-    with row_title[1]:
-        exp["tipo_exploracion"] = _select("Tipo exploración", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "SECUENCIAL"), key=f"tipo_exp_{eid}", disabled=True)
 
-    row1 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
-    with row1[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>☢️</div>", unsafe_allow_html=True)
-    _adq_pair(row1[1], "MODULACIÓN CORRIENTE", lambda: exp.__setitem__("modulacion_corriente", _select("Modulación corriente", MODULACION_CORRIENTE, exp.get("modulacion_corriente", "NO"), key=f"modcorr_{eid}", label_visibility="collapsed")))
-    exp["mas"] = "20"
-    exp["kv"] = "100"
-    with row1[2]:
-        st.markdown("**MAS**")
-        _text_disabled("mas fijo", "20", key=f"mas_fijo_{eid}")
-    _adq_pair(row1[3], "INDICE DE RUIDO", lambda: exp.__setitem__("indice_ruido", _select("Indice ruido", INDICE_RUIDO_OPCIONES, exp.get("indice_ruido", "Seleccionar"), key=f"indruido_{eid}", label_visibility="collapsed")))
-    with row1[4]:
-        st.markdown("**KV**")
-        _text_disabled("kv fijo", "100", key=f"kv_fijo_{eid}")
+    # Posición de corte
+    exp["posicion_corte"] = selectbox_con_placeholder(
+        "Posición de corte", POSICION_CORTE_BOLUS,
+        value=exp.get("posicion_corte"),
+        key=f"poscorte_{eid}",
+    )
 
-    row2 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
-    with row2[0]:
-        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>🎯</div>", unsafe_allow_html=True)
-    _adq_pair(row2[1], "PERIODO", lambda: exp.__setitem__("periodo", _select("Periodo", PERIODO_TEST_BOLUS, exp.get("periodo", "Seleccionar"), key=f"periodo_{eid}", label_visibility="collapsed")))
-    _adq_pair(row2[2], "N° IMÁGENES", lambda: exp.__setitem__("n_imagenes", _select("N imágenes", N_IMAGENES_TEST_BOLUS, exp.get("n_imagenes", "Seleccionar"), key=f"nimg_{eid}", label_visibility="collapsed")))
-    _adq_pair(row2[3], "POSICIÓN DE CORTE", lambda: exp.__setitem__("posicion_corte", _select("Posición corte", POSICION_CORTE_TEST_BOLUS, exp.get("posicion_corte", "Seleccionar"), key=f"poscorte_{eid}", label_visibility="collapsed")))
-    if exp.get("nombre") == "BOLUS TRACKING":
-        _adq_pair(row2[4], "UMBRAL DISPARO", lambda: exp.__setitem__("umbral_tracking", _select("Umbral tracking", UMBRAL_TRACKING, exp.get("umbral_tracking", "Seleccionar"), key=f"uth_{eid}", label_visibility="collapsed")))
-    else:
-        with row2[4]:
-            st.markdown("**UMBRAL DISPARO**")
-            _text_disabled("umbral na", "No aplica", key=f"uth_na_{eid}")
+    # FILA 1: modulación / mAs fijo / índice ruido / kV fijo
+    r1_icon, r1_body = st.columns([0.12, 1], gap="small")
+    with r1_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>☢️</div>", unsafe_allow_html=True)
+    with r1_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+
+        def _render_mod():
+            exp["mod_corriente"] = selectbox_con_placeholder(
+                "Modulación corriente", MODULACION_CORRIENTE,
+                value=exp.get("mod_corriente", "MANUAL"),
+                key=f"mod_bolus_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Modulación corriente", _render_mod)
+
+        exp["mas_val"] = 20
+        exp["kvp"] = 100
+        _adq_pair(c2, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
+
+        def _render_indruido_bolus():
+            exp["ind_ruido"] = selectbox_con_placeholder(
+                "Índice de ruido", INDICE_RUIDO,
+                value=exp.get("ind_ruido"),
+                key=f"indruido_bolus_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c3, "Índice ruido", _render_indruido_bolus)
+
+        _adq_pair(c4, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
+
+    # FILA 2: periodo / N° imágenes / umbral (si tracking)
+    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
+    with r2_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>🎯</div>", unsafe_allow_html=True)
+    with r2_body:
+        c1, c2, c3 = st.columns(3, gap="small")
+
+        def _render_periodo():
+            exp["periodo"] = selectbox_con_placeholder(
+                "Periodo", PERIODO_TEST_BOLUS,
+                value=exp.get("periodo"),
+                key=f"periodo_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Periodo", _render_periodo)
+
+        def _render_nimg():
+            exp["n_imagenes"] = selectbox_con_placeholder(
+                "N° imágenes", N_IMAGENES_TEST_BOLUS,
+                value=exp.get("n_imagenes"),
+                key=f"nimg_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c2, "N° imágenes", _render_nimg)
+
+        if exp.get("nombre") == "BOLUS TRACKING":
+            def _render_umbral():
+                exp["umbral_tracking"] = selectbox_con_placeholder(
+                    "Umbral de disparo", UMBRAL_TRACKING,
+                    value=exp.get("umbral_tracking"),
+                    key=f"uth_{eid}", label_visibility="collapsed",
+                )
+            _adq_pair(c3, "Umbral disparo", _render_umbral)
+        else:
+            _adq_pair(c3, "Umbral disparo",
+                      lambda: _text_disabled("Umbral NA", "No aplica", key=f"uth_na_{eid}"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# RESUMEN CALCULADO: CTDI, duración, ruido, cobertura
+# ═══════════════════════════════════════════════════════════════════════════
+def _render_resumen_calculado(exp):
+    kvp = exp.get("kvp") or 120
+    mas = exp.get("mas_val") or 200
+    conf_det = exp.get("conf_det") or (CONF_DETECTORES[0] if CONF_DETECTORES else None)
+    pitch = exp.get("pitch") or 1.0
+    rot_tubo = exp.get("rot_tubo") or 0.5
+    ini_mm = exp.get("ini_mm", 0)
+    fin_mm = exp.get("fin_mm", 400)
+    try:
+        grosor_float = float(str(exp.get("grosor_prosp") or "1").replace(",", "."))
+    except Exception:
+        grosor_float = 1.0
+
+    cob = calcular_cobertura_helical(conf_det, pitch)
+    cob_str = f"{cob} mm/rot" if isinstance(cob, float) else "—"
+    ctdi = estimar_dosis_ctdi(kvp, mas, conf_det)
+    duracion = calcular_duracion(ini_mm, fin_mm, cob if isinstance(cob, float) else 1, rot_tubo)
+    ruido = nivel_ruido_estimado(mas, kvp, grosor_float)
+
+    exp["ctdi"] = ctdi
+    exp["ruido_est"] = ruido
+    exp["cobertura"] = cob
+    exp["duracion"] = duracion
+
+    st.markdown("---")
+    st.markdown("**Resumen calculado automáticamente**")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Cobertura/rot.", cob_str)
+    c2.metric("CTDIvol estimado", f"{ctdi} mGy" if ctdi != "—" else "—")
+    c3.metric("Duración scan", f"{duracion} sg" if duracion != "—" else "—")
+    c4.metric("Ruido relativo", f"{ruido}" if ruido != "—" else "—")
+
+    if isinstance(ctdi, float) and ctdi > 30:
+        st.warning("⚠️ Dosis estimada elevada. Considere reducir mAs o usar modulación automática.")
+    elif isinstance(ctdi, float):
+        st.info("✅ Dosis dentro de rangos aceptables para esta exploración.")
+
 
 def _render_warnings(exp):
     msgs = []
-    if exp.get("nombre") == "Seleccionar":
+    nombre = exp.get("nombre")
+    es_bolus = nombre in ("BOLUS TEST", "BOLUS TRACKING")
+    if not nombre:
         msgs.append("⚠️ Falta seleccionar el nombre de la exploración.")
-    if exp.get("config_detectores") == "Seleccionar" and exp.get("nombre") not in {"BOLUS TEST", "BOLUS TRACKING"}:
-        msgs.append("⚠️ Falta seleccionar configuración de detectores.")
-    if exp.get("nombre") not in {"BOLUS TEST", "BOLUS TRACKING"} and exp.get("instruccion_voz") == "Seleccionar":
-        msgs.append("⚠️ Falta definir la instrucción de voz.")
-    if exp.get("nombre") in {"BOLUS TEST", "BOLUS TRACKING"} and exp.get("posicion_corte") == "Seleccionar":
-        msgs.append("⚠️ Falta definir la posición de corte.")
+    if not es_bolus:
+        if not exp.get("conf_det"):
+            msgs.append("⚠️ Falta seleccionar configuración de detectores.")
+        if not exp.get("voz_adq"):
+            msgs.append("⚠️ Falta definir la instrucción de voz.")
+    else:
+        if not exp.get("posicion_corte"):
+            msgs.append("⚠️ Falta definir la posición de corte.")
     for m in msgs:
         st.warning(m)
-    if not msgs:
+    if not msgs and nombre:
         st.success("Configuración lista para continuar.")
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENTRYPOINT
+# ═══════════════════════════════════════════════════════════════════════════
 def render_adquisicion():
     _init_state()
+
     col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
     with col_sidebar:
         _render_sidebar()
+
     with col_main:
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
@@ -376,20 +1504,46 @@ def render_adquisicion():
             return
 
         idx = int(activa)
-        exp = st.session_state["exploraciones"][idx]
-        store = st.session_state.get("topograma_store", {})
+        if idx < 0 or idx >= len(st.session_state["exploraciones"]):
+            st.warning("Selecciona una exploración en el panel lateral.")
+            return
 
-        _render_resumen_topograma(store)
-        titulo = exp.get("nombre")
-        if not titulo or titulo == "Seleccionar":
-            titulo = f"EXPLORACIÓN {idx+1}"
+        exp = st.session_state["exploraciones"][idx]
+
+        # Nombre de la exploración (arriba, ancho completo)
+        nombre_prev = exp.get("nombre")
+        exp["nombre"] = selectbox_con_placeholder(
+            "Nombre de la exploración", NOMBRES_EXPLORACION,
+            value=nombre_prev,
+            key=f"nombre_{exp['id']}",
+        )
+        if exp["nombre"] != nombre_prev:
+            _ajustar_por_nombre(exp)
+
+        es_bolus = exp.get("nombre") in ("BOLUS TEST", "BOLUS TRACKING")
+
+        # Topogramas con DFOV (sustituye el "Resumen de referencia")
+        _render_topogramas_adq(exp, es_bolus)
+
+        # Título grande con la exploración activa
+        titulo = exp.get("nombre") or f"EXPLORACIÓN {idx+1}"
         st.markdown(f"## ⚙️ {titulo}")
 
-        if exp.get("nombre") in {"BOLUS TEST", "BOLUS TRACKING"}:
+        # Filas de parámetros
+        if es_bolus:
             _render_bolus(exp)
         else:
-            _render_normales(exp, store)
+            _render_normales(exp)
 
-        exp["observaciones"] = st.text_area("Observaciones", value=exp.get("observaciones", ""), key=f"obs_{exp['id']}", height=100)
-        _sync_adq()
+        # Observaciones
+        exp["observaciones"] = st.text_area(
+            "Observaciones",
+            value=exp.get("observaciones", ""),
+            key=f"obs_{exp['id']}",
+            height=100,
+        )
+
+        # Resumen calculado + warnings
+        if not es_bolus:
+            _render_resumen_calculado(exp)
         _render_warnings(exp)
