@@ -1361,15 +1361,11 @@ def _render_normales(exp):
 
 
 def _render_bolus(exp):
-    """Filas específicas para BOLUS TEST / BOLUS TRACKING."""
+    """Filas específicas para BOLUS TEST / BOLUS TRACKING.
+    Nota: 'Posición de corte' se renderiza arriba, antes de los topogramas,
+    directamente en render_adquisicion().
+    """
     eid = exp["id"]
-
-    # Posición de corte
-    exp["posicion_corte"] = selectbox_con_placeholder(
-        "Posición de corte", POSICION_CORTE_BOLUS,
-        value=exp.get("posicion_corte"),
-        key=f"poscorte_{eid}",
-    )
 
     # FILA 1: modulación / mAs fijo / índice ruido / kV fijo
     r1_icon, r1_body = st.columns([0.12, 1], gap="small")
@@ -1532,6 +1528,15 @@ def render_adquisicion():
 
         es_bolus = exp.get("nombre") in ("BOLUS TEST", "BOLUS TRACKING")
 
+        # Para Bolus: posición de corte va justo debajo del nombre,
+        # antes de los topogramas (afecta a la línea de corte del canvas).
+        if es_bolus:
+            exp["posicion_corte"] = selectbox_con_placeholder(
+                "Posición de corte", POSICION_CORTE_BOLUS,
+                value=exp.get("posicion_corte"),
+                key=f"poscorte_{exp['id']}",
+            )
+
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
         _render_topogramas_adq(exp, es_bolus)
 
@@ -1540,14 +1545,6 @@ def render_adquisicion():
             _render_bolus(exp)
         else:
             _render_normales(exp)
-
-        # Observaciones
-        exp["observaciones"] = st.text_area(
-            "Observaciones",
-            value=exp.get("observaciones", ""),
-            key=f"obs_{exp['id']}",
-            height=100,
-        )
 
         # Resumen calculado + warnings
         if not es_bolus:
