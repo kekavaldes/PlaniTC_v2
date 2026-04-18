@@ -1,40 +1,39 @@
+import copy
+
 import streamlit as st
 
 
-# ───────────────────────────────────────────────────────────────
-# Catálogos base tomados del archivo original
-# ───────────────────────────────────────────────────────────────
 REFS_INICIO = {
-    "CABEZA":  ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE",
+    "CABEZA": ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE",
                 "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR",
                 "BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO"],
-    "CUELLO":  ["TECHO ORBITARIO", "CAE", "ARCO AÓRTICO"],
-    "EESS":    ["SOBRE ART. ACROMIOCLAV.", "BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO",
-                "TERCIO PROXIMAL RADIO-CUBITO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
+    "CUELLO": ["TECHO ORBITARIO", "CAE", "ARCO AÓRTICO"],
+    "EESS": ["SOBRE ART. ACROMIOCLAV.", "BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO",
+              "TERCIO PROXIMAL RADIO-CUBITO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
     "COLUMNA": ["CAE", "SOBRE BASE DE CRÁNEO", "C6-C7", "T1-T2", "T11-T12", "L1-L2", "L4-L5", "S1-S2"],
-    "CUERPO":  ["SOBRE ÁPICES PULMONARES", "SOBRE CÚPULAS DIAF.", "ARCO AÓRTICO",
-                "BAJO ANGULOS COSTOFR.", "L5-S1"],
-    "EEII":    ["EIAS", "TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
-                "TERCIO PROXIMAL TIBIA-PERONÉ", "TERCIO DISTAL TIBIA-PERONÉ",
-                "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS"],
-    "ANGIO":   ["SOBRE ÁPICES PULMONARES", "ARCO AÓRTICO", "SOBRE CÚPULAS DIAF.",
-                "BAJO ANGULOS COSTOFR.", "L5-S1", "COMPLETAR FALANGE DISTAL"],
+    "CUERPO": ["SOBRE ÁPICES PULMONARES", "SOBRE CÚPULAS DIAF.", "ARCO AÓRTICO",
+               "BAJO ANGULOS COSTOFR.", "L5-S1"],
+    "EEII": ["EIAS", "TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+             "TERCIO PROXIMAL TIBIA-PERONÉ", "TERCIO DISTAL TIBIA-PERONÉ",
+             "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS"],
+    "ANGIO": ["SOBRE ÁPICES PULMONARES", "ARCO AÓRTICO", "SOBRE CÚPULAS DIAF.",
+              "BAJO ANGULOS COSTOFR.", "L5-S1", "COMPLETAR FALANGE DISTAL"],
 }
 
 REFS_FIN = {
-    "CABEZA":  ["BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO", "PISO ORBITARIO",
+    "CABEZA": ["BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO", "PISO ORBITARIO",
                 "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR"],
-    "CUELLO":  ["CAE", "ARCO AÓRTICO", "MENTON"],
-    "EESS":    ["BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL MTC",
-                "COMPLETAR FALANGES DISTALES"],
+    "CUELLO": ["CAE", "ARCO AÓRTICO", "MENTON"],
+    "EESS": ["BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL MTC",
+              "COMPLETAR FALANGES DISTALES"],
     "COLUMNA": ["SOBRE BASE DE CRÁNEO", "T1-T2", "T11-T12", "L4-L5", "S1-S2",
                 "1 CM BAJO COXIS", "L5-S1"],
-    "CUERPO":  ["SOBRE CÚPULAS DIAF.", "BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA"],
-    "EEII":    ["TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
-                "TERCIO PROXIMAL TIBIA-PERONÉ", "BAJO CALCÁNEO",
-                "HASTA COMPLETAR ORTEJOS", "COMPLETAR ORTEJOS"],
-    "ANGIO":   ["BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA",
-                "COMPLETAR FALANGE DISTAL", "COMPLETAR ORTEJOS"],
+    "CUERPO": ["SOBRE CÚPULAS DIAF.", "BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA"],
+    "EEII": ["TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+             "TERCIO PROXIMAL TIBIA-PERONÉ", "BAJO CALCÁNEO",
+             "HASTA COMPLETAR ORTEJOS", "COMPLETAR ORTEJOS"],
+    "ANGIO": ["BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA",
+              "COMPLETAR FALANGE DISTAL", "COMPLETAR ORTEJOS"],
 }
 
 FASES_RECONS = [
@@ -43,30 +42,20 @@ FASES_RECONS = [
 ]
 
 TIPOS_RECONS = ["RETROP. FILTRADA", "RECONS. ITERATIVA"]
-
 ALGORITMOS_ITERATIVOS = ["SAFIRE", "ADMIRE", "iDOSE", "ASIR-V", "AIDR-3D", "VEO"]
 
 NIVEL_ITERATIVO = {
-    "SAFIRE":  [1, 2, 3, 4, 5],
-    "ADMIRE":  [1, 2, 3, 4, 5],
-    "iDOSE":   [1, 2, 3, 4, 5, 6, 7],
-    "ASIR-V":  ["0 (%)", "10 (%)", "20 (%)", "30 (%)", "40 (%)",
-                "50 (%)", "60 (%)", "70 (%)", "80 (%)", "90 (%)"],
+    "SAFIRE": [1, 2, 3, 4, 5],
+    "ADMIRE": [1, 2, 3, 4, 5],
+    "iDOSE": [1, 2, 3, 4, 5, 6, 7],
+    "ASIR-V": ["0 (%)", "10 (%)", "20 (%)", "30 (%)", "40 (%)", "50 (%)", "60 (%)", "70 (%)", "80 (%)", "90 (%)"],
     "AIDR-3D": ["Mild", "Standard", "Strong"],
-    "VEO":     ["—"],
+    "VEO": ["—"],
 }
 
 KERNELS = ["SUAVE 20f", "STANDARD 30f", "DEFINIDO 60f", "ULTRADEFINIDO 80f"]
-
-GROSORES_RECONS = [
-    "0,6 mm", "0,625 mm", "1 mm", "1,2 mm", "1,25 mm",
-    "1,5 mm", "2 mm", "3 mm", "4 mm", "5 mm",
-]
-
-INCREMENTOS_RECONS = [
-    "0,3 mm", "0,5 mm", "0,6 mm", "0,75 mm", "1 mm",
-    "1,5 mm", "2 mm", "2,5 mm",
-]
+GROSORES_RECONS = ["0,6 mm", "0,625 mm", "1 mm", "1,2 mm", "1,25 mm", "1,5 mm", "2 mm", "3 mm", "4 mm", "5 mm"]
+INCREMENTOS_RECONS = ["0,3 mm", "0,5 mm", "0,6 mm", "0,75 mm", "1 mm", "1,5 mm", "2 mm", "2,5 mm"]
 
 VENTANAS = {
     "PULMONAR": {"ww": 1500, "wl": -600},
@@ -79,9 +68,6 @@ VENTANAS = {
 DFOV_OPCIONES = ["Mayor al SFOV", "Igual a SFOV", "Menor a SFOV"]
 
 
-# ───────────────────────────────────────────────────────────────
-# Helpers UI
-# ───────────────────────────────────────────────────────────────
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
     opciones = ["Seleccionar"] + list(options)
     idx = opciones.index(value) if value in options else 0
@@ -133,14 +119,25 @@ def _mini_chip(color: str, titulo: str, subtitulo: str = ""):
 
 
 def _color_exploracion(idx: int) -> str:
-    palette = [
-        "#00C2FF", "#8B5CF6", "#F59E0B", "#10B981",
-        "#EF4444", "#EC4899", "#14B8A6", "#F97316"
-    ]
+    palette = ["#00C2FF", "#8B5CF6", "#F59E0B", "#10B981", "#EF4444", "#EC4899", "#14B8A6", "#F97316"]
     return palette[idx % len(palette)]
 
 
-def _crear_reconstruccion_base(exp_id, numero, region_anat):
+def _fase_por_nombre_exploracion(nombre: str):
+    mapa = {
+        "SIN CONTRASTE": "SIN CONTRASTE",
+        "ARTERIAL": "ARTERIAL",
+        "VENOSA": "VENOSA",
+        "TARDÍA": "TARDIA",
+        "ANGIOGRÁFICA": "ANGIOGRÁFICA",
+        "BOLUS TEST": "ARTERIAL",
+        "BOLUS TRACKING": "ARTERIAL",
+    }
+    return mapa.get(nombre or "", FASES_RECONS[0])
+
+
+def _crear_reconstruccion_base(exp, numero, region_anat):
+    exp_id = exp.get("id")
     ventana_def = list(VENTANAS.keys())[0]
     ww_def = VENTANAS[ventana_def]["ww"]
     wl_def = VENTANAS[ventana_def]["wl"]
@@ -152,7 +149,7 @@ def _crear_reconstruccion_base(exp_id, numero, region_anat):
     return {
         "id": f"{exp_id}_rec_{numero}",
         "nombre": f"Reconstrucción {numero}",
-        "fase_recons": FASES_RECONS[0],
+        "fase_recons": _fase_por_nombre_exploracion(exp.get("nombre")),
         "tipo_recons": TIPOS_RECONS[0],
         "algoritmo_iter": algoritmo_def,
         "nivel_iter": niveles_def[0],
@@ -175,26 +172,48 @@ def _reindexar_reconstrucciones(exp_id):
         rec_local["nombre"] = f"Reconstrucción {idx_local}"
 
 
-def render_reconstruccion():
-    region_anat = st.session_state.get("region_anat", "CUERPO")
-    exploraciones = st.session_state.get("exploraciones_adq", [])
-    adquisiciones_validas = [e for e in exploraciones if e.get("tipo") == "adquisicion"]
+def _obtener_adquisiciones_validas():
+    exploraciones = st.session_state.get("exploraciones", [])
+    if not exploraciones:
+        exploraciones = st.session_state.get("exploraciones_adq", [])
 
-    if "reconstrucciones_por_exp" not in st.session_state:
-        st.session_state["reconstrucciones_por_exp"] = {}
-    if "recon_activa_por_exp" not in st.session_state:
-        st.session_state["recon_activa_por_exp"] = {}
-    if "exploracion_rec_activa" not in st.session_state:
-        st.session_state["exploracion_rec_activa"] = None
+    adquisiciones = []
+    ids_vistos = set()
+    for idx, exp in enumerate(exploraciones, start=1):
+        if not isinstance(exp, dict):
+            continue
+        tipo = exp.get("tipo") or exp.get("tipo_item") or "adquisicion"
+        if tipo != "adquisicion":
+            continue
+
+        nuevo = copy.deepcopy(exp)
+        exp_id = nuevo.get("id") or f"exp_{idx}"
+        if exp_id in ids_vistos:
+            exp_id = f"{exp_id}_{idx}"
+        ids_vistos.add(exp_id)
+        nuevo["id"] = exp_id
+        nuevo["orden"] = nuevo.get("orden", idx)
+        nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
+        adquisiciones.append(nuevo)
+
+    return adquisiciones
+
+
+def render_reconstruccion():
+    topo_store = st.session_state.get("topograma_store", {})
+    region_anat = topo_store.get("region_anat") or st.session_state.get("region_anat") or "CUERPO"
+    adquisiciones_validas = _obtener_adquisiciones_validas()
+
+    st.session_state.setdefault("reconstrucciones_por_exp", {})
+    st.session_state.setdefault("recon_activa_por_exp", {})
+    st.session_state.setdefault("exploracion_rec_activa", None)
 
     ids_adq_validos = [e.get("id") for e in adquisiciones_validas]
 
     for exp in adquisiciones_validas:
         exp_id = exp.get("id")
         if exp_id not in st.session_state["reconstrucciones_por_exp"] or not st.session_state["reconstrucciones_por_exp"][exp_id]:
-            st.session_state["reconstrucciones_por_exp"][exp_id] = [
-                _crear_reconstruccion_base(exp_id, 1, region_anat)
-            ]
+            st.session_state["reconstrucciones_por_exp"][exp_id] = [_crear_reconstruccion_base(exp, 1, region_anat)]
 
         _reindexar_reconstrucciones(exp_id)
         ids_rec = [r.get("id") for r in st.session_state["reconstrucciones_por_exp"][exp_id]]
@@ -223,15 +242,16 @@ def render_reconstruccion():
                 activa = st.session_state["exploracion_rec_activa"] == exp_id
                 n_rec = len(st.session_state["reconstrucciones_por_exp"].get(exp_id, []))
                 color = _color_exploracion(i)
+                nombre_visible = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
 
                 _mini_chip(
                     color,
-                    exp.get("nombre", exp_id),
-                    f"{exp.get('tipo_exp', 'HELICOIDAL')} · {n_rec} reconstrucción(es)"
+                    nombre_visible,
+                    f"{exp.get('tipo_exploracion', 'HELICOIDAL')} · {n_rec} reconstrucción(es)",
                 )
 
                 if st.button(
-                    f"⚡ {exp.get('nombre', exp_id)}",
+                    f"⚡ {nombre_visible}",
                     key=f"btn_rec_sel_{exp_id}",
                     use_container_width=True,
                     type="primary" if activa else "secondary",
@@ -242,16 +262,13 @@ def render_reconstruccion():
     with col_det:
         if not adquisiciones_validas or st.session_state.get("exploracion_rec_activa") is None:
             st.warning("No hay adquisiciones disponibles para reconstruir.")
-            return
+            return st.session_state.get("reconstrucciones_por_exp", {})
 
-        exp_activa = next(
-            (e for e in adquisiciones_validas if e.get("id") == st.session_state.get("exploracion_rec_activa")),
-            None
-        )
+        exp_activa = next((e for e in adquisiciones_validas if e.get("id") == st.session_state.get("exploracion_rec_activa")), None)
 
         if exp_activa is None:
             st.warning("No se pudo cargar la adquisición seleccionada.")
-            return
+            return st.session_state.get("reconstrucciones_por_exp", {})
 
         exp_id = exp_activa.get("id")
         recs_exp = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
@@ -259,9 +276,9 @@ def render_reconstruccion():
         rec_actual = next((r for r in recs_exp if r.get("id") == rec_activa_id), recs_exp[0])
         st.session_state["recon_activa_por_exp"][exp_id] = rec_actual.get("id")
 
-        color_activa = _color_exploracion(ids_adq_validos.index(exp_id))
+        nombre_exp = exp_activa.get("nombre") if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
 
-        _panel_header("🔄", f"Reconstrucciones de {exp_activa.get('nombre', 'Exploración')}")
+        _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
         cols_nav_rec = st.columns(min(max(len(recs_exp), 1), 4))
@@ -280,16 +297,14 @@ def render_reconstruccion():
         with c_add:
             if st.button("➕ Agregar reconstrucción", use_container_width=True, key=f"add_rec_{exp_id}"):
                 nuevo_num = len(recs_exp) + 1
-                st.session_state["reconstrucciones_por_exp"][exp_id].append(
-                    _crear_reconstruccion_base(exp_id, nuevo_num, region_anat)
-                )
+                st.session_state["reconstrucciones_por_exp"][exp_id].append(_crear_reconstruccion_base(exp_activa, nuevo_num, region_anat))
                 _reindexar_reconstrucciones(exp_id)
                 st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
                 st.rerun()
 
         with c_dup:
             if st.button("📄 Duplicar reconstrucción", use_container_width=True, key=f"dup_rec_{exp_id}"):
-                copia = dict(rec_actual)
+                copia = copy.deepcopy(rec_actual)
                 st.session_state["reconstrucciones_por_exp"][exp_id].append(copia)
                 _reindexar_reconstrucciones(exp_id)
                 nuevo_id = st.session_state["reconstrucciones_por_exp"][exp_id][-1]["id"]
@@ -298,16 +313,8 @@ def render_reconstruccion():
 
         with c_del:
             deshabilitar = len(recs_exp) <= 1
-            if st.button(
-                "🗑️ Eliminar reconstrucción",
-                use_container_width=True,
-                key=f"del_rec_{exp_id}",
-                disabled=deshabilitar,
-            ):
-                st.session_state["reconstrucciones_por_exp"][exp_id] = [
-                    r for r in st.session_state["reconstrucciones_por_exp"][exp_id]
-                    if r.get("id") != rec_actual.get("id")
-                ]
+            if st.button("🗑️ Eliminar reconstrucción", use_container_width=True, key=f"del_rec_{exp_id}", disabled=deshabilitar):
+                st.session_state["reconstrucciones_por_exp"][exp_id] = [r for r in st.session_state["reconstrucciones_por_exp"][exp_id] if r.get("id") != rec_actual.get("id")]
                 _reindexar_reconstrucciones(exp_id)
                 primer_id = st.session_state["reconstrucciones_por_exp"][exp_id][0]["id"]
                 st.session_state["recon_activa_por_exp"][exp_id] = primer_id
@@ -319,71 +326,30 @@ def render_reconstruccion():
         with col_r1:
             _panel_header("🔧", "Parámetros de Reconstrucción")
 
-            rec_actual["fase_recons"] = selectbox_con_placeholder(
-                "Fase a reconstruir",
-                FASES_RECONS,
-                key=f"fase_recons_{rec_actual['id']}",
-                value=rec_actual.get("fase_recons"),
-            )
-
-            rec_actual["tipo_recons"] = selectbox_con_placeholder(
-                "Tipo de reconstrucción",
-                TIPOS_RECONS,
-                key=f"tipo_recons_{rec_actual['id']}",
-                value=rec_actual.get("tipo_recons"),
-            )
+            rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}", value=rec_actual.get("fase_recons"))
+            rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}", value=rec_actual.get("tipo_recons"))
 
             if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-                rec_actual["algoritmo_iter"] = selectbox_con_placeholder(
-                    "Algoritmo iterativo",
-                    ALGORITMOS_ITERATIVOS,
-                    key=f"alg_iter_{rec_actual['id']}",
-                    value=rec_actual.get("algoritmo_iter"),
-                )
+                rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}", value=rec_actual.get("algoritmo_iter"))
                 niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
-                rec_actual["nivel_iter"] = selectbox_con_placeholder(
-                    "Nivel / Porcentaje / Modo",
-                    niveles_disp,
-                    key=f"nivel_iter_{rec_actual['id']}",
-                    value=rec_actual.get("nivel_iter"),
-                )
+                rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}", value=rec_actual.get("nivel_iter"))
             else:
                 rec_actual["algoritmo_iter"] = "—"
                 rec_actual["nivel_iter"] = "—"
 
-            rec_actual["kernel_sel"] = selectbox_con_placeholder(
-                "Algoritmo (Kernel)",
-                KERNELS,
-                key=f"kernel_sel_{rec_actual['id']}",
-                value=rec_actual.get("kernel_sel"),
-            )
+            rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}", value=rec_actual.get("kernel_sel"))
 
             col_gr, col_inc = st.columns(2)
             with col_gr:
-                rec_actual["grosor_recons"] = selectbox_con_placeholder(
-                    "Grosor reconstrucción",
-                    GROSORES_RECONS,
-                    key=f"grosor_recons_{rec_actual['id']}",
-                    value=rec_actual.get("grosor_recons"),
-                )
+                rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}", value=rec_actual.get("grosor_recons"))
             with col_inc:
-                rec_actual["incremento"] = selectbox_con_placeholder(
-                    "Incremento",
-                    INCREMENTOS_RECONS,
-                    key=f"incremento_{rec_actual['id']}",
-                    value=rec_actual.get("incremento"),
-                )
+                rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}", value=rec_actual.get("incremento"))
 
         with col_r2:
             _panel_header("🪟", "Ventana de Visualización")
 
             ventanas_disp = list(VENTANAS.keys())
-            rec_actual["ventana_preset"] = selectbox_con_placeholder(
-                "Preset de ventana",
-                ventanas_disp,
-                key=f"preset_ventana_{rec_actual['id']}",
-                value=rec_actual.get("ventana_preset"),
-            )
+            rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}", value=rec_actual.get("ventana_preset"))
 
             if rec_actual["ventana_preset"] in VENTANAS:
                 ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
@@ -394,30 +360,11 @@ def render_reconstruccion():
 
             col_ww, col_wl = st.columns(2)
             with col_ww:
-                rec_actual["ww_val"] = st.number_input(
-                    "WW",
-                    min_value=1,
-                    max_value=5000,
-                    value=int(rec_actual.get("ww_val", ww_default)),
-                    step=1,
-                    key=f"ww_{rec_actual['id']}",
-                )
+                rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}")
             with col_wl:
-                rec_actual["wl_val"] = st.number_input(
-                    "WL",
-                    min_value=-1500,
-                    max_value=3000,
-                    value=int(rec_actual.get("wl_val", wl_default)),
-                    step=1,
-                    key=f"wl_{rec_actual['id']}",
-                )
+                rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}")
 
-            rec_actual["dfov"] = selectbox_con_placeholder(
-                "DFOV",
-                DFOV_OPCIONES,
-                key=f"dfov_{rec_actual['id']}",
-                value=rec_actual.get("dfov"),
-            )
+            rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}", value=rec_actual.get("dfov"))
 
             _panel_header("📍", "Rango de Reconstrucción")
 
@@ -426,24 +373,15 @@ def render_reconstruccion():
 
             col_ini, col_fin = st.columns(2)
             with col_ini:
-                rec_actual["inicio_recons"] = selectbox_con_placeholder(
-                    "Inicio reconstrucción",
-                    refs_ini_r,
-                    key=f"ini_rec_{rec_actual['id']}",
-                    value=rec_actual.get("inicio_recons"),
-                )
+                rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
             with col_fin:
-                rec_actual["fin_recons"] = selectbox_con_placeholder(
-                    "Fin reconstrucción",
-                    refs_fin_r,
-                    key=f"fin_rec_{rec_actual['id']}",
-                    value=rec_actual.get("fin_recons"),
-                )
+                rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
 
         st.markdown("---")
         _panel_header("📝", "Resumen de reconstrucción activa")
         st.markdown(
             f"""
+            **Adquisición:** {nombre_exp}  
             **Nombre:** {rec_actual.get('nombre', '—')}  
             **Fase:** {rec_actual.get('fase_recons', '—')}  
             **Tipo:** {rec_actual.get('tipo_recons', '—')}  
