@@ -7,6 +7,14 @@ from ui.inyectora import render_inyectora
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
+TAB_OPTIONS = [
+    "🏠  Inicio",
+    "📋  Ingreso",
+    "⚡  Adquisición",
+    "🧩  Reconstrucción",
+    "💉  Inyectora",
+]
+
 
 def aplicar_css_global():
     st.markdown(
@@ -88,7 +96,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Variante alternativa según versión */
         div[role="listbox"] {
             background-color: #111111 !important;
             border: 1px solid #444 !important;
@@ -124,54 +131,44 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Tabs */
-        button[role="tab"] {
-            color: white !important;
-        }
-
         /* Alertas */
         .stAlert {
             border-radius: 10px;
         }
 
-        /* Header de Streamlit transparente pero SIN ocultar */
+        /* Header de Streamlit transparente */
         .stApp > header,
         [data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        /* Dar respiro arriba */
         .block-container {
-            padding-top: 3.5rem !important;
+            padding-top: 3.0rem !important;
         }
 
-        /* Pestañas */
-        .stTabs [data-baseweb="tab-list"] {
+        /* Navegación superior */
+        div[role="radiogroup"] {
+            display: flex !important;
             gap: 0.5rem;
-            background: transparent;
-            border-bottom: 1px solid #2A2A2A;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
         }
 
-        .stTabs [data-baseweb="tab"] {
+        div[role="radiogroup"] label {
             background: transparent !important;
+            border: 1px solid #2A2A2A !important;
+            border-radius: 10px !important;
+            padding: 0.5rem 0.9rem !important;
             color: #BFBFBF !important;
-            padding: 0.7rem 1.2rem !important;
-            font-weight: 500 !important;
-            font-size: 1rem !important;
-            border-radius: 8px 8px 0 0;
         }
 
-        .stTabs [data-baseweb="tab"]:hover {
+        div[role="radiogroup"] label:hover {
             background: #1A1A1A !important;
             color: #FFFFFF !important;
+            border-color: #444 !important;
         }
 
-        .stTabs [aria-selected="true"] {
-            color: #FFFFFF !important;
-            font-weight: 600 !important;
-        }
-
-        /* Ocultar íconos de anchor */
+        /* Ocultar anchors */
         .stApp a.anchor-link,
         [data-testid="stHeaderActionElements"] {
             display: none !important;
@@ -182,31 +179,47 @@ def aplicar_css_global():
     )
 
 
+def init_navigation():
+    if "current_tab" not in st.session_state:
+        st.session_state["current_tab"] = "🏠  Inicio"
+
+
+def render_top_navigation():
+    current_tab = st.session_state.get("current_tab", "🏠  Inicio")
+
+    selected_tab = st.radio(
+        "Navegación",
+        TAB_OPTIONS,
+        index=TAB_OPTIONS.index(current_tab) if current_tab in TAB_OPTIONS else 0,
+        horizontal=True,
+        key="main_navigation_radio",
+        label_visibility="collapsed",
+    )
+
+    st.session_state["current_tab"] = selected_tab
+
+
 def main():
     aplicar_css_global()
+    init_navigation()
+    render_top_navigation()
 
-    tabs = st.tabs([
-        "🏠  Inicio",
-        "📋  Ingreso",
-        "⚡  Adquisición",
-        "🧩  Reconstrucción",
-        "💉  Inyectora",
-    ])
+    current_tab = st.session_state.get("current_tab", "🏠  Inicio")
 
-    with tabs[0]:
+    if current_tab == "🏠  Inicio":
         st.subheader("Inicio")
         st.info("Pendiente de modularizar")
 
-    with tabs[1]:
+    elif current_tab == "📋  Ingreso":
         render_ingreso()
 
-    with tabs[2]:
+    elif current_tab == "⚡  Adquisición":
         render_adquisicion()
 
-    with tabs[3]:
+    elif current_tab == "🧩  Reconstrucción":
         render_reconstruccion()
 
-    with tabs[4]:
+    elif current_tab == "💉  Inyectora":
         render_inyectora()
 
 
