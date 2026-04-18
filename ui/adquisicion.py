@@ -1,5 +1,3 @@
-import copy
-
 import streamlit as st
 
 from ui.topograma import render_topograma_panel
@@ -182,124 +180,122 @@ POSICION_CORTE_TEST_BOLUS = [
 ]
 
 
-CAMPOS_BASE = {
-    "nombre": "Seleccionar",
-    "tipo_item": "adquisicion",
-    "tipo": "adquisicion",
-    "tipo_exploracion": "HELICOIDAL",
-    "tipo_exp": "HELICOIDAL",
-    "modulacion_corriente": "SELECCIONAR",
-    "mod_corriente": "SELECCIONAR",
-    "mas": "SELECCIONAR",
-    "mas_val": "SELECCIONAR",
-    "indice_ruido": "SELECCIONAR",
-    "ind_ruido": "SELECCIONAR",
-    "kv": "SELECCIONAR",
-    "kvp": "SELECCIONAR",
-    "doble_muestreo": "SELECCIONAR",
-    "config_detectores": "SELECCIONAR",
-    "conf_det": "SELECCIONAR",
-    "cobertura": "",
-    "grosor_prospectivo": "SELECCIONAR",
-    "grosor_prosp": "SELECCIONAR",
-    "sfov": "SELECCIONAR",
-    "instruccion_voz": "SELECCIONAR",
-    "voz_adq": "SELECCIONAR",
-    "retardo": "SELECCIONAR",
-    "pitch": "SELECCIONAR",
-    "rotacion_tubo": "SELECCIONAR",
-    "rot_tubo": "SELECCIONAR",
-    "periodo": "SELECCIONAR",
-    "n_imagenes": "SELECCIONAR",
-    "posicion_corte": "SELECCIONAR",
-    "observaciones": "",
-}
+
+def _next_exp_id():
+    contador = int(st.session_state.get("exploracion_adq_counter", 1))
+    exp_id = f"exp_{contador}"
+    st.session_state["exploracion_adq_counter"] = contador + 1
+    return exp_id
 
 
 def _init_adquisicion_state():
-    st.session_state.setdefault("exploraciones", [])
-    st.session_state.setdefault("exp_activa", "topograma")
-    st.session_state.setdefault("exploracion_counter", 1)
+    if "exploraciones" not in st.session_state:
+        st.session_state["exploraciones"] = []
+
+    if "exploraciones_adq" not in st.session_state:
+        st.session_state["exploraciones_adq"] = []
+
+    if "exploracion_adq_counter" not in st.session_state:
+        st.session_state["exploracion_adq_counter"] = 1
+
+    if "exp_activa" not in st.session_state:
+        st.session_state["exp_activa"] = "topograma"
 
 
 def _crear_exploracion_base():
-    nuevo = dict(CAMPOS_BASE)
-    nuevo["id"] = f"exp_{st.session_state['exploracion_counter']}"
-    st.session_state["exploracion_counter"] += 1
-    nuevo["orden"] = 1
+    exp_id = _next_exp_id()
+    return {
+        "id": exp_id,
+        "orden": None,
+        "tipo_item": "adquisicion",
+        "tipo": "adquisicion",
+        "nombre": "Seleccionar",
+        "tipo_exploracion": "HELICOIDAL",
+        "tipo_exp": "HELICOIDAL",
+        "modulacion_corriente": "SELECCIONAR",
+        "mod_corriente": "SELECCIONAR",
+        "mas": "SELECCIONAR",
+        "mas_val": "SELECCIONAR",
+        "indice_ruido": "SELECCIONAR",
+        "ind_ruido": "SELECCIONAR",
+        "kv": "SELECCIONAR",
+        "kvp": "SELECCIONAR",
+        "doble_muestreo": "SELECCIONAR",
+        "config_detectores": "SELECCIONAR",
+        "conf_det": "SELECCIONAR",
+        "cobertura": "",
+        "grosor_prospectivo": "SELECCIONAR",
+        "grosor_prosp": "SELECCIONAR",
+        "sfov": "SELECCIONAR",
+        "instruccion_voz": "SELECCIONAR",
+        "voz_adq": "SELECCIONAR",
+        "retardo": "SELECCIONAR",
+        "pitch": "SELECCIONAR",
+        "rotacion_tubo": "SELECCIONAR",
+        "rot_tubo": "SELECCIONAR",
+        "periodo": "SELECCIONAR",
+        "periodo_bolus": "SELECCIONAR",
+        "n_imagenes": "SELECCIONAR",
+        "n_imagenes_bolus": "SELECCIONAR",
+        "posicion_corte": "SELECCIONAR",
+        "observaciones": "",
+    }
+
+
+def _normalizar_exploracion(exp, idx=None):
+    nuevo = dict(exp or {})
+    if not nuevo.get("id"):
+        nuevo["id"] = _next_exp_id()
+
+    nuevo["tipo_item"] = "adquisicion"
+    nuevo["tipo"] = "adquisicion"
+    nuevo["nombre"] = nuevo.get("nombre", "Seleccionar")
+    nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
+    nuevo["tipo_exp"] = nuevo["tipo_exploracion"]
+    nuevo["mod_corriente"] = nuevo.get("modulacion_corriente", nuevo.get("mod_corriente", "SELECCIONAR"))
+    nuevo["modulacion_corriente"] = nuevo["mod_corriente"]
+    nuevo["mas_val"] = nuevo.get("mas", nuevo.get("mas_val", "SELECCIONAR"))
+    nuevo["mas"] = nuevo["mas_val"]
+    nuevo["ind_ruido"] = nuevo.get("indice_ruido", nuevo.get("ind_ruido", "SELECCIONAR"))
+    nuevo["indice_ruido"] = nuevo["ind_ruido"]
+    nuevo["kvp"] = nuevo.get("kv", nuevo.get("kvp", "SELECCIONAR"))
+    nuevo["kv"] = nuevo["kvp"]
+    nuevo["conf_det"] = nuevo.get("config_detectores", nuevo.get("conf_det", "SELECCIONAR"))
+    nuevo["config_detectores"] = nuevo["conf_det"]
+    nuevo["grosor_prosp"] = nuevo.get("grosor_prospectivo", nuevo.get("grosor_prosp", "SELECCIONAR"))
+    nuevo["grosor_prospectivo"] = nuevo["grosor_prosp"]
+    nuevo["voz_adq"] = nuevo.get("instruccion_voz", nuevo.get("voz_adq", "SELECCIONAR"))
+    nuevo["instruccion_voz"] = nuevo["voz_adq"]
+    nuevo["rot_tubo"] = nuevo.get("rotacion_tubo", nuevo.get("rot_tubo", "SELECCIONAR"))
+    nuevo["rotacion_tubo"] = nuevo["rot_tubo"]
+    nuevo["periodo_bolus"] = nuevo.get("periodo", nuevo.get("periodo_bolus", "SELECCIONAR"))
+    nuevo["periodo"] = nuevo["periodo_bolus"]
+    nuevo["n_imagenes_bolus"] = nuevo.get("n_imagenes", nuevo.get("n_imagenes_bolus", "SELECCIONAR"))
+    nuevo["n_imagenes"] = nuevo["n_imagenes_bolus"]
+    if idx is not None:
+        nuevo["orden"] = idx + 1
     return nuevo
 
 
-def _asegurar_exploraciones():
-    if not st.session_state["exploraciones"]:
-        st.session_state["exploraciones"] = [_crear_exploracion_base()]
-    _sanear_exploraciones()
-
-
-def _sanear_exploraciones():
+def _sincronizar_exploraciones_adq():
     exploraciones = st.session_state.get("exploraciones", [])
-    if not isinstance(exploraciones, list):
-        exploraciones = []
+    normalizadas = []
+    for idx, exp in enumerate(exploraciones):
+        normalizadas.append(_normalizar_exploracion(exp, idx))
 
-    nuevas = []
-    ids_vistos = set()
-    for idx, exp in enumerate(exploraciones, start=1):
-        base = dict(CAMPOS_BASE)
-        if isinstance(exp, dict):
-            base.update(exp)
-        exp_id = base.get("id")
-        if not exp_id or exp_id in ids_vistos:
-            exp_id = f"exp_{st.session_state['exploracion_counter']}"
-            st.session_state["exploracion_counter"] += 1
-        base["id"] = exp_id
-        ids_vistos.add(exp_id)
-        base["orden"] = idx
-        _sincronizar_aliases_exploracion(base)
-        nuevas.append(base)
-
-    if not nuevas:
-        nuevas = [_crear_exploracion_base()]
-        nuevas[0]["orden"] = 1
-
-    st.session_state["exploraciones"] = nuevas
-
-    activa = st.session_state.get("exp_activa", "topograma")
-    if isinstance(activa, int) and (activa < 0 or activa >= len(nuevas)):
-        st.session_state["exp_activa"] = 0
+    st.session_state["exploraciones"] = normalizadas
+    st.session_state["exploraciones_adq"] = [
+        {"id": "topograma_panel", "orden": 0, "tipo": "topograma", "nombre": "Topograma"}
+    ] + [dict(exp) for exp in normalizadas]
 
 
-def _sincronizar_aliases_exploracion(exp):
-    exp["tipo_item"] = "adquisicion"
-    exp["tipo"] = "adquisicion"
-    exp["tipo_exp"] = exp.get("tipo_exploracion", "HELICOIDAL")
-    exp["mod_corriente"] = exp.get("modulacion_corriente", "SELECCIONAR")
-    exp["mas_val"] = exp.get("mas", "SELECCIONAR")
-    exp["ind_ruido"] = exp.get("indice_ruido", "SELECCIONAR")
-    exp["kvp"] = exp.get("kv", "SELECCIONAR")
-    exp["conf_det"] = exp.get("config_detectores", "SELECCIONAR")
-    exp["grosor_prosp"] = exp.get("grosor_prospectivo", "SELECCIONAR")
-    exp["voz_adq"] = exp.get("instruccion_voz", "SELECCIONAR")
-    exp["rot_tubo"] = exp.get("rotacion_tubo", "SELECCIONAR")
-
-
-def _sincronizar_estado_compartido():
-    _sanear_exploraciones()
-    store_topo = st.session_state.get("topograma_store", {})
-    region_anat = store_topo.get("region_anat") or st.session_state.get("region_anat") or ""
-    examen = store_topo.get("examen") or st.session_state.get("examen") or ""
-
-    st.session_state["region_anat"] = region_anat
-    st.session_state["examen"] = examen
-
-    exploraciones_adq = []
-    for idx, exp in enumerate(st.session_state.get("exploraciones", []), start=1):
-        exp["orden"] = idx
-        exp["region_anat"] = region_anat
-        exp["examen"] = examen
-        _sincronizar_aliases_exploracion(exp)
-        exploraciones_adq.append(copy.deepcopy(exp))
-
-    st.session_state["exploraciones_adq"] = exploraciones_adq
+def _asegurar_exploraciones():
+    if st.session_state["exploraciones"]:
+        st.session_state["exploraciones"] = [_normalizar_exploracion(exp, idx) for idx, exp in enumerate(st.session_state["exploraciones"])]
+        _sincronizar_exploraciones_adq()
+        return
+    st.session_state["exploraciones"] = [_crear_exploracion_base()]
+    _sincronizar_exploraciones_adq()
 
 
 def _calcular_cobertura(config_detectores, doble_muestreo):
@@ -353,19 +349,23 @@ def _render_lista_exploraciones():
     if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
         st.session_state["exp_activa"] = "topograma"
 
-    st.markdown("""<div style="height:10px"></div>""", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="height:10px"></div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     for idx, exp in enumerate(st.session_state["exploraciones"]):
         etiqueta = _nombre_visible_exploracion(exp, idx)
-        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{exp['id']}", use_container_width=True):
+        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{idx}", use_container_width=True):
             st.session_state["exp_activa"] = idx
 
     st.markdown(" ")
     if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
         st.session_state["exploraciones"].append(_crear_exploracion_base())
-        _sanear_exploraciones()
+        _sincronizar_exploraciones_adq()
         st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        _sincronizar_estado_compartido()
         st.rerun()
 
     if isinstance(st.session_state.get("exp_activa"), int):
@@ -375,22 +375,19 @@ def _render_lista_exploraciones():
 
             with col1:
                 if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
-                    copia = copy.deepcopy(st.session_state["exploraciones"][idx])
-                    copia["id"] = f"exp_{st.session_state['exploracion_counter']}"
-                    st.session_state["exploracion_counter"] += 1
-                    st.session_state["exploraciones"].insert(idx + 1, copia)
-                    _sanear_exploraciones()
+                    copia = dict(st.session_state["exploraciones"][idx])
+                    copia["id"] = _next_exp_id()
+                    st.session_state["exploraciones"].insert(idx + 1, _normalizar_exploracion(copia, idx + 1))
+                    _sincronizar_exploraciones_adq()
                     st.session_state["exp_activa"] = idx + 1
-                    _sincronizar_estado_compartido()
                     st.rerun()
 
             with col2:
                 if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
                     if len(st.session_state["exploraciones"]) > 1:
                         st.session_state["exploraciones"].pop(idx)
-                        _sanear_exploraciones()
-                        st.session_state["exp_activa"] = min(idx, len(st.session_state["exploraciones"]) - 1)
-                        _sincronizar_estado_compartido()
+                        _sincronizar_exploraciones_adq()
+                        st.session_state["exp_activa"] = 0
                         st.rerun()
 
 
@@ -399,13 +396,13 @@ def _render_resumen_topograma(store):
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.info(f"**Examen:** {store.get('examen') or '-'}")
+        st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
     with c2:
-        st.info(f"**Topograma 1:** {store.get('t1_posicion_paciente') or '-'}")
+        st.info(f"**Topograma 1**\n\n{store.get('t1_posicion_paciente') or '-'}")
     with c3:
-        st.info(f"**Entrada 1:** {store.get('t1_entrada_paciente') or '-'}")
+        st.info(f"**Entrada 1**\n\n{store.get('t1_entrada_paciente') or '-'}")
     with c4:
-        st.info(f"**Tubo 1:** {store.get('t1_posicion_tubo') or '-'}")
+        st.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '-'}")
 
     if store.get("aplica_topograma_2"):
         st.success(
@@ -426,8 +423,6 @@ def _ajustar_tipo_segun_nombre(exp):
     elif exp.get("tipo_exploracion") in ["TEST BOLUS", "BOLUS TRACKING"] and nombre not in ["BOLUS TEST", "BOLUS TRACKING"]:
         exp["tipo_exploracion"] = "HELICOIDAL"
 
-    _sincronizar_aliases_exploracion(exp)
-
 
 def _render_parametros_adquisicion(exp, idx, store):
     titulo = _nombre_visible_exploracion(exp, idx)
@@ -439,7 +434,7 @@ def _render_parametros_adquisicion(exp, idx, store):
             "Nombre de la exploración",
             NOMBRES_EXPLORACION,
             exp.get("nombre", "Seleccionar"),
-            key=f"nombre_exp_{exp['id']}",
+            key=f"nombre_exp_{idx}",
         )
 
     _ajustar_tipo_segun_nombre(exp)
@@ -449,7 +444,7 @@ def _render_parametros_adquisicion(exp, idx, store):
             "Tipo exploración",
             TIPOS_EXPLORACION,
             exp.get("tipo_exploracion", "HELICOIDAL"),
-            key=f"tipo_exp_{exp['id']}",
+            key=f"tipo_exp_{idx}",
         )
 
     row1 = st.columns(4, gap="medium")
@@ -458,28 +453,28 @@ def _render_parametros_adquisicion(exp, idx, store):
             "Modulación de corriente",
             MODULACION_CORRIENTE,
             exp.get("modulacion_corriente", "SELECCIONAR"),
-            key=f"modcorr_{exp['id']}",
+            key=f"modcorr_{idx}",
         )
     with row1[1]:
         exp["mas"] = _selectbox_con_indice(
             "mAs",
             MAS_OPCIONES,
             exp.get("mas", "SELECCIONAR"),
-            key=f"mas_{exp['id']}",
+            key=f"mas_{idx}",
         )
     with row1[2]:
         exp["indice_ruido"] = _selectbox_con_indice(
             "Índice de ruido",
             INDICE_RUIDO_OPCIONES,
             exp.get("indice_ruido", "SELECCIONAR"),
-            key=f"ruido_{exp['id']}",
+            key=f"ruido_{idx}",
         )
     with row1[3]:
         exp["kv"] = _selectbox_con_indice(
             "kV",
             KV_OPCIONES,
             exp.get("kv", "SELECCIONAR"),
-            key=f"kv_{exp['id']}",
+            key=f"kv_{idx}",
         )
 
     row2 = st.columns(6, gap="medium")
@@ -488,14 +483,14 @@ def _render_parametros_adquisicion(exp, idx, store):
             "Doble muestreo",
             DOBLE_MUESTREO_OPCIONES,
             exp.get("doble_muestreo", "SELECCIONAR"),
-            key=f"doble_{exp['id']}",
+            key=f"doble_{idx}",
         )
     with row2[1]:
         exp["config_detectores"] = _selectbox_con_indice(
             "Configuración detección",
             CONFIG_DETECTORES,
             exp.get("config_detectores", "SELECCIONAR"),
-            key=f"config_{exp['id']}",
+            key=f"config_{idx}",
         )
 
     exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
@@ -505,21 +500,21 @@ def _render_parametros_adquisicion(exp, idx, store):
             "Cobertura",
             value=exp.get("cobertura", ""),
             disabled=True,
-            key=f"cobertura_{exp['id']}",
+            key=f"cobertura_{idx}",
         )
     with row2[3]:
         exp["grosor_prospectivo"] = _selectbox_con_indice(
             "Grosor prospectivo",
             GROSOR_PROSPECTIVO_OPCIONES,
             exp.get("grosor_prospectivo", "SELECCIONAR"),
-            key=f"grosor_{exp['id']}",
+            key=f"grosor_{idx}",
         )
     with row2[4]:
         exp["sfov"] = _selectbox_con_indice(
             "SFOV",
             SFOV_OPCIONES,
             exp.get("sfov", "SELECCIONAR"),
-            key=f"sfov_{exp['id']}",
+            key=f"sfov_{idx}",
         )
     with row2[5]:
         st.info(store.get("examen") or "-")
@@ -533,21 +528,21 @@ def _render_parametros_adquisicion(exp, idx, store):
                 "Periodo",
                 PERIODO_TEST_BOLUS,
                 exp.get("periodo", "SELECCIONAR"),
-                key=f"periodo_{exp['id']}",
+                key=f"periodo_{idx}",
             )
         with row3[1]:
             exp["n_imagenes"] = _selectbox_con_indice(
                 "N° de imágenes",
                 N_IMAGENES_TEST_BOLUS,
                 exp.get("n_imagenes", "SELECCIONAR"),
-                key=f"nimg_{exp['id']}",
+                key=f"nimg_{idx}",
             )
         with row3[2]:
             exp["posicion_corte"] = _selectbox_con_indice(
                 "Posición de corte",
                 POSICION_CORTE_TEST_BOLUS,
                 exp.get("posicion_corte", "SELECCIONAR"),
-                key=f"poscorte_{exp['id']}",
+                key=f"poscorte_{idx}",
             )
     else:
         row3 = st.columns(4, gap="medium")
@@ -556,38 +551,39 @@ def _render_parametros_adquisicion(exp, idx, store):
                 "Instrucción de voz",
                 INSTRUCCION_VOZ_OPCIONES,
                 exp.get("instruccion_voz", "SELECCIONAR"),
-                key=f"voz_{exp['id']}",
+                key=f"voz_{idx}",
             )
         with row3[1]:
             exp["retardo"] = _selectbox_con_indice(
                 "Retardo",
                 RETARDO_OPCIONES,
                 exp.get("retardo", "SELECCIONAR"),
-                key=f"retardo_{exp['id']}",
+                key=f"retardo_{idx}",
             )
         with row3[2]:
             exp["pitch"] = _selectbox_con_indice(
                 "Pitch",
                 PITCH_OPCIONES,
                 exp.get("pitch", "SELECCIONAR"),
-                key=f"pitch_{exp['id']}",
+                key=f"pitch_{idx}",
             )
         with row3[3]:
             exp["rotacion_tubo"] = _selectbox_con_indice(
                 "TPO ROTACION TUBO",
                 ROTACION_TUBO_OPCIONES,
                 exp.get("rotacion_tubo", "SELECCIONAR"),
-                key=f"rot_{exp['id']}",
+                key=f"rot_{idx}",
             )
 
     exp["observaciones"] = st.text_area(
         "Observaciones",
         value=exp.get("observaciones", ""),
-        key=f"obs_{exp['id']}",
+        key=f"obs_{idx}",
         height=100,
     )
 
-    _sincronizar_aliases_exploracion(exp)
+    exp = _normalizar_exploracion(exp, idx)
+    st.session_state["exploraciones"][idx] = exp
 
     mensajes = []
 
@@ -616,7 +612,7 @@ def _render_parametros_adquisicion(exp, idx, store):
 def render_adquisicion():
     _init_adquisicion_state()
     _asegurar_exploraciones()
-    _sincronizar_estado_compartido()
+    _sincronizar_exploraciones_adq()
 
     col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
 
@@ -628,14 +624,12 @@ def render_adquisicion():
 
         if activa == "topograma":
             render_topograma_panel()
-            _sincronizar_estado_compartido()
         else:
             store = st.session_state.get("topograma_store", {})
 
             if not _topograma_tiene_minimo(store):
                 st.warning("Primero debes completar al menos el Topograma 1.")
                 render_topograma_panel()
-                _sincronizar_estado_compartido()
                 return
 
             _render_resumen_topograma(store)
@@ -647,4 +641,4 @@ def render_adquisicion():
 
             exp = exploraciones[activa]
             _render_parametros_adquisicion(exp, activa, store)
-            _sincronizar_estado_compartido()
+            _sincronizar_exploraciones_adq()
