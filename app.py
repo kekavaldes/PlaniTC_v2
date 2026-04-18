@@ -171,31 +171,36 @@ def init_navigation():
     if "current_tab" not in st.session_state:
         st.session_state["current_tab"] = "🏠  Inicio"
 
-    if "main_navigation_radio" not in st.session_state:
-        st.session_state["main_navigation_radio"] = st.session_state["current_tab"]
+    if "pending_tab" not in st.session_state:
+        st.session_state["pending_tab"] = None
 
 
-def sync_tab_from_radio():
-    st.session_state["current_tab"] = st.session_state["main_navigation_radio"]
+def apply_pending_navigation():
+    pending = st.session_state.get("pending_tab")
+    if pending in TAB_OPTIONS:
+        st.session_state["current_tab"] = pending
+        st.session_state["pending_tab"] = None
 
 
 def render_top_navigation():
-    # mantener siempre sincronizados ambos estados antes de dibujar
-    st.session_state["main_navigation_radio"] = st.session_state["current_tab"]
+    current_tab = st.session_state.get("current_tab", "🏠  Inicio")
 
-    st.radio(
+    selected_tab = st.radio(
         "Navegación",
         TAB_OPTIONS,
-        key="main_navigation_radio",
+        index=TAB_OPTIONS.index(current_tab),
         horizontal=True,
+        key="main_navigation_radio",
         label_visibility="collapsed",
-        on_change=sync_tab_from_radio,
     )
+
+    st.session_state["current_tab"] = selected_tab
 
 
 def main():
     aplicar_css_global()
     init_navigation()
+    apply_pending_navigation()
     render_top_navigation()
 
     current_tab = st.session_state.get("current_tab", "🏠  Inicio")
