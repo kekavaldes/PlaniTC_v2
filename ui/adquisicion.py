@@ -1448,18 +1448,96 @@ def _render_bolus(exp):
         _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
 
 
-def _render_imagen_posicion_corte(exp):
-    """Muestra la imagen asociada a la posición de corte en exploraciones bolus."""
+def _img_file_to_b64(path: Path) -> str:
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def _render_imagen_posicion_corte(exp, alto=430):
+    """Muestra la imagen asociada a la posición de corte en exploraciones bolus.
+    Se renderiza con la misma altura visual que el bloque de topogramas para
+    que quede alineada en la parte superior.
+    """
     posicion = exp.get("posicion_corte")
     if not posicion:
-        st.info("Selecciona una posición de corte para ver la imagen de referencia.")
+        st.markdown(
+            f"""
+            <div style="
+                height:{alto}px;
+                border:1px solid #2E2E2E;
+                border-radius:12px;
+                background:#0A0A0A;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                color:#BFBFBF;
+                font-size:0.95rem;
+                text-align:center;
+                padding:1rem;
+                box-sizing:border-box;
+                margin-top: 2.25rem;
+            ">
+                Selecciona una posición de corte para ver la imagen de referencia.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         return
 
     ruta = IMG_POSICION_CORTE_DIR / f"{posicion}.png"
     if ruta.exists():
-        st.image(str(ruta), use_container_width=True)
+        mime = "image/png"
+        img_b64 = _img_file_to_b64(ruta)
+        st.markdown(
+            f"""
+            <div style="
+                height:{alto}px;
+                border:1px solid #2E2E2E;
+                border-radius:12px;
+                background:#000000;
+                display:flex;
+                align-items:flex-start;
+                justify-content:center;
+                padding:8px;
+                box-sizing:border-box;
+                overflow:hidden;
+                margin-top: 2.25rem;
+            ">
+                <img src="data:{mime};base64,{img_b64}"
+                     style="
+                        width:100%;
+                        height:100%;
+                        object-fit:contain;
+                        border-radius:10px;
+                        display:block;
+                     ">
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
-        st.warning(f"No se encontró la imagen para: {posicion}")
+        st.markdown(
+            f"""
+            <div style="
+                height:{alto}px;
+                border:1px solid #2E2E2E;
+                border-radius:12px;
+                background:#0A0A0A;
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                color:#FFB4B4;
+                font-size:0.95rem;
+                text-align:center;
+                padding:1rem;
+                box-sizing:border-box;
+                margin-top: 2.25rem;
+            ">
+                No se encontró la imagen para: {posicion}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1569,11 +1647,11 @@ def render_adquisicion():
 
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
         if es_bolus:
-            col_topos, col_imagen = st.columns([3.6, 1.15], gap="medium")
+            col_topos, col_imagen = st.columns([3.45, 1.35], gap="medium")
             with col_topos:
                 _render_topogramas_adq(exp, es_bolus)
             with col_imagen:
-                _render_imagen_posicion_corte(exp)
+                _render_imagen_posicion_corte(exp, alto=430)
         else:
             _render_topogramas_adq(exp, es_bolus)
 
