@@ -239,42 +239,10 @@ def _render_resumen_topograma(store):
     c4.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '—'}")
 
 
-def _adq_pair(col, title, render_fn, compact=False):
+def _adq_pair(col, title, render_fn):
     with col:
-        title_html = f"""
-        <div style="
-            min-height:{'2.2rem' if compact else '2.4rem'};
-            display:flex;
-            align-items:flex-end;
-            font-weight:700;
-            font-size:0.98rem;
-            letter-spacing:0.01em;
-            white-space:nowrap;
-            margin-bottom:0.2rem;
-        ">
-            {title}
-        </div>
-        """
-        st.markdown(title_html, unsafe_allow_html=True)
+        st.markdown(f"**{title}**")
         render_fn()
-
-
-def _icon_cell(col, emoji):
-    with col:
-        st.markdown(
-            f"""
-            <div style="
-                min-height:2.4rem;
-                display:flex;
-                align-items:flex-end;
-                justify-content:center;
-                margin-bottom:0.2rem;
-            ">
-                <div style="font-size:2rem; line-height:1;">{emoji}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 
 def _render_normales(exp, store):
@@ -287,8 +255,9 @@ def _render_normales(exp, store):
         disabled_tipo = exp.get("nombre") in {"BOLUS TEST", "BOLUS TRACKING"}
         exp["tipo_exploracion"] = _select("Tipo exploración", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "Seleccionar"), key=f"tipo_exp_{eid}", disabled=disabled_tipo)
 
-    row1 = st.columns([0.38, 1.18, 1.05, 1.18, 1.05], gap="medium")
-    _icon_cell(row1[0], "☢️")
+    row1 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
+    with row1[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>☢️</div>", unsafe_allow_html=True)
     _adq_pair(row1[1], "MODULACIÓN CORRIENTE", lambda: exp.__setitem__("modulacion_corriente", _select("Modulación corriente", MODULACION_CORRIENTE, exp.get("modulacion_corriente", "Seleccionar"), key=f"modcorr_{eid}", label_visibility="collapsed")))
     _adq_pair(row1[2], "MAS", lambda: exp.__setitem__("mas", _select("mAs", MAS_OPCIONES, exp.get("mas", "Seleccionar"), key=f"mas_{eid}", label_visibility="collapsed", disabled=exp.get("nombre") in {"BOLUS TEST","BOLUS TRACKING"})))
     _adq_pair(row1[3], "INDICE DE RUIDO", lambda: exp.__setitem__("indice_ruido", _select("Indice ruido", INDICE_RUIDO_OPCIONES, exp.get("indice_ruido", "Seleccionar"), key=f"indruido_{eid}", label_visibility="collapsed")))
@@ -297,8 +266,9 @@ def _render_normales(exp, store):
     helicoidal = exp.get("tipo_exploracion") == "HELICOIDAL"
     exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo") if helicoidal else "NO")
 
-    row2 = st.columns([0.38, 1.45, 1.2, 1.25, 1.05, 1.2, 1.0], gap="medium")
-    _icon_cell(row2[0], "⚙️")
+    row2 = st.columns([0.55, 1.2, 1, 1, 1, 1, 1], gap="medium")
+    with row2[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>⚙️</div>", unsafe_allow_html=True)
     _adq_pair(row2[1], "TIPO EXPLORACIÓN", lambda: exp.__setitem__("tipo_exploracion", _select("Tipo exploración fila 2", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "Seleccionar"), key=f"tipo_exploracion_row_{eid}", label_visibility="collapsed", disabled=exp.get("nombre") in {"BOLUS TEST","BOLUS TRACKING"})))
     if helicoidal:
         _adq_pair(row2[2], "DOBLE MUESTREO", lambda: exp.__setitem__("doble_muestreo", _select("Doble muestreo", DOBLE_MUESTREO_OPCIONES, exp.get("doble_muestreo", "Seleccionar"), key=f"doble_{eid}", label_visibility="collapsed")))
@@ -314,8 +284,9 @@ def _render_normales(exp, store):
     _adq_pair(row2[5], "GROSOR PROSP.", lambda: exp.__setitem__("grosor_prospectivo", _select("Grosor prospectivo", GROSOR_PROSPECTIVO_OPCIONES, exp.get("grosor_prospectivo", "Seleccionar"), key=f"gpros_{eid}", label_visibility="collapsed")))
     _adq_pair(row2[6], "SFOV", lambda: exp.__setitem__("sfov", _select("SFOV", SFOV_OPCIONES, exp.get("sfov", "Seleccionar"), key=f"sfov_{eid}", label_visibility="collapsed")))
 
-    row3 = st.columns([0.38, 1.35, 1.15, 1.15, 1.3], gap="medium")
-    _icon_cell(row3[0], "🕒")
+    row3 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
+    with row3[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>🕒</div>", unsafe_allow_html=True)
     _adq_pair(row3[1], "INSTRUCCIÓN DE VOZ", lambda: exp.__setitem__("instruccion_voz", _select("Instrucción de voz", INSTRUCCION_VOZ_OPCIONES, exp.get("instruccion_voz", "Seleccionar"), key=f"voz_{eid}", label_visibility="collapsed")))
     _adq_pair(row3[2], "RETARDO", lambda: exp.__setitem__("retardo", _select("Retardo", RETARDO_OPCIONES, exp.get("retardo", "Seleccionar"), key=f"delay_{eid}", label_visibility="collapsed")))
     if helicoidal:
@@ -330,8 +301,9 @@ def _render_normales(exp, store):
     grupo = _region_grupo(store)
     ini_opts = ["Seleccionar"] + REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
     fin_opts = ["Seleccionar"] + REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
-    row4 = st.columns([0.38, 1.45, 1.0, 1.45, 1.0], gap="medium")
-    _icon_cell(row4[0], "📏")
+    row4 = st.columns([0.55, 1.2, 1, 1.2, 1], gap="medium")
+    with row4[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>📏</div>", unsafe_allow_html=True)
     _adq_pair(row4[1], "INICIO EXPLORACIÓN", lambda: exp.__setitem__("inicio_ref", _select("Inicio exploración", ini_opts, exp.get("inicio_ref", "Seleccionar"), key=f"iniref_{eid}", label_visibility="collapsed")))
     with row4[2]:
         st.markdown("**MM INICIO**")
@@ -350,8 +322,9 @@ def _render_bolus(exp):
     with row_title[1]:
         exp["tipo_exploracion"] = _select("Tipo exploración", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "SECUENCIAL"), key=f"tipo_exp_{eid}", disabled=True)
 
-    row1 = st.columns([0.38, 1.18, 1.05, 1.18, 1.05], gap="medium")
-    _icon_cell(row1[0], "☢️")
+    row1 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
+    with row1[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>☢️</div>", unsafe_allow_html=True)
     _adq_pair(row1[1], "MODULACIÓN CORRIENTE", lambda: exp.__setitem__("modulacion_corriente", _select("Modulación corriente", MODULACION_CORRIENTE, exp.get("modulacion_corriente", "NO"), key=f"modcorr_{eid}", label_visibility="collapsed")))
     exp["mas"] = "20"
     exp["kv"] = "100"
@@ -363,8 +336,9 @@ def _render_bolus(exp):
         st.markdown("**KV**")
         _text_disabled("kv fijo", "100", key=f"kv_fijo_{eid}")
 
-    row2 = st.columns([0.38, 1.15, 1.15, 1.3, 1.15], gap="medium")
-    _icon_cell(row2[0], "🎯")
+    row2 = st.columns([0.55, 1, 1, 1, 1], gap="medium")
+    with row2[0]:
+        st.markdown("<div style='font-size:2rem; margin-top:1.6rem; text-align:center;'>🎯</div>", unsafe_allow_html=True)
     _adq_pair(row2[1], "PERIODO", lambda: exp.__setitem__("periodo", _select("Periodo", PERIODO_TEST_BOLUS, exp.get("periodo", "Seleccionar"), key=f"periodo_{eid}", label_visibility="collapsed")))
     _adq_pair(row2[2], "N° IMÁGENES", lambda: exp.__setitem__("n_imagenes", _select("N imágenes", N_IMAGENES_TEST_BOLUS, exp.get("n_imagenes", "Seleccionar"), key=f"nimg_{eid}", label_visibility="collapsed")))
     _adq_pair(row2[3], "POSICIÓN DE CORTE", lambda: exp.__setitem__("posicion_corte", _select("Posición corte", POSICION_CORTE_TEST_BOLUS, exp.get("posicion_corte", "Seleccionar"), key=f"poscorte_{eid}", label_visibility="collapsed")))
@@ -392,16 +366,6 @@ def _render_warnings(exp):
 
 def render_adquisicion():
     _init_state()
-    st.markdown(
-        """
-        <style>
-        div[data-testid="stNumberInputContainer"] button {
-            min-width: 2.2rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
     with col_sidebar:
         _render_sidebar()
