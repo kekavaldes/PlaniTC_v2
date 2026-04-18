@@ -1,399 +1,252 @@
-"""
-ui/ingreso.py
-Módulo de Ingreso del paciente para PlaniTC_v2.
-"""
-
-from datetime import date
-from pathlib import Path
-
 import streamlit as st
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-IMAGEN_INGRESO_PATH = BASE_DIR / "data" / "images" / "portada_ingreso.png"
+from ui.ingreso import render_ingreso
+from ui.adquisicion import render_adquisicion
+from ui.reconstruccion import render_reconstruccion
+from ui.inyectora import render_inyectora
+
+st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
 
-def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
-    opciones = ["Seleccionar"] + list(options)
-    if value in options:
-        idx = opciones.index(value)
-    else:
-        idx = 0
-    val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
-    return None if val == "Seleccionar" else val
-
-
-def calcular_edad(fecha_nacimiento, fecha_referencia=None):
-    try:
-        if fecha_nacimiento in (None, ""):
-            return None
-
-        if isinstance(fecha_nacimiento, str):
-            fecha_nacimiento = date.fromisoformat(fecha_nacimiento)
-
-        if fecha_referencia is None:
-            fecha_referencia = date.today()
-
-        edad = fecha_referencia.year - fecha_nacimiento.year
-        if (fecha_referencia.month, fecha_referencia.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
-            edad -= 1
-
-        return max(0, int(edad))
-    except Exception:
-        return None
-
-
-def _safe_float(value, default=1.0):
-    try:
-        if value in (None, ""):
-            return float(default)
-        return float(value)
-    except Exception:
-        return float(default)
-
-
-def _safe_int(value, default=70):
-    try:
-        if value in (None, ""):
-            return int(default)
-        return int(value)
-    except Exception:
-        return int(default)
-
-
-def _panel_header(emoji: str, titulo: str):
-    st.markdown(
-        f"""
-        <div style="
-            background:#1A1A1A;
-            border:1px solid #2E2E2E;
-            border-radius:10px;
-            padding:0.75rem 1rem;
-            margin-bottom:0.9rem;
-            display:flex;
-            align-items:center;
-            gap:0.55rem;
-            font-weight:600;
-            font-size:1rem;
-            color:#FFFFFF;
-        ">
-            <span style="font-size:1.15rem;">{emoji}</span>
-            <span>{titulo}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _render_imagen_ingreso():
-    if not IMAGEN_INGRESO_PATH.exists():
-        return
-    try:
-        col_esp_izq, col_img, col_esp_der = st.columns([1, 2, 1])
-        with col_img:
-            st.image(
-                str(IMAGEN_INGRESO_PATH),
-                use_container_width=True,
-            )
-    except Exception:
-        pass
-
-
-def _build_store(**kwargs):
-    prev = st.session_state.get("ingreso_store", {})
-    prev.update(kwargs)
-    st.session_state["ingreso_store"] = prev
-
-
-def _init_session_state():
-    defaults = {
-        "contraste_ev": False,
-        "vvp": None,
-        "metodo_inyeccion": None,
-        "cantidad_contraste": None,
-        "sexo_clearance": None,
-        "requiere_creatinina": False,
-        "embarazo": None,
-    }
-    for key, value in defaults.items():
-        st.session_state.setdefault(key, value)
-
-
-def _go_to_inyectora():
-    st.session_state["active_tab"] = "💉  Inyectora"
-
-
-def render_ingreso():
-    _init_session_state()
-    store = st.session_state.get("ingreso_store", {})
-
+def aplicar_css_global():
     st.markdown(
         """
         <style>
-        div[data-testid="stButton"] > button[kind="secondary"] {
+        .stApp {
+            background-color: #0e1117 !important;
+            color: white !important;
+        }
+
+        html, body, [class*="css"] {
+            color: white !important;
+        }
+
+        h1, h2, h3, h4, h5, h6, p, label, span, div {
+            color: white !important;
+        }
+
+        [data-testid="stMarkdownContainer"] p {
+            color: white !important;
+        }
+
+        section[data-testid="stSidebar"] * {
+            color: white !important;
+        }
+
+        div[data-baseweb="select"] > div {
+            background-color: #111111 !important;
+            color: white !important;
+            border: 1px solid #444 !important;
+            border-radius: 10px !important;
+        }
+
+        div[data-baseweb="select"] * {
+            color: white !important;
+        }
+
+        .stTextInput input,
+        .stNumberInput input,
+        .stDateInput input,
+        input[type="text"],
+        input[type="number"],
+        textarea {
+            background-color: #111111 !important;
+            color: white !important;
+            border: 1px solid #444 !important;
+            border-radius: 10px !important;
+            -webkit-text-fill-color: white !important;
+        }
+
+        div[data-baseweb="popover"] {
+            background-color: #111111 !important;
+            color: white !important;
+        }
+
+        div[data-baseweb="popover"] * {
+            color: white !important;
+        }
+
+        ul[role="listbox"] {
+            background-color: #111111 !important;
+            border: 1px solid #444 !important;
+        }
+
+        ul[role="listbox"] li {
+            background-color: #111111 !important;
+            color: white !important;
+        }
+
+        ul[role="listbox"] li:hover,
+        ul[role="listbox"] li[aria-selected="true"] {
+            background-color: #222222 !important;
+            color: white !important;
+        }
+
+        div[role="listbox"] {
+            background-color: #111111 !important;
+            border: 1px solid #444 !important;
+            color: white !important;
+        }
+
+        div[role="option"] {
+            background-color: #111111 !important;
+            color: white !important;
+        }
+
+        div[role="option"]:hover,
+        div[role="option"][aria-selected="true"] {
+            background-color: #222222 !important;
+            color: white !important;
+        }
+
+        .stButton button {
+            background-color: #1c1f26 !important;
+            color: white !important;
+            border: 1px solid #444 !important;
+            border-radius: 10px !important;
+        }
+
+        .stButton button:hover {
+            background-color: #2a2e36 !important;
+            color: white !important;
+        }
+
+        .stCheckbox label {
+            color: white !important;
+        }
+
+        .stAlert {
             border-radius: 10px;
         }
 
-        div[data-testid="stButton"] > button[data-testid="baseButton-secondary"][key="btn_ir_inyectora"],
-        div.stButton > button[key="btn_ir_inyectora"] {
-            background-color: #1f6feb !important;
-            color: white !important;
-            border: 1px solid #1f6feb !important;
-            font-weight: 600 !important;
+        .stApp > header,
+        [data-testid="stHeader"] {
+            background: transparent !important;
         }
 
-        div[data-testid="stButton"] > button[data-testid="baseButton-secondary"][key="btn_ir_inyectora"]:hover,
-        div.stButton > button[key="btn_ir_inyectora"]:hover {
-            background-color: #388bfd !important;
-            color: white !important;
-            border: 1px solid #388bfd !important;
+        .block-container {
+            padding-top: 3.2rem !important;
+        }
+
+        .stApp a.anchor-link,
+        [data-testid="stHeaderActionElements"] {
+            display: none !important;
+        }
+
+        /* Navegación superior */
+        .top-nav-wrap {
+            display: flex;
+            gap: 0.45rem;
+            margin-bottom: 1.1rem;
+            border-bottom: 1px solid #2A2A2A;
+            padding-bottom: 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .top-nav-active {
+            background: transparent !important;
+            color: #FFFFFF !important;
+            border: none !important;
+            border-bottom: 2px solid #3B82F6 !important;
+            border-radius: 0 !important;
+            padding: 0.7rem 0.2rem 0.6rem 0.2rem !important;
+            font-weight: 600 !important;
+            font-size: 1rem !important;
+            display: inline-block;
+        }
+
+        div[data-testid="stHorizontalBlock"] .stButton button.nav-btn {
+            background: transparent !important;
+            color: #BFBFBF !important;
+            border: none !important;
+            border-bottom: 2px solid transparent !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            padding: 0.7rem 0.2rem 0.6rem 0.2rem !important;
+            font-weight: 500 !important;
+            font-size: 1rem !important;
+        }
+
+        div[data-testid="stHorizontalBlock"] .stButton button.nav-btn:hover {
+            color: #FFFFFF !important;
+            background: transparent !important;
+            border-bottom: 2px solid #666 !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    col_izq, col_der = st.columns([1, 1], gap="large")
 
-    with col_izq:
-        _panel_header("📋", "Datos del Paciente")
+def _init_navigation():
+    if "active_tab" not in st.session_state:
+        st.session_state["active_tab"] = "📋  Ingreso"
 
-        nombre = st.text_input(
-            "Nombre del paciente",
-            value=store.get("nombre", ""),
-            placeholder="Ej: Juan Pérez",
-            key="nombre_paciente_widget",
-        )
 
-        col_fn, col_edad = st.columns([1, 1])
+def _go_to(tab_name: str):
+    st.session_state["active_tab"] = tab_name
 
-        with col_fn:
-            fecha_guardada = store.get("fecha_nacimiento")
-            fecha_default = date.today()
-            try:
-                if fecha_guardada:
-                    fecha_default = date.fromisoformat(fecha_guardada)
-            except Exception:
-                fecha_default = date.today()
 
-            fecha_nacimiento = st.date_input(
-                "Fecha de nacimiento",
-                value=fecha_default,
-                min_value=date(1900, 1, 1),
-                max_value=date.today(),
-                format="DD/MM/YYYY",
-                key="fecha_nacimiento",
-            )
+def render_navigation():
+    tabs = [
+        "🏠  Inicio",
+        "📋  Ingreso",
+        "⚡  Adquisición",
+        "🧩  Reconstrucción",
+        "💉  Inyectora",
+    ]
 
-        edad = calcular_edad(fecha_nacimiento, date.today())
+    cols = st.columns(len(tabs), gap="small")
 
-        with col_edad:
-            st.markdown(
-                f"""
-                <div style="margin-bottom:0.35rem;">
-                    <label style="font-size:0.875rem; font-weight:400; color:white;">Edad</label>
-                </div>
-                <div style="
-                    background-color:#111111;
-                    color:white;
-                    border:1px solid #444;
-                    border-radius:10px;
-                    padding:0.72rem 0.9rem;
-                    min-height:24px;
-                    display:flex;
-                    align-items:center;
-                    font-size:1.05rem;
-                    font-weight:500;
-                    height:42px;
-                    box-sizing:border-box;
-                ">
-                    {f"{edad} años" if edad is not None else ""}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        diagnostico = st.text_area(
-            "Diagnóstico",
-            value=store.get("diagnostico", ""),
-            placeholder="Indicación clínica del examen",
-            height=100,
-            key="diagnostico_widget",
-        )
-
-        _render_imagen_ingreso()
-
-    with col_der:
-        _panel_header("💉", "Preparación del paciente")
-
-        col_prep_izq, col_prep_der = st.columns(2)
-
-        with col_prep_izq:
-            peso = st.number_input(
-                "Peso (kg)",
-                min_value=0,
-                max_value=250,
-                value=_safe_int(store.get("peso", 70), 70),
-                key="peso_widget",
-            )
-
-            embarazo = selectbox_con_placeholder(
-                "¿Embarazo?",
-                ["SI", "NO", "PROBABLE"],
-                "embarazo_widget",
-                value=store.get("embarazo"),
-            )
-            st.session_state["embarazo"] = embarazo
-
-            requiere_creatinina = st.checkbox(
-                "¿Requiere creatinina?",
-                value=bool(store.get("requiere_creatinina", False)),
-                key="requiere_creatinina",
-            )
-
-            sexo_clearance = None
-            creatinina_serica = None
-            clearance = None
-
-            if requiere_creatinina:
-                sexo_clearance = selectbox_con_placeholder(
-                    "Sexo",
-                    ["Femenino", "Masculino"],
-                    "sexo_clearance_widget",
-                    value=store.get("sexo_clearance"),
+    for i, tab_name in enumerate(tabs):
+        with cols[i]:
+            if st.session_state["active_tab"] == tab_name:
+                st.markdown(
+                    f'<div class="top-nav-active">{tab_name}</div>',
+                    unsafe_allow_html=True,
                 )
-                st.session_state["sexo_clearance"] = sexo_clearance
-
-                creatinina_serica = st.number_input(
-                    "Creatinina sérica (mg/dL)",
-                    min_value=0.1,
-                    max_value=20.0,
-                    value=_safe_float(store.get("creatinina_serica", 1.0), 1.0),
-                    step=0.1,
-                    key="creatinina_serica_widget",
-                )
-
-                clearance = None
-                if sexo_clearance is not None:
-                    try:
-                        clearance = ((140 - float(edad)) * float(peso)) / (72 * float(creatinina_serica))
-                        if sexo_clearance == "Femenino":
-                            clearance *= 0.85
-                        clearance = round(clearance, 1)
-                    except Exception:
-                        clearance = None
-
-                if clearance is None:
-                    st.info("Selecciona sexo e ingresa creatinina para calcular el clearance estimado.")
-                else:
-                    if clearance >= 60:
-                        fondo, borde, texto = "#143d22", "#2ecc71", "#d8ffe5"
-                        estado = "Adecuado"
-                    elif clearance >= 30:
-                        fondo, borde, texto = "#4a3d12", "#f1c40f", "#fff6cc"
-                        estado = "Disminución moderada"
-                    else:
-                        fondo, borde, texto = "#4a1616", "#ff5c5c", "#ffe0e0"
-                        estado = "Disminución severa"
-
-                    st.markdown(
-                        f"""
-                        <div style="margin-top:0.35rem; padding:0.85rem 1rem; border-radius:10px;
-                                    background:{fondo}; border:1px solid {borde}; color:{texto};">
-                            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.15rem;">
-                                Clearance de creatinina estimado
-                            </div>
-                            <div style="font-size:1.15rem; font-weight:700;">{clearance} mL/min</div>
-                            <div style="font-size:0.82rem; opacity:0.95;">{estado}</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-        with col_prep_der:
-            contraste_ev = st.checkbox(
-                "¿Se requiere medio de contraste EV?",
-                value=bool(store.get("contraste_ev", False)),
-                key="contraste_ev",
-            )
-
-            vvp = None
-            metodo_inyeccion = None
-            cantidad_contraste = None
-
-            if contraste_ev:
-                vvp = selectbox_con_placeholder(
-                    "VVP",
-                    ["24G", "22G", "20G", "18G", "CVC"],
-                    "vvp_widget",
-                    value=store.get("vvp"),
-                )
-                st.session_state["vvp"] = vvp
-
-                metodo_inyeccion = selectbox_con_placeholder(
-                    "Método de inyección",
-                    ["INYECTORA AUTOMÁTICA", "INYECCIÓN MANUAL"],
-                    "metodo_inyeccion_widget",
-                    value=store.get("metodo_inyeccion"),
-                )
-                st.session_state["metodo_inyeccion"] = metodo_inyeccion
-
-                cantidad_contraste = selectbox_con_placeholder(
-                    "Cantidad de medio de contraste",
-                    [f"{i} cc" for i in range(10, 151, 10)],
-                    "cantidad_contraste_widget",
-                    value=store.get("cantidad_contraste"),
-                )
-                st.session_state["cantidad_contraste"] = cantidad_contraste
-
-                if metodo_inyeccion == "INYECTORA AUTOMÁTICA":
-                    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
-                    col_btn_izq, col_btn_centro, col_btn_der = st.columns([1, 2, 1])
-
-                    with col_btn_centro:
-                        if st.button(
-                            "Parámetros de Inyectora",
-                            use_container_width=True,
-                            key="btn_ir_inyectora"
-                        ):
-                            _build_store(
-                                nombre=nombre,
-                                fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
-                                edad=edad,
-                                diagnostico=diagnostico,
-                                peso=peso,
-                                embarazo=embarazo,
-                                requiere_creatinina=requiere_creatinina,
-                                sexo_clearance=sexo_clearance,
-                                creatinina_serica=creatinina_serica,
-                                clearance=clearance,
-                                contraste_ev=contraste_ev,
-                                vvp=vvp,
-                                metodo_inyeccion=metodo_inyeccion,
-                                cantidad_contraste=cantidad_contraste,
-                            )
-                            _go_to_inyectora()
-                            st.rerun()
-
             else:
-                st.session_state["vvp"] = None
-                st.session_state["metodo_inyeccion"] = None
-                st.session_state["cantidad_contraste"] = None
+                if st.button(tab_name, key=f"nav_{i}", use_container_width=True):
+                    _go_to(tab_name)
+                    st.rerun()
 
-    _build_store(
-        nombre=nombre,
-        fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
-        edad=edad,
-        diagnostico=diagnostico,
-        peso=peso,
-        embarazo=embarazo,
-        requiere_creatinina=requiere_creatinina,
-        sexo_clearance=sexo_clearance,
-        creatinina_serica=creatinina_serica,
-        clearance=clearance,
-        contraste_ev=contraste_ev,
-        vvp=vvp,
-        metodo_inyeccion=metodo_inyeccion,
-        cantidad_contraste=cantidad_contraste,
+    st.markdown(
+        """
+        <style>
+        button[kind="secondary"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    return st.session_state["ingreso_store"]
+
+def main():
+    aplicar_css_global()
+    _init_navigation()
+    render_navigation()
+
+    active = st.session_state["active_tab"]
+
+    if active == "🏠  Inicio":
+        st.subheader("Inicio")
+        st.info("Pendiente de modularizar")
+
+    elif active == "📋  Ingreso":
+        render_ingreso()
+
+    elif active == "⚡  Adquisición":
+        render_adquisicion()
+
+    elif active == "🧩  Reconstrucción":
+        render_reconstruccion()
+
+    elif active == "💉  Inyectora":
+        render_inyectora()
+
+
+if __name__ == "__main__":
+    main()
