@@ -1,650 +1,342 @@
-import copy
+"""
+ui/ingreso.py
+Módulo de Ingreso del paciente para PlaniTC_v2.
+"""
+
+import base64
+from datetime import date
+from pathlib import Path
 
 import streamlit as st
 
-from ui.topograma import render_topograma_panel
+BASE_DIR = Path(__file__).resolve().parent.parent
+IMAGEN_INGRESO_PATH = BASE_DIR / "assets" / "portada_ingreso.jpg"
 
 
-NOMBRES_EXPLORACION = [
-    "Seleccionar",
-    "SIN CONTRASTE",
-    "ARTERIAL",
-    "ANGIOGRÁFICA",
-    "BOLUS TEST",
-    "BOLUS TRACKING",
-    "VENOSA",
-    "TARDÍA",
-]
-
-TIPOS_EXPLORACION = [
-    "HELICOIDAL",
-    "SECUENCIAL",
-    "VOLUMETRICA",
-    "TEST BOLUS",
-    "BOLUS TRACKING",
-]
-
-MODULACION_CORRIENTE = [
-    "SELECCIONAR",
-    "NO",
-    "CARE DOSE",
-    "AUTOMATICA",
-]
-
-MAS_OPCIONES = [
-    "SELECCIONAR",
-    "40",
-    "50",
-    "80",
-    "100",
-    "120",
-    "150",
-    "180",
-    "200",
-    "220",
-    "250",
-    "300",
-]
-
-INDICE_RUIDO_OPCIONES = [
-    "SELECCIONAR",
-    "6",
-    "8",
-    "10",
-    "12",
-    "14",
-    "16",
-    "18",
-    "20",
-]
-
-KV_OPCIONES = [
-    "SELECCIONAR",
-    "80",
-    "100",
-    "110",
-    "120",
-    "130",
-    "140",
-]
-
-DOBLE_MUESTREO_OPCIONES = [
-    "SELECCIONAR",
-    "NO",
-    "SI",
-]
-
-CONFIG_DETECTORES = [
-    "SELECCIONAR",
-    "16 x 0,6",
-    "16 x 1,2",
-    "32 x 0,6",
-    "32 x 1,2",
-    "64 x 0,6",
-    "64 x 1,2",
-    "80 x 0,6",
-    "80 x 1,2",
-    "128 x 0,6",
-]
-
-GROSOR_PROSPECTIVO_OPCIONES = [
-    "SELECCIONAR",
-    "0,6",
-    "0,75",
-    "1",
-    "1,2",
-    "1,5",
-    "2",
-    "3",
-    "5",
-]
-
-SFOV_OPCIONES = [
-    "SELECCIONAR",
-    "CABEZA",
-    "CUELLO",
-    "PEQUEÑO",
-    "MEDIANO",
-    "GRANDE",
-    "MAXIMO",
-]
-
-INSTRUCCION_VOZ_OPCIONES = [
-    "SELECCIONAR",
-    "NINGUNA",
-    "INSPIRACIÓN",
-    "ESPIRACIÓN",
-    "NO TRAGAR",
-    "VALSALVA",
-    "NO RESPIRE",
-]
-
-RETARDO_OPCIONES = [
-    "SELECCIONAR",
-    "0 sg",
-    "2 sg",
-    "3 sg",
-    "4 sg",
-    "5 sg",
-    "6 sg",
-    "8 sg",
-    "10 sg",
-    "12 sg",
-    "15 sg",
-    "20 sg",
-    "25 sg",
-    "30 sg",
-]
-
-PITCH_OPCIONES = [
-    "SELECCIONAR",
-    "0,5",
-    "0,6",
-    "0,8",
-    "1",
-    "1,2",
-    "1,5",
-    "1,8",
-]
-
-ROTACION_TUBO_OPCIONES = [
-    "SELECCIONAR",
-    "0,25 sg.",
-    "0,28 sg.",
-    "0,33 sg.",
-    "0,35 sg.",
-    "0,5 sg.",
-    "0,75 sg.",
-    "1 sg.",
-]
-
-PERIODO_TEST_BOLUS = [
-    "SELECCIONAR",
-    "0,9 sg",
-    "1 sg",
-    "1,5 sg",
-    "2 sg",
-]
-
-N_IMAGENES_TEST_BOLUS = [
-    "SELECCIONAR",
-    "10",
-    "15",
-    "20",
-    "25",
-    "30",
-]
-
-POSICION_CORTE_TEST_BOLUS = [
-    "SELECCIONAR",
-    "BOTON AORTICO",
-    "BAJO CARINA",
-]
+def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
+    opciones = ["Seleccionar"] + list(options)
+    if value in options:
+        idx = opciones.index(value)
+    else:
+        idx = 0
+    val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
+    return None if val == "Seleccionar" else val
 
 
-CAMPOS_BASE = {
-    "nombre": "Seleccionar",
-    "tipo_item": "adquisicion",
-    "tipo": "adquisicion",
-    "tipo_exploracion": "HELICOIDAL",
-    "tipo_exp": "HELICOIDAL",
-    "modulacion_corriente": "SELECCIONAR",
-    "mod_corriente": "SELECCIONAR",
-    "mas": "SELECCIONAR",
-    "mas_val": "SELECCIONAR",
-    "indice_ruido": "SELECCIONAR",
-    "ind_ruido": "SELECCIONAR",
-    "kv": "SELECCIONAR",
-    "kvp": "SELECCIONAR",
-    "doble_muestreo": "SELECCIONAR",
-    "config_detectores": "SELECCIONAR",
-    "conf_det": "SELECCIONAR",
-    "cobertura": "",
-    "grosor_prospectivo": "SELECCIONAR",
-    "grosor_prosp": "SELECCIONAR",
-    "sfov": "SELECCIONAR",
-    "instruccion_voz": "SELECCIONAR",
-    "voz_adq": "SELECCIONAR",
-    "retardo": "SELECCIONAR",
-    "pitch": "SELECCIONAR",
-    "rotacion_tubo": "SELECCIONAR",
-    "rot_tubo": "SELECCIONAR",
-    "periodo": "SELECCIONAR",
-    "n_imagenes": "SELECCIONAR",
-    "posicion_corte": "SELECCIONAR",
-    "observaciones": "",
-}
-
-
-def _init_adquisicion_state():
-    st.session_state.setdefault("exploraciones", [])
-    st.session_state.setdefault("exp_activa", "topograma")
-    st.session_state.setdefault("exploracion_counter", 1)
-
-
-def _crear_exploracion_base():
-    nuevo = dict(CAMPOS_BASE)
-    nuevo["id"] = f"exp_{st.session_state['exploracion_counter']}"
-    st.session_state["exploracion_counter"] += 1
-    nuevo["orden"] = 1
-    return nuevo
-
-
-def _asegurar_exploraciones():
-    if not st.session_state["exploraciones"]:
-        st.session_state["exploraciones"] = [_crear_exploracion_base()]
-    _sanear_exploraciones()
-
-
-def _sanear_exploraciones():
-    exploraciones = st.session_state.get("exploraciones", [])
-    if not isinstance(exploraciones, list):
-        exploraciones = []
-
-    nuevas = []
-    ids_vistos = set()
-    for idx, exp in enumerate(exploraciones, start=1):
-        base = dict(CAMPOS_BASE)
-        if isinstance(exp, dict):
-            base.update(exp)
-        exp_id = base.get("id")
-        if not exp_id or exp_id in ids_vistos:
-            exp_id = f"exp_{st.session_state['exploracion_counter']}"
-            st.session_state["exploracion_counter"] += 1
-        base["id"] = exp_id
-        ids_vistos.add(exp_id)
-        base["orden"] = idx
-        _sincronizar_aliases_exploracion(base)
-        nuevas.append(base)
-
-    if not nuevas:
-        nuevas = [_crear_exploracion_base()]
-        nuevas[0]["orden"] = 1
-
-    st.session_state["exploraciones"] = nuevas
-
-    activa = st.session_state.get("exp_activa", "topograma")
-    if isinstance(activa, int) and (activa < 0 or activa >= len(nuevas)):
-        st.session_state["exp_activa"] = 0
-
-
-def _sincronizar_aliases_exploracion(exp):
-    exp["tipo_item"] = "adquisicion"
-    exp["tipo"] = "adquisicion"
-    exp["tipo_exp"] = exp.get("tipo_exploracion", "HELICOIDAL")
-    exp["mod_corriente"] = exp.get("modulacion_corriente", "SELECCIONAR")
-    exp["mas_val"] = exp.get("mas", "SELECCIONAR")
-    exp["ind_ruido"] = exp.get("indice_ruido", "SELECCIONAR")
-    exp["kvp"] = exp.get("kv", "SELECCIONAR")
-    exp["conf_det"] = exp.get("config_detectores", "SELECCIONAR")
-    exp["grosor_prosp"] = exp.get("grosor_prospectivo", "SELECCIONAR")
-    exp["voz_adq"] = exp.get("instruccion_voz", "SELECCIONAR")
-    exp["rot_tubo"] = exp.get("rotacion_tubo", "SELECCIONAR")
-
-
-def _sincronizar_estado_compartido():
-    _sanear_exploraciones()
-    store_topo = st.session_state.get("topograma_store", {})
-    region_anat = store_topo.get("region_anat") or st.session_state.get("region_anat") or ""
-    examen = store_topo.get("examen") or st.session_state.get("examen") or ""
-
-    st.session_state["region_anat"] = region_anat
-    st.session_state["examen"] = examen
-
-    exploraciones_adq = []
-    for idx, exp in enumerate(st.session_state.get("exploraciones", []), start=1):
-        exp["orden"] = idx
-        exp["region_anat"] = region_anat
-        exp["examen"] = examen
-        _sincronizar_aliases_exploracion(exp)
-        exploraciones_adq.append(copy.deepcopy(exp))
-
-    st.session_state["exploraciones_adq"] = exploraciones_adq
-
-
-def _calcular_cobertura(config_detectores, doble_muestreo):
-    if not config_detectores or config_detectores == "SELECCIONAR":
-        return ""
-
-    texto = config_detectores.replace(" ", "").replace(",", ".")
-    if "x" not in texto:
-        return ""
-
+def calcular_edad(fecha_nacimiento, fecha_referencia=None):
     try:
-        filas_txt, colim_txt = texto.split("x")
-        filas = float(filas_txt)
-        colim = float(colim_txt)
-        cobertura = filas * colim
+        if fecha_nacimiento in (None, ""):
+            return None
 
-        if doble_muestreo == "SI":
-            cobertura *= 2
+        if isinstance(fecha_nacimiento, str):
+            fecha_nacimiento = date.fromisoformat(fecha_nacimiento)
 
-        if cobertura.is_integer():
-            return f"{int(cobertura)} mm"
-        return f"{round(cobertura, 1)} mm"
+        if fecha_referencia is None:
+            fecha_referencia = date.today()
+
+        edad = fecha_referencia.year - fecha_nacimiento.year
+        if (fecha_referencia.month, fecha_referencia.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
+            edad -= 1
+
+        return max(0, int(edad))
     except Exception:
-        return ""
+        return None
 
 
-def _selectbox_con_indice(label, options, actual, key):
-    index = options.index(actual) if actual in options else 0
-    return st.selectbox(label, options, index=index, key=key)
+def _safe_float(value, default=1.0):
+    try:
+        if value in (None, ""):
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
 
 
-def _topograma_tiene_minimo(store):
-    return bool(
-        store.get("examen")
-        and store.get("t1_posicion_paciente")
-        and store.get("t1_entrada_paciente")
-        and store.get("t1_posicion_tubo")
+def _safe_int(value, default=70):
+    try:
+        if value in (None, ""):
+            return int(default)
+        return int(value)
+    except Exception:
+        return int(default)
+
+
+def _panel_header(emoji: str, titulo: str):
+    st.markdown(
+        f"""
+        <div style="
+            background:#1A1A1A;
+            border:1px solid #2E2E2E;
+            border-radius:10px;
+            padding:0.75rem 1rem;
+            margin-bottom:0.9rem;
+            display:flex;
+            align-items:center;
+            gap:0.55rem;
+            font-weight:600;
+            font-size:1rem;
+            color:#FFFFFF;
+        ">
+            <span style="font-size:1.15rem;">{emoji}</span>
+            <span>{titulo}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
-def _nombre_visible_exploracion(exp, idx):
-    nombre = exp.get("nombre", "Seleccionar")
-    if not nombre or nombre == "Seleccionar":
-        return f"EXPLORACIÓN {idx + 1}"
-    return nombre
+def _render_imagen_ingreso():
+    if not IMAGEN_INGRESO_PATH.exists():
+        return
+    try:
+        with open(IMAGEN_INGRESO_PATH, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        mime = "image/jpeg" if IMAGEN_INGRESO_PATH.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+        st.markdown(
+            f"""
+            <div style="text-align:center; margin-top:1rem;">
+                <img src="data:{mime};base64,{b64}"
+                     style="max-width:55%; border-radius:10px; border:1px solid #333;">
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass
 
 
-def _render_lista_exploraciones():
-    st.markdown("### 📋 Exploraciones")
-
-    if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
-        st.session_state["exp_activa"] = "topograma"
-
-    st.markdown("""<div style="height:10px"></div>""", unsafe_allow_html=True)
-
-    for idx, exp in enumerate(st.session_state["exploraciones"]):
-        etiqueta = _nombre_visible_exploracion(exp, idx)
-        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{exp['id']}", use_container_width=True):
-            st.session_state["exp_activa"] = idx
-
-    st.markdown(" ")
-    if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
-        st.session_state["exploraciones"].append(_crear_exploracion_base())
-        _sanear_exploraciones()
-        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        _sincronizar_estado_compartido()
-        st.rerun()
-
-    if isinstance(st.session_state.get("exp_activa"), int):
-        idx = st.session_state["exp_activa"]
-        if 0 <= idx < len(st.session_state["exploraciones"]):
-            col1, col2 = st.columns(2, gap="small")
-
-            with col1:
-                if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
-                    copia = copy.deepcopy(st.session_state["exploraciones"][idx])
-                    copia["id"] = f"exp_{st.session_state['exploracion_counter']}"
-                    st.session_state["exploracion_counter"] += 1
-                    st.session_state["exploraciones"].insert(idx + 1, copia)
-                    _sanear_exploraciones()
-                    st.session_state["exp_activa"] = idx + 1
-                    _sincronizar_estado_compartido()
-                    st.rerun()
-
-            with col2:
-                if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
-                    if len(st.session_state["exploraciones"]) > 1:
-                        st.session_state["exploraciones"].pop(idx)
-                        _sanear_exploraciones()
-                        st.session_state["exp_activa"] = min(idx, len(st.session_state["exploraciones"]) - 1)
-                        _sincronizar_estado_compartido()
-                        st.rerun()
+def _build_store(**kwargs):
+    prev = st.session_state.get("ingreso_store", {})
+    prev.update(kwargs)
+    st.session_state["ingreso_store"] = prev
 
 
-def _render_resumen_topograma(store):
-    st.markdown("### 📡 Resumen de referencia")
+def _init_session_state():
+    defaults = {
+        "contraste_ev": False,
+        "vvp": None,
+        "metodo_inyeccion": None,
+        "cantidad_contraste": None,
+        "sexo_clearance": None,
+        "requiere_creatinina": False,
+        "embarazo": None,
+    }
+    for key, value in defaults.items():
+        st.session_state.setdefault(key, value)
 
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.info(f"**Examen:** {store.get('examen') or '-'}")
-    with c2:
-        st.info(f"**Topograma 1:** {store.get('t1_posicion_paciente') or '-'}")
-    with c3:
-        st.info(f"**Entrada 1:** {store.get('t1_entrada_paciente') or '-'}")
-    with c4:
-        st.info(f"**Tubo 1:** {store.get('t1_posicion_tubo') or '-'}")
 
-    if store.get("aplica_topograma_2"):
-        st.success(
-            "Topograma 2 activo: "
-            f"{store.get('t2_posicion_paciente') or '-'} · "
-            f"{store.get('t2_entrada_paciente') or '-'} · "
-            f"{store.get('t2_posicion_tubo') or '-'}"
+def render_ingreso():
+    _init_session_state()
+    store = st.session_state.get("ingreso_store", {})
+
+    col_izq, col_der = st.columns([1, 1], gap="large")
+
+    with col_izq:
+        _panel_header("📋", "Datos del Paciente")
+
+        nombre = st.text_input(
+            "Nombre del paciente",
+            value=store.get("nombre", ""),
+            placeholder="Ej: Juan Pérez",
+            key="nombre_paciente_widget",
         )
 
+        col_fn, col_edad = st.columns([1, 1])
 
-def _ajustar_tipo_segun_nombre(exp):
-    nombre = exp.get("nombre", "Seleccionar")
+        with col_fn:
+            fecha_guardada = store.get("fecha_nacimiento")
+            fecha_default = date.today()
+            try:
+                if fecha_guardada:
+                    fecha_default = date.fromisoformat(fecha_guardada)
+            except Exception:
+                fecha_default = date.today()
 
-    if nombre == "BOLUS TEST":
-        exp["tipo_exploracion"] = "TEST BOLUS"
-    elif nombre == "BOLUS TRACKING":
-        exp["tipo_exploracion"] = "BOLUS TRACKING"
-    elif exp.get("tipo_exploracion") in ["TEST BOLUS", "BOLUS TRACKING"] and nombre not in ["BOLUS TEST", "BOLUS TRACKING"]:
-        exp["tipo_exploracion"] = "HELICOIDAL"
-
-    _sincronizar_aliases_exploracion(exp)
-
-
-def _render_parametros_adquisicion(exp, idx, store):
-    titulo = _nombre_visible_exploracion(exp, idx)
-    st.markdown(f"## ⚙️ {titulo}")
-
-    row_head = st.columns([2, 1], gap="medium")
-    with row_head[0]:
-        exp["nombre"] = _selectbox_con_indice(
-            "Nombre de la exploración",
-            NOMBRES_EXPLORACION,
-            exp.get("nombre", "Seleccionar"),
-            key=f"nombre_exp_{exp['id']}",
-        )
-
-    _ajustar_tipo_segun_nombre(exp)
-
-    with row_head[1]:
-        exp["tipo_exploracion"] = _selectbox_con_indice(
-            "Tipo exploración",
-            TIPOS_EXPLORACION,
-            exp.get("tipo_exploracion", "HELICOIDAL"),
-            key=f"tipo_exp_{exp['id']}",
-        )
-
-    row1 = st.columns(4, gap="medium")
-    with row1[0]:
-        exp["modulacion_corriente"] = _selectbox_con_indice(
-            "Modulación de corriente",
-            MODULACION_CORRIENTE,
-            exp.get("modulacion_corriente", "SELECCIONAR"),
-            key=f"modcorr_{exp['id']}",
-        )
-    with row1[1]:
-        exp["mas"] = _selectbox_con_indice(
-            "mAs",
-            MAS_OPCIONES,
-            exp.get("mas", "SELECCIONAR"),
-            key=f"mas_{exp['id']}",
-        )
-    with row1[2]:
-        exp["indice_ruido"] = _selectbox_con_indice(
-            "Índice de ruido",
-            INDICE_RUIDO_OPCIONES,
-            exp.get("indice_ruido", "SELECCIONAR"),
-            key=f"ruido_{exp['id']}",
-        )
-    with row1[3]:
-        exp["kv"] = _selectbox_con_indice(
-            "kV",
-            KV_OPCIONES,
-            exp.get("kv", "SELECCIONAR"),
-            key=f"kv_{exp['id']}",
-        )
-
-    row2 = st.columns(6, gap="medium")
-    with row2[0]:
-        exp["doble_muestreo"] = _selectbox_con_indice(
-            "Doble muestreo",
-            DOBLE_MUESTREO_OPCIONES,
-            exp.get("doble_muestreo", "SELECCIONAR"),
-            key=f"doble_{exp['id']}",
-        )
-    with row2[1]:
-        exp["config_detectores"] = _selectbox_con_indice(
-            "Configuración detección",
-            CONFIG_DETECTORES,
-            exp.get("config_detectores", "SELECCIONAR"),
-            key=f"config_{exp['id']}",
-        )
-
-    exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
-
-    with row2[2]:
-        st.text_input(
-            "Cobertura",
-            value=exp.get("cobertura", ""),
-            disabled=True,
-            key=f"cobertura_{exp['id']}",
-        )
-    with row2[3]:
-        exp["grosor_prospectivo"] = _selectbox_con_indice(
-            "Grosor prospectivo",
-            GROSOR_PROSPECTIVO_OPCIONES,
-            exp.get("grosor_prospectivo", "SELECCIONAR"),
-            key=f"grosor_{exp['id']}",
-        )
-    with row2[4]:
-        exp["sfov"] = _selectbox_con_indice(
-            "SFOV",
-            SFOV_OPCIONES,
-            exp.get("sfov", "SELECCIONAR"),
-            key=f"sfov_{exp['id']}",
-        )
-    with row2[5]:
-        st.info(store.get("examen") or "-")
-
-    tipo = exp.get("tipo_exploracion")
-
-    if tipo in ["TEST BOLUS", "BOLUS TRACKING"]:
-        row3 = st.columns(3, gap="medium")
-        with row3[0]:
-            exp["periodo"] = _selectbox_con_indice(
-                "Periodo",
-                PERIODO_TEST_BOLUS,
-                exp.get("periodo", "SELECCIONAR"),
-                key=f"periodo_{exp['id']}",
-            )
-        with row3[1]:
-            exp["n_imagenes"] = _selectbox_con_indice(
-                "N° de imágenes",
-                N_IMAGENES_TEST_BOLUS,
-                exp.get("n_imagenes", "SELECCIONAR"),
-                key=f"nimg_{exp['id']}",
-            )
-        with row3[2]:
-            exp["posicion_corte"] = _selectbox_con_indice(
-                "Posición de corte",
-                POSICION_CORTE_TEST_BOLUS,
-                exp.get("posicion_corte", "SELECCIONAR"),
-                key=f"poscorte_{exp['id']}",
-            )
-    else:
-        row3 = st.columns(4, gap="medium")
-        with row3[0]:
-            exp["instruccion_voz"] = _selectbox_con_indice(
-                "Instrucción de voz",
-                INSTRUCCION_VOZ_OPCIONES,
-                exp.get("instruccion_voz", "SELECCIONAR"),
-                key=f"voz_{exp['id']}",
-            )
-        with row3[1]:
-            exp["retardo"] = _selectbox_con_indice(
-                "Retardo",
-                RETARDO_OPCIONES,
-                exp.get("retardo", "SELECCIONAR"),
-                key=f"retardo_{exp['id']}",
-            )
-        with row3[2]:
-            exp["pitch"] = _selectbox_con_indice(
-                "Pitch",
-                PITCH_OPCIONES,
-                exp.get("pitch", "SELECCIONAR"),
-                key=f"pitch_{exp['id']}",
-            )
-        with row3[3]:
-            exp["rotacion_tubo"] = _selectbox_con_indice(
-                "TPO ROTACION TUBO",
-                ROTACION_TUBO_OPCIONES,
-                exp.get("rotacion_tubo", "SELECCIONAR"),
-                key=f"rot_{exp['id']}",
+            fecha_nacimiento = st.date_input(
+                "Fecha de nacimiento",
+                value=fecha_default,
+                min_value=date(1900, 1, 1),
+                max_value=date.today(),
+                format="DD/MM/YYYY",
+                key="fecha_nacimiento",
             )
 
-    exp["observaciones"] = st.text_area(
-        "Observaciones",
-        value=exp.get("observaciones", ""),
-        key=f"obs_{exp['id']}",
-        height=100,
+        edad = calcular_edad(fecha_nacimiento, date.today())
+
+        with col_edad:
+            st.markdown("**Edad**")
+            st.markdown(
+                f"""
+                <div style="
+                    background-color:#111111;
+                    color:white;
+                    border:1px solid #444;
+                    border-radius:10px;
+                    padding:0.72rem 0.9rem;
+                    min-height:24px;
+                    display:flex;
+                    align-items:center;
+                    font-size:1.05rem;
+                    font-weight:500;
+                ">
+                    {f"{edad} años" if edad is not None else ""}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        diagnostico = st.text_area(
+            "Diagnóstico",
+            value=store.get("diagnostico", ""),
+            placeholder="Indicación clínica del examen",
+            height=100,
+            key="diagnostico_widget",
+        )
+
+        _render_imagen_ingreso()
+
+    with col_der:
+        _panel_header("💉", "Preparación del paciente")
+
+        col_prep_izq, col_prep_der = st.columns(2)
+
+        with col_prep_izq:
+            peso = st.number_input(
+                "Peso (kg)",
+                min_value=0,
+                max_value=250,
+                value=_safe_int(store.get("peso", 70), 70),
+                key="peso_widget",
+            )
+
+            embarazo = selectbox_con_placeholder(
+                "¿Embarazo?",
+                ["SI", "NO", "PROBABLE"],
+                "embarazo_widget",
+                value=store.get("embarazo"),
+            )
+            st.session_state["embarazo"] = embarazo
+
+            requiere_creatinina = st.checkbox(
+                "¿Requiere creatinina?",
+                value=bool(store.get("requiere_creatinina", False)),
+                key="requiere_creatinina",
+            )
+
+            sexo_clearance = None
+            creatinina_serica = None
+            clearance = None
+
+            if requiere_creatinina:
+                sexo_clearance = selectbox_con_placeholder(
+                    "Sexo",
+                    ["Femenino", "Masculino"],
+                    "sexo_clearance_widget",
+                    value=store.get("sexo_clearance"),
+                )
+                st.session_state["sexo_clearance"] = sexo_clearance
+
+                creatinina_serica = st.number_input(
+                    "Creatinina sérica (mg/dL)",
+                    min_value=0.1,
+                    max_value=20.0,
+                    value=_safe_float(store.get("creatinina_serica", 1.0), 1.0),
+                    step=0.1,
+                    key="creatinina_serica_widget",
+                )
+
+                clearance = None
+                if sexo_clearance is not None:
+                    try:
+                        clearance = ((140 - float(edad)) * float(peso)) / (72 * float(creatinina_serica))
+                        if sexo_clearance == "Femenino":
+                            clearance *= 0.85
+                        clearance = round(clearance, 1)
+                    except Exception:
+                        clearance = None
+
+                if clearance is None:
+                    st.info("Selecciona sexo e ingresa creatinina para calcular el clearance estimado.")
+                else:
+                    if clearance >= 60:
+                        fondo, borde, texto = "#143d22", "#2ecc71", "#d8ffe5"
+                        estado = "Adecuado"
+                    elif clearance >= 30:
+                        fondo, borde, texto = "#4a3d12", "#f1c40f", "#fff6cc"
+                        estado = "Disminución moderada"
+                    else:
+                        fondo, borde, texto = "#4a1616", "#ff5c5c", "#ffe0e0"
+                        estado = "Disminución severa"
+
+                    st.markdown(
+                        f"""
+                        <div style="margin-top:0.35rem; padding:0.85rem 1rem; border-radius:10px;
+                                    background:{fondo}; border:1px solid {borde}; color:{texto};">
+                            <div style="font-size:0.9rem; font-weight:600; margin-bottom:0.15rem;">
+                                Clearance de creatinina estimado
+                            </div>
+                            <div style="font-size:1.15rem; font-weight:700;">{clearance} mL/min</div>
+                            <div style="font-size:0.82rem; opacity:0.95;">{estado}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+        with col_prep_der:
+            contraste_ev = st.checkbox(
+                "¿Se requiere medio de contraste EV?",
+                value=bool(store.get("contraste_ev", False)),
+                key="contraste_ev",
+            )
+
+            vvp = None
+            metodo_inyeccion = None
+            cantidad_contraste = None
+
+            if contraste_ev:
+                vvp = selectbox_con_placeholder(
+                    "VVP",
+                    ["24G", "22G", "20G", "18G", "CVC"],
+                    "vvp_widget",
+                    value=store.get("vvp"),
+                )
+                st.session_state["vvp"] = vvp
+
+                metodo_inyeccion = selectbox_con_placeholder(
+                    "Método de inyección",
+                    ["INYECTORA AUTOMÁTICA", "INYECCIÓN MANUAL"],
+                    "metodo_inyeccion_widget",
+                    value=store.get("metodo_inyeccion"),
+                )
+                st.session_state["metodo_inyeccion"] = metodo_inyeccion
+
+                cantidad_contraste = selectbox_con_placeholder(
+                    "Cantidad de medio de contraste",
+                    [f"{i} cc" for i in range(10, 151, 10)],
+                    "cantidad_contraste_widget",
+                    value=store.get("cantidad_contraste"),
+                )
+                st.session_state["cantidad_contraste"] = cantidad_contraste
+            else:
+                st.session_state["vvp"] = None
+                st.session_state["metodo_inyeccion"] = None
+                st.session_state["cantidad_contraste"] = None
+
+    _build_store(
+        nombre=nombre,
+        fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+        edad=edad,
+        diagnostico=diagnostico,
+        peso=peso,
+        embarazo=embarazo,
+        requiere_creatinina=requiere_creatinina,
+        sexo_clearance=sexo_clearance,
+        creatinina_serica=creatinina_serica,
+        clearance=clearance,
+        contraste_ev=contraste_ev,
+        vvp=vvp,
+        metodo_inyeccion=metodo_inyeccion,
+        cantidad_contraste=cantidad_contraste,
     )
 
-    _sincronizar_aliases_exploracion(exp)
-
-    mensajes = []
-
-    if exp.get("nombre") == "Seleccionar":
-        mensajes.append("⚠️ Falta seleccionar el nombre de la exploración.")
-    if exp.get("kv") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar kV.")
-    if exp.get("config_detectores") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
-    if tipo not in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("instruccion_voz") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta definir la instrucción de voz.")
-    if tipo in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("posicion_corte") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta definir la posición de corte.")
-
-    if mensajes:
-        for msg in mensajes:
-            st.warning(msg)
-    else:
-        st.success("Configuración lista para continuar.")
-
-    with st.container(border=True):
-        st.markdown("### 🖼️ Imagen simulada")
-        st.caption("Aquí irá la imagen simulada de esta adquisición en el siguiente paso.")
-
-
-def render_adquisicion():
-    _init_adquisicion_state()
-    _asegurar_exploraciones()
-    _sincronizar_estado_compartido()
-
-    col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
-
-    with col_sidebar:
-        _render_lista_exploraciones()
-
-    with col_main:
-        activa = st.session_state.get("exp_activa", "topograma")
-
-        if activa == "topograma":
-            render_topograma_panel()
-            _sincronizar_estado_compartido()
-        else:
-            store = st.session_state.get("topograma_store", {})
-
-            if not _topograma_tiene_minimo(store):
-                st.warning("Primero debes completar al menos el Topograma 1.")
-                render_topograma_panel()
-                _sincronizar_estado_compartido()
-                return
-
-            _render_resumen_topograma(store)
-
-            exploraciones = st.session_state["exploraciones"]
-            if not isinstance(activa, int) or activa >= len(exploraciones):
-                st.session_state["exp_activa"] = 0
-                activa = 0
-
-            exp = exploraciones[activa]
-            _render_parametros_adquisicion(exp, activa, store)
-            _sincronizar_estado_compartido()
+    return st.session_state["ingreso_store"]
