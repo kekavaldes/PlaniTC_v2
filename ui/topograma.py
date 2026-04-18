@@ -341,6 +341,13 @@ def selectbox_con_placeholder(label, options, key, value=None, label_visibility=
 # región anatómica y examen. Permite planificar exploraciones basadas en
 # distintas regiones dentro del mismo estudio.
 # ═══════════════════════════════════════════════════════════════════════════
+def _next_order() -> int:
+    """Contador monotónico usado para ordenar topogramas + exploraciones
+    cronológicamente en el sidebar de Adquisición."""
+    st.session_state["_next_order"] = int(st.session_state.get("_next_order", 0)) + 1
+    return st.session_state["_next_order"]
+
+
 def _init_topograma_sets():
     """Inicializa topograma_sets y asegura al menos un set.
     Migra el legado `topograma_store` si existe y aún no hay sets creados."""
@@ -349,7 +356,13 @@ def _init_topograma_sets():
         legacy.setdefault("topograma_iniciado", bool(st.session_state.get("topograma_iniciado", False)))
         legacy.setdefault("topograma2_iniciado", bool(st.session_state.get("topograma2_iniciado", False)))
         legacy.setdefault("label", "Topograma 1")
+        legacy.setdefault("order", _next_order())
         st.session_state["topograma_sets"] = [legacy]
+
+    # Migración defensiva: asegurar que todos los sets tengan `order`
+    for s in st.session_state["topograma_sets"]:
+        if "order" not in s:
+            s["order"] = _next_order()
 
     st.session_state.setdefault("topograma_set_activo", 0)
     n = len(st.session_state["topograma_sets"])
@@ -372,6 +385,7 @@ def _agregar_set_topograma(label=None) -> int:
     sets = st.session_state.setdefault("topograma_sets", [])
     nuevo = {
         "label": label or f"Topograma {len(sets) + 1}",
+        "order": _next_order(),
         "topograma_iniciado": False,
         "topograma2_iniciado": False,
     }
