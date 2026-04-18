@@ -118,9 +118,39 @@ def _init_session_state():
         st.session_state.setdefault(key, value)
 
 
+def _go_to_inyectora():
+    st.session_state["active_tab"] = "💉  Inyectora"
+
+
 def render_ingreso():
     _init_session_state()
     store = st.session_state.get("ingreso_store", {})
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stButton"] > button[kind="secondary"] {
+            border-radius: 10px;
+        }
+
+        div[data-testid="stButton"] > button[data-testid="baseButton-secondary"][key="btn_ir_inyectora"],
+        div.stButton > button[key="btn_ir_inyectora"] {
+            background-color: #1f6feb !important;
+            color: white !important;
+            border: 1px solid #1f6feb !important;
+            font-weight: 600 !important;
+        }
+
+        div[data-testid="stButton"] > button[data-testid="baseButton-secondary"][key="btn_ir_inyectora"]:hover,
+        div.stButton > button[key="btn_ir_inyectora"]:hover {
+            background-color: #388bfd !important;
+            color: white !important;
+            border: 1px solid #388bfd !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     col_izq, col_der = st.columns([1, 1], gap="large")
 
@@ -314,6 +344,36 @@ def render_ingreso():
                     value=store.get("cantidad_contraste"),
                 )
                 st.session_state["cantidad_contraste"] = cantidad_contraste
+
+                if metodo_inyeccion == "INYECTORA AUTOMÁTICA":
+                    st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+                    col_btn_izq, col_btn_centro, col_btn_der = st.columns([1, 2, 1])
+
+                    with col_btn_centro:
+                        if st.button(
+                            "Parámetros de Inyectora",
+                            use_container_width=True,
+                            key="btn_ir_inyectora"
+                        ):
+                            _build_store(
+                                nombre=nombre,
+                                fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+                                edad=edad,
+                                diagnostico=diagnostico,
+                                peso=peso,
+                                embarazo=embarazo,
+                                requiere_creatinina=requiere_creatinina,
+                                sexo_clearance=sexo_clearance,
+                                creatinina_serica=creatinina_serica,
+                                clearance=clearance,
+                                contraste_ev=contraste_ev,
+                                vvp=vvp,
+                                metodo_inyeccion=metodo_inyeccion,
+                                cantidad_contraste=cantidad_contraste,
+                            )
+                            _go_to_inyectora()
+                            st.rerun()
+
             else:
                 st.session_state["vvp"] = None
                 st.session_state["metodo_inyeccion"] = None
