@@ -1,4 +1,7 @@
 
+import copy
+import uuid
+
 import streamlit as st
 
 from ui.topograma import render_topograma_panel
@@ -67,7 +70,11 @@ KV_OPCIONES = [
     "140",
 ]
 
-DOBLE_MUESTREO_OPCIONES = ["SELECCIONAR", "NO", "SI"]
+DOBLE_MUESTREO_OPCIONES = [
+    "SELECCIONAR",
+    "NO",
+    "SI",
+]
 
 CONFIG_DETECTORES = [
     "SELECCIONAR",
@@ -131,7 +138,16 @@ RETARDO_OPCIONES = [
     "30 sg",
 ]
 
-PITCH_OPCIONES = ["SELECCIONAR", "0,5", "0,6", "0,8", "1", "1,2", "1,5", "1,8"]
+PITCH_OPCIONES = [
+    "SELECCIONAR",
+    "0,5",
+    "0,6",
+    "0,8",
+    "1",
+    "1,2",
+    "1,5",
+    "1,8",
+]
 
 ROTACION_TUBO_OPCIONES = [
     "SELECCIONAR",
@@ -144,32 +160,45 @@ ROTACION_TUBO_OPCIONES = [
     "1 sg.",
 ]
 
-PERIODO_TEST_BOLUS = ["SELECCIONAR", "0,9 sg", "1 sg", "1,5 sg", "2 sg"]
-N_IMAGENES_TEST_BOLUS = ["SELECCIONAR", "10", "15", "20", "25", "30"]
-POSICION_CORTE_TEST_BOLUS = ["SELECCIONAR", "BOTON AORTICO", "BAJO CARINA"]
+PERIODO_TEST_BOLUS = [
+    "SELECCIONAR",
+    "0,9 sg",
+    "1 sg",
+    "1,5 sg",
+    "2 sg",
+]
+
+N_IMAGENES_TEST_BOLUS = [
+    "SELECCIONAR",
+    "10",
+    "15",
+    "20",
+    "25",
+    "30",
+]
+
+POSICION_CORTE_TEST_BOLUS = [
+    "SELECCIONAR",
+    "BOTON AORTICO",
+    "BAJO CARINA",
+]
 
 
-def _next_exp_id():
-    contador = int(st.session_state.get("exploracion_adq_counter", 1))
-    exp_id = f"exp_{contador}"
-    st.session_state["exploracion_adq_counter"] = contador + 1
-    return exp_id
+def _nuevo_id():
+    return f"adq_{uuid.uuid4().hex[:8]}"
 
 
 def _init_adquisicion_state():
     st.session_state.setdefault("exploraciones", [])
     st.session_state.setdefault("exploraciones_adq", [])
-    st.session_state.setdefault("exploracion_adq_counter", 1)
     st.session_state.setdefault("exp_activa", "topograma")
 
 
 def _crear_exploracion_base():
-    exp_id = _next_exp_id()
     return {
-        "id": exp_id,
-        "orden": None,
-        "tipo_item": "adquisicion",
+        "id": _nuevo_id(),
         "tipo": "adquisicion",
+        "tipo_item": "adquisicion",
         "nombre": "Seleccionar",
         "tipo_exploracion": "HELICOIDAL",
         "tipo_exp": "HELICOIDAL",
@@ -178,14 +207,12 @@ def _crear_exploracion_base():
         "mas": "SELECCIONAR",
         "mas_val": "SELECCIONAR",
         "indice_ruido": "SELECCIONAR",
-        "ind_ruido": "SELECCIONAR",
         "kv": "SELECCIONAR",
         "kvp": "SELECCIONAR",
         "doble_muestreo": "SELECCIONAR",
         "config_detectores": "SELECCIONAR",
-        "conf_det": "SELECCIONAR",
+        "config_det": "SELECCIONAR",
         "cobertura": "",
-        "cobertura_tabla": "",
         "grosor_prospectivo": "SELECCIONAR",
         "grosor_prosp": "SELECCIONAR",
         "sfov": "SELECCIONAR",
@@ -194,171 +221,77 @@ def _crear_exploracion_base():
         "retardo": "SELECCIONAR",
         "pitch": "SELECCIONAR",
         "rotacion_tubo": "SELECCIONAR",
-        "rot_tubo": "SELECCIONAR",
         "periodo": "SELECCIONAR",
         "periodo_bolus": "SELECCIONAR",
         "n_imagenes": "SELECCIONAR",
         "n_imagenes_bolus": "SELECCIONAR",
         "posicion_corte": "SELECCIONAR",
         "umbral_disparo": "",
+        "inicio_exploracion": "SELECCIONAR",
+        "mm_inicio": 0,
+        "fin_exploracion": "SELECCIONAR",
+        "mm_fin": 400,
         "observaciones": "",
     }
 
 
-def _normalizar_exploracion(exp, idx=None):
-    nuevo = dict(exp or {})
-    if not nuevo.get("id"):
-        nuevo["id"] = _next_exp_id()
-
-    nuevo["tipo_item"] = "adquisicion"
-    nuevo["tipo"] = "adquisicion"
-    nuevo["nombre"] = nuevo.get("nombre", "Seleccionar")
-    nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
-    nuevo["tipo_exp"] = nuevo["tipo_exploracion"]
-    nuevo["mod_corriente"] = nuevo.get("modulacion_corriente", nuevo.get("mod_corriente", "SELECCIONAR"))
-    nuevo["modulacion_corriente"] = nuevo["mod_corriente"]
-    nuevo["mas_val"] = nuevo.get("mas", nuevo.get("mas_val", "SELECCIONAR"))
-    nuevo["mas"] = nuevo["mas_val"]
-    nuevo["ind_ruido"] = nuevo.get("indice_ruido", nuevo.get("ind_ruido", "SELECCIONAR"))
-    nuevo["indice_ruido"] = nuevo["ind_ruido"]
-    nuevo["kvp"] = nuevo.get("kv", nuevo.get("kvp", "SELECCIONAR"))
-    nuevo["kv"] = nuevo["kvp"]
-    nuevo["conf_det"] = nuevo.get("config_detectores", nuevo.get("conf_det", "SELECCIONAR"))
-    nuevo["config_detectores"] = nuevo["conf_det"]
-    nuevo["grosor_prosp"] = nuevo.get("grosor_prospectivo", nuevo.get("grosor_prosp", "SELECCIONAR"))
-    nuevo["grosor_prospectivo"] = nuevo["grosor_prosp"]
-    nuevo["voz_adq"] = nuevo.get("instruccion_voz", nuevo.get("voz_adq", "SELECCIONAR"))
-    nuevo["instruccion_voz"] = nuevo["voz_adq"]
-    nuevo["rot_tubo"] = nuevo.get("rotacion_tubo", nuevo.get("rot_tubo", "SELECCIONAR"))
-    nuevo["rotacion_tubo"] = nuevo["rot_tubo"]
-    nuevo["periodo_bolus"] = nuevo.get("periodo", nuevo.get("periodo_bolus", "SELECCIONAR"))
-    nuevo["periodo"] = nuevo["periodo_bolus"]
-    nuevo["n_imagenes_bolus"] = nuevo.get("n_imagenes", nuevo.get("n_imagenes_bolus", "SELECCIONAR"))
-    nuevo["n_imagenes"] = nuevo["n_imagenes_bolus"]
-    nuevo["cobertura_tabla"] = nuevo.get("cobertura_tabla", nuevo.get("cobertura", ""))
-    nuevo["cobertura"] = nuevo["cobertura_tabla"]
-    nuevo["umbral_disparo"] = str(nuevo.get("umbral_disparo", ""))
-    if idx is not None:
-        nuevo["orden"] = idx + 1
-    return nuevo
-
-
-def _sincronizar_exploraciones_adq():
-    exploraciones = st.session_state.get("exploraciones", [])
-    normalizadas = [_normalizar_exploracion(exp, idx) for idx, exp in enumerate(exploraciones)]
-    st.session_state["exploraciones"] = normalizadas
-    st.session_state["exploraciones_adq"] = [
-        {"id": "topograma_panel", "orden": 0, "tipo": "topograma", "nombre": "Topograma"}
-    ] + [dict(exp) for exp in normalizadas]
-
-
 def _asegurar_exploraciones():
-    if st.session_state["exploraciones"]:
-        _sincronizar_exploraciones_adq()
-        return
-    st.session_state["exploraciones"] = [_crear_exploracion_base()]
-    _sincronizar_exploraciones_adq()
+    if not st.session_state["exploraciones"]:
+        st.session_state["exploraciones"] = [_crear_exploracion_base()]
+    _sincronizar_exploraciones()
+
+
+def _sincronizar_exploraciones():
+    for exp in st.session_state.get("exploraciones", []):
+        exp.setdefault("id", _nuevo_id())
+        exp["tipo"] = "adquisicion"
+        exp["tipo_item"] = "adquisicion"
+        _ajustar_tipo_segun_nombre(exp)
+        _normalizar_aliases(exp)
+    st.session_state["exploraciones_adq"] = [copy.deepcopy(e) for e in st.session_state.get("exploraciones", [])]
+
+
+def _normalizar_aliases(exp):
+    exp["tipo_exp"] = exp.get("tipo_exploracion", "HELICOIDAL")
+    exp["mod_corriente"] = exp.get("modulacion_corriente", "SELECCIONAR")
+    exp["mas_val"] = exp.get("mas", "SELECCIONAR")
+    exp["kvp"] = exp.get("kv", "SELECCIONAR")
+    exp["config_det"] = exp.get("config_detectores", "SELECCIONAR")
+    exp["grosor_prosp"] = exp.get("grosor_prospectivo", "SELECCIONAR")
+    exp["voz_adq"] = exp.get("instruccion_voz", "SELECCIONAR")
+    exp["periodo_bolus"] = exp.get("periodo", "SELECCIONAR")
+    exp["n_imagenes_bolus"] = exp.get("n_imagenes", "SELECCIONAR")
+
+
+def _selectbox_con_indice(label, options, value, key, label_visibility="visible", disabled=False):
+    opciones = list(options)
+    idx = opciones.index(value) if value in opciones else 0
+    return st.selectbox(
+        label,
+        opciones,
+        index=idx,
+        key=key,
+        label_visibility=label_visibility,
+        disabled=disabled,
+    )
 
 
 def _calcular_cobertura(config_detectores, doble_muestreo):
     if not config_detectores or config_detectores == "SELECCIONAR":
-        return ""
-
+        return "—"
     texto = str(config_detectores).replace(" ", "").replace(",", ".")
     if "x" not in texto:
-        return ""
-
+        return "—"
     try:
         filas_txt, colim_txt = texto.split("x")
-        filas = float(filas_txt)
-        colim = float(colim_txt)
-        cobertura = filas * colim
+        cobertura = float(filas_txt) * float(colim_txt)
         if doble_muestreo == "SI":
             cobertura *= 2
-        return f"{int(cobertura)} mm" if cobertura.is_integer() else f"{round(cobertura, 1)} mm"
+        if float(cobertura).is_integer():
+            return f"{int(cobertura)} mm"
+        return f"{round(cobertura, 1)} mm"
     except Exception:
-        return ""
-
-
-def _selectbox_con_indice(label, options, actual, key, disabled=False):
-    index = options.index(actual) if actual in options else 0
-    return st.selectbox(label, options, index=index, key=key, disabled=disabled)
-
-
-def _topograma_tiene_minimo(store):
-    return bool(
-        store.get("examen")
-        and store.get("t1_posicion_paciente")
-        and store.get("t1_entrada_paciente")
-        and store.get("t1_posicion_tubo")
-    )
-
-
-def _nombre_visible_exploracion(exp, idx):
-    nombre = exp.get("nombre", "Seleccionar")
-    return f"EXPLORACIÓN {idx + 1}" if not nombre or nombre == "Seleccionar" else nombre
-
-
-def _render_lista_exploraciones():
-    st.markdown("### 📋 Exploraciones")
-
-    if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
-        st.session_state["exp_activa"] = "topograma"
-
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-    for idx, exp in enumerate(st.session_state["exploraciones"]):
-        etiqueta = _nombre_visible_exploracion(exp, idx)
-        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{idx}", use_container_width=True):
-            st.session_state["exp_activa"] = idx
-
-    st.markdown(" ")
-    if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
-        st.session_state["exploraciones"].append(_crear_exploracion_base())
-        _sincronizar_exploraciones_adq()
-        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        st.rerun()
-
-    if isinstance(st.session_state.get("exp_activa"), int):
-        idx = st.session_state["exp_activa"]
-        if 0 <= idx < len(st.session_state["exploraciones"]):
-            col1, col2 = st.columns(2, gap="small")
-            with col1:
-                if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
-                    copia = dict(st.session_state["exploraciones"][idx])
-                    copia["id"] = _next_exp_id()
-                    st.session_state["exploraciones"].insert(idx + 1, _normalizar_exploracion(copia, idx + 1))
-                    _sincronizar_exploraciones_adq()
-                    st.session_state["exp_activa"] = idx + 1
-                    st.rerun()
-            with col2:
-                if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
-                    if len(st.session_state["exploraciones"]) > 1:
-                        st.session_state["exploraciones"].pop(idx)
-                        _sincronizar_exploraciones_adq()
-                        st.session_state["exp_activa"] = 0
-                        st.rerun()
-
-
-def _render_resumen_topograma(store):
-    st.markdown("### 📡 Resumen de referencia")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
-    with c2:
-        st.info(f"**Topograma 1**\n\n{store.get('t1_posicion_paciente') or '-'}")
-    with c3:
-        st.info(f"**Entrada 1**\n\n{store.get('t1_entrada_paciente') or '-'}")
-    with c4:
-        st.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '-'}")
-
-    if store.get("aplica_topograma_2"):
-        st.success(
-            "Topograma 2 activo: "
-            f"{store.get('t2_posicion_paciente') or '-'} · "
-            f"{store.get('t2_entrada_paciente') or '-'} · "
-            f"{store.get('t2_posicion_tubo') or '-'}"
-        )
+        return "—"
 
 
 def _ajustar_tipo_segun_nombre(exp):
@@ -371,13 +304,185 @@ def _ajustar_tipo_segun_nombre(exp):
         exp["tipo_exploracion"] = "HELICOIDAL"
 
 
+def _nombre_visible_exploracion(exp, idx):
+    nombre = exp.get("nombre", "Seleccionar")
+    return f"EXPLORACIÓN {idx + 1}" if not nombre or nombre == "Seleccionar" else str(nombre)
+
+
+def _topograma_tiene_minimo(store):
+    return bool(
+        store.get("examen")
+        and store.get("t1_posicion_paciente")
+        and store.get("t1_entrada_paciente")
+        and store.get("t1_posicion_tubo")
+    )
+
+
+def _render_resumen_topograma(store):
+    st.markdown("## 📡 Resumen de referencia")
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
+    with c2:
+        st.info(f"**Topograma 1**\n\n{store.get('t1_posicion_paciente') or '-'}")
+    with c3:
+        st.info(f"**Entrada 1**\n\n{store.get('t1_entrada_paciente') or '-'}")
+    with c4:
+        st.info(f"**Tubo 1**\n\n{store.get('t1_posicion_tubo') or '-'}")
+
+
+def _render_lista_exploraciones():
+    st.markdown("## 📋 Exploraciones")
+
+    if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
+        st.session_state["exp_activa"] = "topograma"
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+    for idx, exp in enumerate(st.session_state["exploraciones"]):
+        etiqueta = _nombre_visible_exploracion(exp, idx)
+        if st.button(f"⚡ {etiqueta}", key=f"btn_sidebar_exp_{exp['id']}", use_container_width=True):
+            st.session_state["exp_activa"] = idx
+
+    st.markdown(" ")
+    if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
+        st.session_state["exploraciones"].append(_crear_exploracion_base())
+        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+        _sincronizar_exploraciones()
+        st.rerun()
+
+    if isinstance(st.session_state.get("exp_activa"), int):
+        idx = st.session_state["exp_activa"]
+        if 0 <= idx < len(st.session_state["exploraciones"]):
+            col1, col2 = st.columns(2, gap="small")
+            with col1:
+                if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
+                    copia = copy.deepcopy(st.session_state["exploraciones"][idx])
+                    copia["id"] = _nuevo_id()
+                    st.session_state["exploraciones"].insert(idx + 1, copia)
+                    st.session_state["exp_activa"] = idx + 1
+                    _sincronizar_exploraciones()
+                    st.rerun()
+            with col2:
+                if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
+                    if len(st.session_state["exploraciones"]) > 1:
+                        st.session_state["exploraciones"].pop(idx)
+                        st.session_state["exp_activa"] = 0
+                        _sincronizar_exploraciones()
+                        st.rerun()
+
+
+def _render_disabled_text(label, value, key):
+    st.text_input(label, value=value, disabled=True, key=key)
+
+
+def _render_adq_pair(col, label, render_fn):
+    with col:
+        st.markdown(
+            f"<div style='font-size:0.9rem; font-weight:600; margin-bottom:0.3rem;'>{label}</div>",
+            unsafe_allow_html=True,
+        )
+        render_fn()
+
+
+def _render_parametros_normales(exp, idx, store):
+    row1_icon, row1_body = st.columns([0.12, 1], gap="small")
+    with row1_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:0.8rem;'>☢️</div>", unsafe_allow_html=True)
+    with row1_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+        _render_adq_pair(c1, "MODULACIÓN CORRIENTE", lambda: exp.__setitem__("modulacion_corriente", _selectbox_con_indice("", MODULACION_CORRIENTE, exp.get("modulacion_corriente", "SELECCIONAR"), key=f"modcorr_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c2, "MAS", lambda: exp.__setitem__("mas", _selectbox_con_indice("", MAS_OPCIONES, exp.get("mas", "SELECCIONAR"), key=f"mas_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c3, "ÍNDICE DE RUIDO", lambda: exp.__setitem__("indice_ruido", _selectbox_con_indice("", INDICE_RUIDO_OPCIONES, exp.get("indice_ruido", "SELECCIONAR"), key=f"ruido_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c4, "KV", lambda: exp.__setitem__("kv", _selectbox_con_indice("", KV_OPCIONES, exp.get("kv", "SELECCIONAR"), key=f"kv_{idx}", label_visibility="collapsed")))
+
+    row2_icon, row2_body = st.columns([0.12, 1], gap="small")
+    with row2_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:0.8rem;'>⚙️</div>", unsafe_allow_html=True)
+    with row2_body:
+        c1, c2, c3, c4, c5, c6 = st.columns(6, gap="small")
+        _render_adq_pair(c1, "TIPO EXPLORACIÓN", lambda: exp.__setitem__("tipo_exploracion", _selectbox_con_indice("", TIPOS_EXPLORACION, exp.get("tipo_exploracion", "HELICOIDAL"), key=f"tipo_exp_{idx}", label_visibility="collapsed")))
+        if exp.get("tipo_exploracion") == "HELICOIDAL":
+            _render_adq_pair(c2, "DOBLE MUESTREO", lambda: exp.__setitem__("doble_muestreo", _selectbox_con_indice("", DOBLE_MUESTREO_OPCIONES, exp.get("doble_muestreo", "SELECCIONAR"), key=f"doble_{idx}", label_visibility="collapsed")))
+        else:
+            exp["doble_muestreo"] = "NO"
+            _render_adq_pair(c2, "DOBLE MUESTREO", lambda: _render_disabled_text("", "No aplica", key=f"doble_na_{idx}"))
+        _render_adq_pair(c3, "CONF. DETECCIÓN", lambda: exp.__setitem__("config_detectores", _selectbox_con_indice("", CONFIG_DETECTORES, exp.get("config_detectores", "SELECCIONAR"), key=f"config_{idx}", label_visibility="collapsed")))
+        exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
+        _render_adq_pair(c4, "COBERTURA", lambda: _render_disabled_text("", exp.get("cobertura", "—"), key=f"cobertura_{idx}"))
+        _render_adq_pair(c5, "GROSOR PROSP.", lambda: exp.__setitem__("grosor_prospectivo", _selectbox_con_indice("", GROSOR_PROSPECTIVO_OPCIONES, exp.get("grosor_prospectivo", "SELECCIONAR"), key=f"grosor_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c6, "SFOV", lambda: exp.__setitem__("sfov", _selectbox_con_indice("", SFOV_OPCIONES, exp.get("sfov", "SELECCIONAR"), key=f"sfov_{idx}", label_visibility="collapsed")))
+
+    row3_icon, row3_body = st.columns([0.12, 1], gap="small")
+    with row3_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:0.8rem;'>🕒</div>", unsafe_allow_html=True)
+    with row3_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+        _render_adq_pair(c1, "INSTRUCCIÓN DE VOZ", lambda: exp.__setitem__("instruccion_voz", _selectbox_con_indice("", INSTRUCCION_VOZ_OPCIONES, exp.get("instruccion_voz", "SELECCIONAR"), key=f"voz_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c2, "RETARDO", lambda: exp.__setitem__("retardo", _selectbox_con_indice("", RETARDO_OPCIONES, exp.get("retardo", "SELECCIONAR"), key=f"retardo_{idx}", label_visibility="collapsed")))
+        if exp.get("tipo_exploracion") == "HELICOIDAL":
+            _render_adq_pair(c3, "PITCH", lambda: exp.__setitem__("pitch", _selectbox_con_indice("", PITCH_OPCIONES, exp.get("pitch", "SELECCIONAR"), key=f"pitch_{idx}", label_visibility="collapsed")))
+        else:
+            exp["pitch"] = "1"
+            _render_adq_pair(c3, "PITCH", lambda: _render_disabled_text("", "No aplica", key=f"pitch_na_{idx}"))
+        _render_adq_pair(c4, "TPO ROTACION TUBO", lambda: exp.__setitem__("rotacion_tubo", _selectbox_con_indice("", ROTACION_TUBO_OPCIONES, exp.get("rotacion_tubo", "SELECCIONAR"), key=f"rot_{idx}", label_visibility="collapsed")))
+
+    row4_icon, row4_body = st.columns([0.12, 1], gap="small")
+    with row4_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:0.8rem;'>📏</div>", unsafe_allow_html=True)
+    with row4_body:
+        c1, c2, c3, c4 = st.columns([1.2, 0.8, 1.2, 0.8], gap="small")
+        referencias = [
+            "VERTEX", "GLABELA", "ORBITAS", "MAXILAR", "MENTON", "CUELLO",
+            "CLAVICULAS", "CARINA", "CUPULAS DIAFRAGMATICAS", "XIFOIDES",
+            "CRESTAS ILIACAS", "SINFISIS PUBICA", "RODILLAS", "TOBILLOS", "PLANTAS"
+        ]
+        _render_adq_pair(c1, "INICIO EXPLORACIÓN", lambda: exp.__setitem__("inicio_exploracion", _selectbox_con_indice("", ["SELECCIONAR"] + referencias, exp.get("inicio_exploracion", "SELECCIONAR"), key=f"inicio_ref_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c2, "MM INICIO", lambda: exp.__setitem__("mm_inicio", st.number_input("", min_value=-1000, max_value=2000, value=int(exp.get("mm_inicio", 0)), step=1, key=f"mm_inicio_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c3, "FIN EXPLORACIÓN", lambda: exp.__setitem__("fin_exploracion", _selectbox_con_indice("", ["SELECCIONAR"] + referencias, exp.get("fin_exploracion", "SELECCIONAR"), key=f"fin_ref_{idx}", label_visibility="collapsed")))
+        _render_adq_pair(c4, "MM FIN", lambda: exp.__setitem__("mm_fin", st.number_input("", min_value=-1000, max_value=2000, value=int(exp.get("mm_fin", 400)), step=1, key=f"mm_fin_{idx}", label_visibility="collapsed")))
+
+    with st.container():
+        exp["observaciones"] = st.text_area(
+            "Observaciones",
+            value=exp.get("observaciones", ""),
+            key=f"obs_{idx}",
+            height=100,
+        )
+
+
+def _render_parametros_bolus(exp, idx):
+    exp["kv"] = "100"
+    exp["mas"] = "20"
+
+    col1, col2 = st.columns(2, gap="large")
+    with col1:
+        st.markdown("### ⚙️ Parámetros de Bolus")
+        exp["periodo"] = _selectbox_con_indice("Periodo", PERIODO_TEST_BOLUS, exp.get("periodo", "SELECCIONAR"), key=f"periodo_{idx}")
+        exp["n_imagenes"] = _selectbox_con_indice("N° de imágenes", N_IMAGENES_TEST_BOLUS, exp.get("n_imagenes", "SELECCIONAR"), key=f"nimg_{idx}")
+        exp["posicion_corte"] = _selectbox_con_indice("Posición de corte", POSICION_CORTE_TEST_BOLUS, exp.get("posicion_corte", "SELECCIONAR"), key=f"poscorte_{idx}")
+        if exp.get("tipo_exploracion") == "BOLUS TRACKING":
+            exp["umbral_disparo"] = st.text_input("Umbral de disparo (UH)", value=exp.get("umbral_disparo", ""), key=f"umbral_{idx}")
+    with col2:
+        st.markdown("### 🔧 Configuración fija")
+        st.text_input("kV", value="100", key=f"kv_bolus_{idx}", disabled=True)
+        st.text_input("mAs", value="20", key=f"mas_bolus_{idx}", disabled=True)
+        st.info("En Test bolus y Bolus tracking estos valores quedan fijos.")
+
+    with st.container():
+        exp["observaciones"] = st.text_area(
+            "Observaciones",
+            value=exp.get("observaciones", ""),
+            key=f"obs_{idx}",
+            height=100,
+        )
+
+
 def _render_parametros_adquisicion(exp, idx, store):
     titulo = _nombre_visible_exploracion(exp, idx)
     st.markdown(f"## ⚙️ {titulo}")
 
-    exp = _normalizar_exploracion(exp, idx)
-
-    row_head = st.columns([1], gap="medium")
+    row_head = st.columns([2, 1], gap="medium")
     with row_head[0]:
         exp["nombre"] = _selectbox_con_indice(
             "Nombre de la exploración",
@@ -387,65 +492,8 @@ def _render_parametros_adquisicion(exp, idx, store):
         )
 
     _ajustar_tipo_segun_nombre(exp)
-    tipo = exp.get("tipo_exploracion", "HELICOIDAL")
-    es_bolus = tipo in ["TEST BOLUS", "BOLUS TRACKING"]
 
-    if es_bolus:
-        exp["mas"] = "20"
-        exp["mas_val"] = "20"
-        exp["kv"] = "100"
-        exp["kvp"] = "100"
-        exp["doble_muestreo"] = "NO"
-        exp["pitch"] = "SELECCIONAR"
-        exp["instruccion_voz"] = "SELECCIONAR"
-        exp["voz_adq"] = "SELECCIONAR"
-        exp["retardo"] = "SELECCIONAR"
-
-    row1 = st.columns(4, gap="medium")
-    with row1[0]:
-        exp["modulacion_corriente"] = _selectbox_con_indice(
-            "Modulación de corriente",
-            MODULACION_CORRIENTE,
-            exp.get("modulacion_corriente", "SELECCIONAR"),
-            key=f"modcorr_{idx}",
-            disabled=es_bolus,
-        )
-        if es_bolus:
-            exp["modulacion_corriente"] = "NO"
-    with row1[1]:
-        if es_bolus:
-            st.text_input("mAs", value="20", disabled=True, key=f"mas_bolus_fix_{idx}")
-        else:
-            exp["mas"] = _selectbox_con_indice(
-                "mAs",
-                MAS_OPCIONES,
-                exp.get("mas", "SELECCIONAR"),
-                key=f"mas_{idx}",
-            )
-    with row1[2]:
-        if es_bolus:
-            st.text_input("Índice de ruido", value="No aplica", disabled=True, key=f"ruido_na_{idx}")
-            exp["indice_ruido"] = "SELECCIONAR"
-        else:
-            exp["indice_ruido"] = _selectbox_con_indice(
-                "Índice de ruido",
-                INDICE_RUIDO_OPCIONES,
-                exp.get("indice_ruido", "SELECCIONAR"),
-                key=f"ruido_{idx}",
-            )
-    with row1[3]:
-        if es_bolus:
-            st.text_input("kV", value="100", disabled=True, key=f"kv_bolus_fix_{idx}")
-        else:
-            exp["kv"] = _selectbox_con_indice(
-                "kV",
-                KV_OPCIONES,
-                exp.get("kv", "SELECCIONAR"),
-                key=f"kv_{idx}",
-            )
-
-    row2 = st.columns(6, gap="medium")
-    with row2[0]:
+    with row_head[1]:
         exp["tipo_exploracion"] = _selectbox_con_indice(
             "Tipo exploración",
             TIPOS_EXPLORACION,
@@ -453,157 +501,29 @@ def _render_parametros_adquisicion(exp, idx, store):
             key=f"tipo_exp_{idx}",
             disabled=exp.get("nombre") in ["BOLUS TEST", "BOLUS TRACKING"],
         )
-    with row2[1]:
-        if exp.get("tipo_exploracion") == "HELICOIDAL" and not es_bolus:
-            exp["doble_muestreo"] = _selectbox_con_indice(
-                "Doble muestreo",
-                DOBLE_MUESTREO_OPCIONES,
-                exp.get("doble_muestreo", "SELECCIONAR"),
-                key=f"doble_{idx}",
-            )
-        else:
-            exp["doble_muestreo"] = "NO"
-            st.text_input("Doble muestreo", value="No aplica", disabled=True, key=f"doble_na_{idx}")
-    with row2[2]:
-        exp["config_detectores"] = _selectbox_con_indice(
-            "Configuración detección",
-            CONFIG_DETECTORES,
-            exp.get("config_detectores", "SELECCIONAR"),
-            key=f"config_{idx}",
-        )
 
-    exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
-    exp["cobertura_tabla"] = exp["cobertura"]
-
-    with row2[3]:
-        st.text_input("Cobertura", value=exp.get("cobertura", ""), disabled=True, key=f"cobertura_{idx}")
-    with row2[4]:
-        exp["grosor_prospectivo"] = _selectbox_con_indice(
-            "Grosor prospectivo",
-            GROSOR_PROSPECTIVO_OPCIONES,
-            exp.get("grosor_prospectivo", "SELECCIONAR"),
-            key=f"grosor_{idx}",
-        )
-    with row2[5]:
-        exp["sfov"] = _selectbox_con_indice(
-            "SFOV",
-            SFOV_OPCIONES,
-            exp.get("sfov", "SELECCIONAR"),
-            key=f"sfov_{idx}",
-        )
-
+    es_bolus = exp.get("tipo_exploracion") in ["TEST BOLUS", "BOLUS TRACKING"]
     if es_bolus:
-        cols = st.columns(4, gap="medium")
-        with cols[0]:
-            exp["periodo"] = _selectbox_con_indice(
-                "Periodo",
-                PERIODO_TEST_BOLUS,
-                exp.get("periodo", exp.get("periodo_bolus", "SELECCIONAR")),
-                key=f"periodo_{idx}",
-            )
-        with cols[1]:
-            exp["n_imagenes"] = _selectbox_con_indice(
-                "N° de imágenes",
-                N_IMAGENES_TEST_BOLUS,
-                exp.get("n_imagenes", exp.get("n_imagenes_bolus", "SELECCIONAR")),
-                key=f"nimg_{idx}",
-            )
-        with cols[2]:
-            exp["posicion_corte"] = _selectbox_con_indice(
-                "Posición de corte",
-                POSICION_CORTE_TEST_BOLUS,
-                exp.get("posicion_corte", "SELECCIONAR"),
-                key=f"poscorte_{idx}",
-            )
-        with cols[3]:
-            if tipo == "BOLUS TRACKING":
-                exp["umbral_disparo"] = st.text_input(
-                    "Umbral de disparo (UH)",
-                    value=str(exp.get("umbral_disparo", "")),
-                    key=f"umbral_{idx}",
-                )
-            else:
-                st.text_input("Umbral de disparo (UH)", value="No aplica", disabled=True, key=f"umbral_na_{idx}")
-                exp["umbral_disparo"] = ""
-        st.info("En Test bolus y Bolus tracking, kV y mAs quedan fijos en 100 y 20 respectivamente.")
+        _render_parametros_bolus(exp, idx)
     else:
-        row3 = st.columns(4, gap="medium")
-        with row3[0]:
-            exp["instruccion_voz"] = _selectbox_con_indice(
-                "Instrucción de voz",
-                INSTRUCCION_VOZ_OPCIONES,
-                exp.get("instruccion_voz", "SELECCIONAR"),
-                key=f"voz_{idx}",
-            )
-        with row3[1]:
-            exp["retardo"] = _selectbox_con_indice(
-                "Retardo",
-                RETARDO_OPCIONES,
-                exp.get("retardo", "SELECCIONAR"),
-                key=f"retardo_{idx}",
-            )
-        with row3[2]:
-            if exp.get("tipo_exploracion") == "HELICOIDAL":
-                exp["pitch"] = _selectbox_con_indice(
-                    "Pitch",
-                    PITCH_OPCIONES,
-                    exp.get("pitch", "SELECCIONAR"),
-                    key=f"pitch_{idx}",
-                )
-            else:
-                exp["pitch"] = "SELECCIONAR"
-                st.text_input("Pitch", value="No aplica", disabled=True, key=f"pitch_na_{idx}")
-        with row3[3]:
-            exp["rotacion_tubo"] = _selectbox_con_indice(
-                "TPO ROTACION TUBO",
-                ROTACION_TUBO_OPCIONES,
-                exp.get("rotacion_tubo", "SELECCIONAR"),
-                key=f"rot_{idx}",
-            )
-
-    exp["observaciones"] = st.text_area(
-        "Observaciones",
-        value=exp.get("observaciones", ""),
-        key=f"obs_{idx}",
-        height=100,
-    )
-
-    exp = _normalizar_exploracion(exp, idx)
-    st.session_state["exploraciones"][idx] = exp
-    _sincronizar_exploraciones_adq()
+        _render_parametros_normales(exp, idx, store)
 
     mensajes = []
-    tipo = exp.get("tipo_exploracion")
-
     if exp.get("nombre") == "Seleccionar":
         mensajes.append("⚠️ Falta seleccionar el nombre de la exploración.")
-    if exp.get("config_detectores") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
-    if exp.get("grosor_prospectivo") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar grosor prospectivo.")
-    if exp.get("sfov") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar SFOV.")
-
-    if tipo in ["TEST BOLUS", "BOLUS TRACKING"]:
-        if exp.get("periodo") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir el periodo.")
-        if exp.get("n_imagenes") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir el número de imágenes.")
+    if es_bolus:
         if exp.get("posicion_corte") == "SELECCIONAR":
             mensajes.append("⚠️ Falta definir la posición de corte.")
-        if tipo == "BOLUS TRACKING" and not str(exp.get("umbral_disparo", "")).strip():
-            mensajes.append("⚠️ Falta definir el umbral de disparo.")
     else:
         if exp.get("kv") == "SELECCIONAR":
             mensajes.append("⚠️ Falta seleccionar kV.")
+        if exp.get("config_detectores") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
         if exp.get("instruccion_voz") == "SELECCIONAR":
             mensajes.append("⚠️ Falta definir la instrucción de voz.")
-        if exp.get("retardo") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir el retardo.")
-        if exp.get("rotacion_tubo") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir el tiempo de rotación del tubo.")
-        if exp.get("tipo_exploracion") == "HELICOIDAL" and exp.get("pitch") == "SELECCIONAR":
-            mensajes.append("⚠️ Falta definir el pitch.")
+
+    _normalizar_aliases(exp)
+    _sincronizar_exploraciones()
 
     if mensajes:
         for msg in mensajes:
@@ -619,9 +539,9 @@ def _render_parametros_adquisicion(exp, idx, store):
 def render_adquisicion():
     _init_adquisicion_state()
     _asegurar_exploraciones()
-    _sincronizar_exploraciones_adq()
 
     col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
+
     with col_sidebar:
         _render_lista_exploraciones()
 
@@ -629,19 +549,20 @@ def render_adquisicion():
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
             render_topograma_panel()
-        else:
-            store = st.session_state.get("topograma_store", {})
-            if not _topograma_tiene_minimo(store):
-                st.warning("Primero debes completar al menos el Topograma 1.")
-                render_topograma_panel()
-                return
+            return
 
-            _render_resumen_topograma(store)
+        store = st.session_state.get("topograma_store", {})
+        if not _topograma_tiene_minimo(store):
+            st.warning("Primero debes completar al menos el Topograma 1.")
+            render_topograma_panel()
+            return
 
-            exploraciones = st.session_state["exploraciones"]
-            if not isinstance(activa, int) or activa >= len(exploraciones):
-                st.session_state["exp_activa"] = 0
-                activa = 0
+        _render_resumen_topograma(store)
 
-            exp = exploraciones[activa]
-            _render_parametros_adquisicion(exp, activa, store)
+        exploraciones = st.session_state["exploraciones"]
+        if not isinstance(activa, int) or activa >= len(exploraciones):
+            st.session_state["exp_activa"] = 0
+            activa = 0
+
+        exp = exploraciones[activa]
+        _render_parametros_adquisicion(exp, activa, store)
