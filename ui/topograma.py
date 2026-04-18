@@ -335,6 +335,81 @@ def selectbox_con_placeholder(label, options, key, value=None, label_visibility=
     return None if val == "Seleccionar" else val
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# GESTIÓN DE MÚLTIPLES "SETS" DE TOPOGRAMA
+# Cada set es un par Topograma 1 (+ Topograma 2 opcional) con su propia
+# región anatómica y examen. Permite planificar exploraciones basadas en
+# distintas regiones dentro del mismo estudio.
+# ═══════════════════════════════════════════════════════════════════════════
+def _init_topograma_sets():
+    """Inicializa topograma_sets y asegura al menos un set.
+    Migra el legado `topograma_store` si existe y aún no hay sets creados."""
+    if "topograma_sets" not in st.session_state or not st.session_state["topograma_sets"]:
+        legacy = dict(st.session_state.get("topograma_store", {}) or {})
+        legacy.setdefault("topograma_iniciado", bool(st.session_state.get("topograma_iniciado", False)))
+        legacy.setdefault("topograma2_iniciado", bool(st.session_state.get("topograma2_iniciado", False)))
+        legacy.setdefault("label", "Topograma 1")
+        st.session_state["topograma_sets"] = [legacy]
+
+    st.session_state.setdefault("topograma_set_activo", 0)
+    n = len(st.session_state["topograma_sets"])
+    if st.session_state["topograma_set_activo"] >= n:
+        st.session_state["topograma_set_activo"] = max(0, n - 1)
+
+
+def _set_activo_idx() -> int:
+    _init_topograma_sets()
+    return st.session_state["topograma_set_activo"]
+
+
+def _get_set_activo() -> dict:
+    _init_topograma_sets()
+    return st.session_state["topograma_sets"][_set_activo_idx()]
+
+
+def _agregar_set_topograma(label=None) -> int:
+    """Agrega un nuevo set vacío y lo deja como activo. Devuelve su índice."""
+    sets = st.session_state.setdefault("topograma_sets", [])
+    nuevo = {
+        "label": label or f"Topograma {len(sets) + 1}",
+        "topograma_iniciado": False,
+        "topograma2_iniciado": False,
+    }
+    sets.append(nuevo)
+    st.session_state["topograma_set_activo"] = len(sets) - 1
+    return len(sets) - 1
+
+
+def _eliminar_set_topograma(idx: int):
+    """Elimina un set y reasigna las exploraciones huérfanas al set 0."""
+    sets = st.session_state.get("topograma_sets", [])
+    if len(sets) <= 1 or not (0 <= idx < len(sets)):
+        return
+    sets.pop(idx)
+    for exp in st.session_state.get("exploraciones", []):
+        tsi = exp.get("topo_set_idx", 0)
+        if tsi == idx:
+            exp["topo_set_idx"] = 0
+        elif tsi > idx:
+            exp["topo_set_idx"] = tsi - 1
+    st.session_state["topograma_set_activo"] = min(
+        st.session_state.get("topograma_set_activo", 0), len(sets) - 1
+    )
+
+
+def _build_store_in_set(idx: int, **kwargs):
+    """Escribe kwargs en el set indicado. Espeja en topograma_store (compat)
+    solo si el set es el activo."""
+    sets = st.session_state.setdefault("topograma_sets", [])
+    if not (0 <= idx < len(sets)):
+        return
+    sets[idx].update(kwargs)
+    if idx == _set_activo_idx():
+        st.session_state["topograma_store"] = dict(sets[idx])
+        st.session_state["topograma_iniciado"] = bool(sets[idx].get("topograma_iniciado", False))
+        st.session_state["topograma2_iniciado"] = bool(sets[idx].get("topograma2_iniciado", False))
+
+
 def _build_store(**kwargs):
     prev = st.session_state.get("topograma_store", {})
     prev.update(kwargs)
@@ -507,24 +582,84 @@ def _placeholder_topograma(proyeccion: str = "AP", tubo: str = "", alto_px: int 
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# BARRA SUPERIOR: sets de topograma
+# ═══════════════════════════════════════════════════════════════════════════
+def _render_barra_sets():
+    """Barra superior con los sets de topograma + botón de agregar/eliminar/renombrar."""
+    _init_topograma_sets()
+    sets = st.session_state["topograma_sets"]
+    activo = _set_activo_idx()
+
+    st.markdown("#### 🗂️ Topogramas del estudio")
+
+    n = len(sets)
+    cols = st.columns(n + 1)
+    for i, s in enumerate(sets):
+        with cols[i]:
+            lbl = s.get("label") or f"Topograma {i+1}"
+            region_lbl = s.get("region_anat") or "sin región"
+            tipo = "primary" if i == activo else "secondary"
+            if st.button(
+                f"📡 {lbl}\n{region_lbl}",
+                key=f"btn_set_{i}",
+                type=tipo,
+                use_container_width=True,
+            ):
+                st.session_state["topograma_set_activo"] = i
+                _build_store_in_set(i)
+                st.rerun()
+
+    with cols[-1]:
+        if st.button("➕ Nuevo topograma", key="btn_nuevo_set", use_container_width=True):
+            _agregar_set_topograma()
+            st.rerun()
+
+    # Línea de edición de label + eliminar
+    c_lbl, c_del = st.columns([3, 1])
+    with c_lbl:
+        cur = sets[activo]
+        nuevo_lbl = st.text_input(
+            "Nombre del topograma activo",
+            value=cur.get("label") or f"Topograma {activo+1}",
+            key=f"lbl_set_{activo}",
+        )
+        if nuevo_lbl and nuevo_lbl != cur.get("label"):
+            cur["label"] = nuevo_lbl
+    with c_del:
+        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+        if len(sets) > 1:
+            if st.button("🗑️ Eliminar este topograma", key=f"del_set_{activo}", use_container_width=True):
+                _eliminar_set_topograma(activo)
+                st.rerun()
+
+    st.markdown("---")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ENTRYPOINT: PANEL DE TOPOGRAMA
+# ═══════════════════════════════════════════════════════════════════════════
 def render_topograma_panel():
-    store = st.session_state.get("topograma_store", {})
+    _init_topograma_sets()
+    _render_barra_sets()
+
+    idx = _set_activo_idx()
+    store = st.session_state["topograma_sets"][idx]
+    sfx = f"_s{idx}"  # sufijo único por set (evita colisión de widget keys)
 
     col1, col2, col3 = st.columns([1, 1, 1], gap="large")
 
     with col1:
         _panel_header("🧾", "Datos del Examen")
         region = selectbox_con_placeholder(
-            "Región anatómica", list(REGIONES.keys()), "region_widget", value=store.get("region_anat")
+            "Región anatómica", list(REGIONES.keys()), f"region_widget{sfx}", value=store.get("region_anat")
         )
         examen = selectbox_con_placeholder(
-            "Examen", REGIONES.get(region, []), "examen_widget", value=store.get("examen")
+            "Examen", REGIONES.get(region, []), f"examen_widget{sfx}", value=store.get("examen")
         )
 
         img_region = obtener_imagen_region(region) if region else None
         if img_region is not None:
-            # Silueta achicada y alineada al borde inferior del contenedor,
-            # para que su borde inferior coincida con el de las imágenes de las col 2 y 3.
             _render_imagen_alineada_abajo(img_region, altura_contenedor_px=220, max_width_pct=50)
         else:
             _placeholder_dashed("Selecciona una región anatómica", alto_px=220)
@@ -534,24 +669,23 @@ def render_topograma_panel():
         c2a, c2b = st.columns(2)
         with c2a:
             posicion = selectbox_con_placeholder(
-                "Posición paciente", POSICIONES_PACIENTE, "pos_widget", value=store.get("posicion")
+                "Posición paciente", POSICIONES_PACIENTE, f"pos_widget{sfx}", value=store.get("posicion")
             )
         with c2b:
             entrada = selectbox_con_placeholder(
-                "Entrada", ENTRADAS_PACIENTE, "entrada_widget", value=store.get("entrada")
+                "Entrada", ENTRADAS_PACIENTE, f"entrada_widget{sfx}", value=store.get("entrada")
             )
         with c2a:
             tubo = selectbox_con_placeholder(
-                "Posición tubo", POS_TUBO, "tubo_widget", value=store.get("t1pt")
+                "Posición tubo", POS_TUBO, f"tubo_widget{sfx}", value=store.get("t1pt")
             )
         with c2b:
             extremidades = selectbox_con_placeholder(
-                "Posición extremidades", POS_EXTREMIDADES, "ext_widget", value=store.get("extremidades")
+                "Posición extremidades", POS_EXTREMIDADES, f"ext_widget{sfx}", value=store.get("extremidades")
             )
 
         img_pos = obtener_imagen_posicionamiento_topograma(posicion or "", entrada or "", tubo or "")
         if img_pos is not None:
-            # Se deja como antes: ocupa el ancho natural de la columna
             st.image(img_pos, use_container_width=True)
         else:
             _placeholder_info(
@@ -562,10 +696,9 @@ def render_topograma_panel():
     with col3:
         _panel_header("🖼️", "Topograma")
 
-        if st.session_state.get("topograma_iniciado", False):
+        if store.get("topograma_iniciado", False):
             img_topo, err = obtener_imagen_topograma_adquirido(examen or "", posicion or "", entrada or "", tubo or "")
             if img_topo is not None:
-                # Se deja como antes: la imagen del topograma ocupa todo el ancho de su columna
                 st.image(img_topo, use_container_width=True)
             else:
                 st.warning(err or "Imagen no encontrada")
@@ -574,35 +707,42 @@ def render_topograma_panel():
             _placeholder_topograma(proyeccion="AP", tubo=tubo or "", alto_px=420)
 
     st.markdown("---")
-    st.markdown("### 📡 Topograma 1")
+    titulo_set = store.get("label") or f"Topograma {idx+1}"
+    st.markdown(f"### 📡 Topograma 1 — {titulo_set}")
     r1a, r1b, r1c, r1d, r1e = st.columns(5, gap="medium")
     with r1a:
-        t1_ini_ref = selectbox_con_placeholder("Inicio Topograma 1", REFS_TOPO, "t1_ini_ref_widget", value=store.get("t1_ini_ref"))
+        t1_ini_ref = selectbox_con_placeholder("Inicio Topograma 1", REFS_TOPO, f"t1_ini_ref_widget{sfx}", value=store.get("t1_ini_ref"))
     with r1b:
-        t1_fin_ref = selectbox_con_placeholder("Fin Topograma 1", REFS_TOPO, "t1_fin_ref_widget", value=store.get("t1_fin_ref"))
+        t1_fin_ref = selectbox_con_placeholder("Fin Topograma 1", REFS_TOPO, f"t1_fin_ref_widget{sfx}", value=store.get("t1_fin_ref"))
     with r1c:
         st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
     with r1d:
         st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
     with r1e:
-        t1_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, "t1_centraje_inicio_widget", value=store.get("t1_centraje_inicio"))
+        t1_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, f"t1_centraje_inicio_widget{sfx}", value=store.get("t1_centraje_inicio"))
 
     r2a, r2b, r2c = st.columns(3, gap="medium")
     with r2a:
-        t1_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, "t1l_widget", value=store.get("t1l"))
+        t1_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, f"t1l_widget{sfx}", value=store.get("t1l"))
     with r2b:
-        t1_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, "t1dir_widget", value=store.get("t1dir"))
+        t1_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, f"t1dir_widget{sfx}", value=store.get("t1dir"))
     with r2c:
-        t1_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, "t1vz_widget", value=store.get("t1vz"))
+        t1_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, f"t1vz_widget{sfx}", value=store.get("t1vz"))
 
-    aplica_topo2 = st.checkbox("¿Aplica Topograma 2?", value=bool(store.get("aplica_topograma_2") or store.get("aplica_topo2")), key="aplica_topo2_widget")
+    aplica_topo2 = st.checkbox(
+        "¿Aplica Topograma 2?",
+        value=bool(store.get("aplica_topograma_2") or store.get("aplica_topo2")),
+        key=f"aplica_topo2_widget{sfx}",
+    )
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("☢️ INICIAR TOPOGRAMA 1", key="btn_iniciar_topo1_down", use_container_width=True):
+        if st.button("☢️ INICIAR TOPOGRAMA 1", key=f"btn_iniciar_topo1_down{sfx}", use_container_width=True):
+            store["topograma_iniciado"] = True
             st.session_state["topograma_iniciado"] = True
     with col_btn2:
-        if st.button("↺ Repetir topograma 1", key="btn_reset_topo1", use_container_width=True):
+        if st.button("↺ Repetir topograma 1", key=f"btn_reset_topo1{sfx}", use_container_width=True):
+            store["topograma_iniciado"] = False
             st.session_state["topograma_iniciado"] = False
             st.rerun()
 
@@ -613,21 +753,16 @@ def render_topograma_panel():
     if aplica_topo2:
         st.markdown("---")
 
-        # Topograma 2 hereda Región y Examen del Topograma 1 (no se repiten los campos).
+        # Topograma 2 hereda Región y Examen del Topograma 1 del mismo set.
         t2_region = region
         t2_examen = examen
 
         mid_t2, right_t2 = st.columns([1, 1], gap="large")
 
-        # Alineación de bordes inferiores en Topograma 2:
-        # - Col izq (mid_t2): header + 4 dropdowns en 2×2 (~170 px) + scanner pegado ARRIBA
-        # - Col der (right_t2): header + topograma grande, pegado al borde INFERIOR
-        # El contenedor del topograma es ~170 px más alto que el del scanner,
-        # para compensar los dropdowns y que ambos bordes inferiores coincidan.
-        H_IMG_LATERAL_T2 = 240     # alto del contenedor del scanner (pegado arriba)
-        H_IMG_TOPOGRAMA_T2 = 410   # alto del contenedor del topograma (pegado abajo)
-        MAX_W_SCANNER_T2 = 55      # scanner achicado, referencial
-        MAX_W_TOPOGRAMA_T2 = 100   # topograma ocupa todo el ancho de su columna
+        H_IMG_LATERAL_T2 = 240
+        H_IMG_TOPOGRAMA_T2 = 410
+        MAX_W_SCANNER_T2 = 55
+        MAX_W_TOPOGRAMA_T2 = 100
 
         with mid_t2:
             _panel_header("🛏️", "Posicionamiento del paciente — Topograma 2")
@@ -636,34 +771,33 @@ def render_topograma_panel():
                 t2_pos = selectbox_con_placeholder(
                     "Posición paciente",
                     POSICIONES_PACIENTE,
-                    "t2_pos_widget",
-                    value=store.get("t2_posicion")
+                    f"t2_pos_widget{sfx}",
+                    value=store.get("t2_posicion"),
                 )
             with b:
                 t2_entrada = selectbox_con_placeholder(
                     "Entrada",
                     ENTRADAS_PACIENTE,
-                    "t2_entrada_widget",
-                    value=store.get("t2_entrada")
+                    f"t2_entrada_widget{sfx}",
+                    value=store.get("t2_entrada"),
                 )
             with a:
                 t2_tubo = selectbox_con_placeholder(
                     "Posición tubo",
                     POS_TUBO,
-                    "t2_tubo_widget",
-                    value=store.get("t2pt")
+                    f"t2_tubo_widget{sfx}",
+                    value=store.get("t2pt"),
                 )
             with b:
                 t2_ext = selectbox_con_placeholder(
                     "Posición extremidades",
                     POS_EXTREMIDADES,
-                    "t2_ext_widget",
-                    value=store.get("t2_extremidades")
+                    f"t2_ext_widget{sfx}",
+                    value=store.get("t2_extremidades"),
                 )
 
             img_pos2 = obtener_imagen_posicionamiento_topograma(t2_pos or "", t2_entrada or "", t2_tubo or "")
             if img_pos2 is not None:
-                # Scanner pegado ARRIBA (justo después de los dropdowns, sin espacio vacío)
                 _render_imagen_alineada_abajo(
                     img_pos2,
                     altura_contenedor_px=H_IMG_LATERAL_T2,
@@ -678,7 +812,7 @@ def render_topograma_panel():
 
         with right_t2:
             _panel_header("🖼️", "Topograma 2")
-            if st.session_state.get("topograma2_iniciado", False):
+            if store.get("topograma2_iniciado", False):
                 img_topo2, err2 = obtener_imagen_topograma_adquirido(
                     t2_examen or "",
                     t2_pos or "",
@@ -686,8 +820,6 @@ def render_topograma_panel():
                     t2_tubo or "",
                 )
                 if img_topo2 is not None:
-                    # Topograma grande: llena todo el alto del contenedor y queda
-                    # pegado al borde INFERIOR → alinea con el scanner de la izquierda.
                     _render_imagen_alineada_abajo(
                         img_topo2,
                         altura_contenedor_px=H_IMG_TOPOGRAMA_T2,
@@ -704,34 +836,37 @@ def render_topograma_panel():
         st.markdown("### 📡 Parámetros Topograma 2")
         t2a, t2b, t2c, t2d, t2e = st.columns(5, gap="medium")
         with t2a:
-            t2_ini_ref = selectbox_con_placeholder("Inicio Topograma 2", REFS_TOPO, "t2_ini_ref_widget", value=store.get("t2_ini_ref"))
+            t2_ini_ref = selectbox_con_placeholder("Inicio Topograma 2", REFS_TOPO, f"t2_ini_ref_widget{sfx}", value=store.get("t2_ini_ref"))
         with t2b:
-            t2_fin_ref = selectbox_con_placeholder("Fin Topograma 2", REFS_TOPO, "t2_fin_ref_widget", value=store.get("t2_fin_ref"))
+            t2_fin_ref = selectbox_con_placeholder("Fin Topograma 2", REFS_TOPO, f"t2_fin_ref_widget{sfx}", value=store.get("t2_fin_ref"))
         with t2c:
             st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
         with t2d:
             st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
         with t2e:
-            t2_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, "t2_centraje_inicio_widget", value=store.get("t2_centraje_inicio"))
+            t2_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", REFS_TOPO, f"t2_centraje_inicio_widget{sfx}", value=store.get("t2_centraje_inicio"))
 
         t2f, t2g, t2h = st.columns(3, gap="medium")
         with t2f:
-            t2_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, "t2l_widget", value=store.get("t2l"))
+            t2_long = selectbox_con_placeholder("Longitud de topograma (mm)", LONGITUDES_TOPO, f"t2l_widget{sfx}", value=store.get("t2l"))
         with t2g:
-            t2_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, "t2dir_widget", value=store.get("t2dir"))
+            t2_dir = selectbox_con_placeholder("Dirección topograma", DIRECCIONES, f"t2dir_widget{sfx}", value=store.get("t2dir"))
         with t2h:
-            t2_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, "t2vz_widget", value=store.get("t2vz"))
+            t2_voz = selectbox_con_placeholder("Instrucción de voz", INSTRUCCIONES_VOZ, f"t2vz_widget{sfx}", value=store.get("t2vz"))
 
         col_btn3, col_btn4 = st.columns(2)
         with col_btn3:
-            if st.button("☢️ INICIAR TOPOGRAMA 2", key="btn_iniciar_topo2", use_container_width=True):
+            if st.button("☢️ INICIAR TOPOGRAMA 2", key=f"btn_iniciar_topo2{sfx}", use_container_width=True):
+                store["topograma2_iniciado"] = True
                 st.session_state["topograma2_iniciado"] = True
         with col_btn4:
-            if st.button("↺ Repetir topograma 2", key="btn_reset_topo2", use_container_width=True):
+            if st.button("↺ Repetir topograma 2", key=f"btn_reset_topo2{sfx}", use_container_width=True):
+                store["topograma2_iniciado"] = False
                 st.session_state["topograma2_iniciado"] = False
                 st.rerun()
 
-    _build_store(
+    _build_store_in_set(
+        idx,
         region_anat=region,
         examen=examen,
         posicion=posicion,
