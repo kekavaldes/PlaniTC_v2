@@ -1,63 +1,3 @@
-"""
-ui/inyectora.py
-Módulo de Jeringa Inyectora para PlaniTC_v2.
-
-Cubre la TAB 4 del simulador:
-- Número de fases de inyección (1 a 6)
-- Configuración por fase: solución (MC / SF / PAUSA), volumen, caudal, duración
-- Visualización SVG de ambas jeringas (A = Medio de Contraste, B = Suero Fisiológico)
-- Validaciones: capacidad de jeringas y calibre VVP vs caudal
-
-Entrypoint: render_inyectora()
-"""
-
-import streamlit as st
-
-
-# ─── Constantes del módulo ──────────────────────────────────────────────────
-MAX_JERINGA = 180  # mL fijos para ambas jeringas (MC y SF)
-CAUDAL_OPCIONES = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0]
-VVP_GAUGE = [18, 20, 22, 24]
-
-
-# ─── Helpers reutilizables ──────────────────────────────────────────────────
-def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
-    """Selectbox con opción 'Seleccionar' al inicio; devuelve None si no hay elección."""
-    opciones = ["Seleccionar"] + list(options)
-    if value in options:
-        idx = opciones.index(value)
-    else:
-        idx = 0
-    val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
-    return None if val == "Seleccionar" else val
-
-
-def _panel_header(emoji: str, titulo: str):
-    """Header tipo banner oscuro, consistente con el resto de la app."""
-    st.markdown(
-        f"""
-        <div style="
-            background:#1A1A1A;
-            border:1px solid #2E2E2E;
-            border-radius:10px;
-            padding:0.75rem 1rem;
-            margin-bottom:0.9rem;
-            display:flex;
-            align-items:center;
-            gap:0.55rem;
-            font-weight:600;
-            font-size:1rem;
-            color:#FFFFFF;
-        ">
-            <span style="font-size:1.15rem;">{emoji}</span>
-            <span>{titulo}</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# ─── Renderizado SVG de la jeringa inyectora ────────────────────────────────
 def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
     """Genera el SVG de la inyectora con ambas jeringas y la tabla de fases."""
 
@@ -119,10 +59,8 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
 
         try:
             vol_txt = int(vol) if float(vol).is_integer() else vol
-            max_txt = int(maxv) if float(maxv).is_integer() else maxv
         except Exception:
             vol_txt = vol
-            max_txt = maxv
 
         return (
             f'<g transform="translate({x},58)">'
@@ -133,7 +71,6 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
             f'<polygon points="30,252 42,252 42,270 46,275 46,282 26,282 26,275 30,270" fill="{colors["EMPTY"]}" stroke="{colors["OUTLINE"]}" stroke-width="2"/>'
             f'<text x="36" y="136" text-anchor="middle" font-size="40" font-weight="900" fill="#11212B">{label}</text>'
             f'<text x="36" y="164" text-anchor="middle" font-size="26" font-weight="800" fill="#11212B">{vol_txt}</text>'
-            f'<text x="36" y="304" text-anchor="middle" font-size="18" font-weight="800" fill="{colors["TEXT"]}">{vol_txt} / {max_txt} mL</text>'
             f'</g>'
         )
 
@@ -144,17 +81,18 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
 
     svg = (
         f'<div style="background:transparent;padding:0;margin:0;">'
-        f'<svg viewBox="0 0 640 430" width="100%" xmlns="http://www.w3.org/2000/svg">'
+        f'<svg viewBox="0 0 640 470" width="100%" xmlns="http://www.w3.org/2000/svg">'
         f'{syringe(22, "A", ratio_mc, vol_mc, max_mc, colors["MC"])}'
         f'{syringe(122, "B", ratio_sf, vol_sf, max_sf, colors["SF"])}'
 
-        f'<g transform="translate(22,350)">'
-        f'<text x="0" y="-8" font-size="12" font-weight="700" fill="{colors["TEXT"]}">Canales de inyección</text>'
+        # bloque inferior más abajo y más pequeño
+        f'<g transform="translate(22,395)">'
+        f'<text x="0" y="-10" font-size="10" font-weight="700" fill="{colors["TEXT"]}">Canales de inyección</text>'
 
-        f'<text x="0" y="10" font-size="10" font-weight="700" fill="{colors["TEXT"]}">{mc_txt} / {max_mc_txt} mL</text>'
-        f'<text x="88" y="10" font-size="10" font-weight="700" fill="{colors["TEXT"]}">{sf_txt} / {max_sf_txt} mL</text>'
+        f'<text x="0" y="4" font-size="9" font-weight="700" fill="{colors["TEXT"]}">{mc_txt} / {max_mc_txt} mL</text>'
+        f'<text x="88" y="4" font-size="9" font-weight="700" fill="{colors["TEXT"]}">{sf_txt} / {max_sf_txt} mL</text>'
 
-        f'<g transform="translate(0,20)">'
+        f'<g transform="translate(0,16)">'
         f'<rect x="0" y="0" width="82" height="22" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.2"/>'
         f'<rect x="5" y="4" width="21" height="14" rx="4" fill="{colors["MC"]}"/>'
         f'<text x="15.5" y="15" text-anchor="middle" font-size="10" font-weight="800" fill="#11212B">A</text>'
@@ -163,7 +101,7 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
         f'<text x="76" y="15" text-anchor="middle" font-size="10" font-weight="800" fill="{colors["TEXT"]}">MC</text>'
         f'</g>'
 
-        f'<g transform="translate(0,47)">'
+        f'<g transform="translate(0,43)">'
         f'<rect x="0" y="0" width="82" height="22" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.2"/>'
         f'<rect x="5" y="4" width="21" height="14" rx="4" fill="{colors["SF"]}"/>'
         f'<text x="15.5" y="15" text-anchor="middle" font-size="10" font-weight="800" fill="#11212B">B</text>'
@@ -186,152 +124,3 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
         f'</svg></div>'
     )
     return svg
-
-
-# ─── Persistencia ───────────────────────────────────────────────────────────
-def _build_store(**kwargs):
-    """Acumula valores del formulario en st.session_state['inyectora_store']."""
-    prev = st.session_state.get("inyectora_store", {})
-    prev.update(kwargs)
-    st.session_state["inyectora_store"] = prev
-
-
-# ─── Render principal ───────────────────────────────────────────────────────
-def render_inyectora():
-    """Entrypoint del módulo: renderiza la TAB 4 (Jeringa Inyectora) completa."""
-    vol_max_mc = MAX_JERINGA
-    vol_max_sf = MAX_JERINGA
-
-    n_fases_default = int(st.session_state.get("n_fases_iny", 2))
-    fases_data = []
-
-    vvp_default = st.session_state.get("vvp_gauge_widget", VVP_GAUGE[1])
-    vvp_gauge = vvp_default if vvp_default in VVP_GAUGE else VVP_GAUGE[1]
-
-    left_col, right_col = st.columns([1.45, 1.0], gap="large")
-
-    with right_col:
-        _panel_header("💉", "Fases de inyección")
-
-        n_fases = st.number_input(
-            "Número de fases",
-            min_value=1,
-            max_value=6,
-            value=n_fases_default,
-            key="n_fases_iny",
-        )
-
-        for i in range(int(n_fases)):
-            with st.expander(f"Fase {i+1}", expanded=(i == 0)):
-                form_col, empty_col = st.columns([1, 1])
-
-                with form_col:
-                    sol = selectbox_con_placeholder(
-                        "Solución",
-                        ["MC", "SF", "PAUSA"],
-                        key=f"sol_{i}",
-                        value=st.session_state.get(f"sol_{i}"),
-                    )
-
-                    if sol == "PAUSA":
-                        duracion_fase = st.number_input(
-                            "Duración (sg)",
-                            min_value=2,
-                            max_value=30,
-                            value=int(st.session_state.get(f"dur_pause_{i}", 10)),
-                            step=1,
-                            key=f"dur_pause_{i}",
-                        )
-                        vol = 0
-                        caud = 0
-
-                    elif sol is None:
-                        duracion_fase = 0
-                        vol = 0
-                        caud = 0
-
-                    else:
-                        vol = selectbox_con_placeholder(
-                            "Volumen (mL)",
-                            list(range(0, 185, 5)),
-                            key=f"vol_{i}",
-                            value=st.session_state.get(f"vol_{i}_val", 50),
-                        )
-
-                        caud = selectbox_con_placeholder(
-                            "Caudal (mL/sg)",
-                            CAUDAL_OPCIONES,
-                            key=f"caud_{i}",
-                            value=st.session_state.get(f"caud_{i}_val", CAUDAL_OPCIONES[5]),
-                        )
-
-                        vol_num = vol if vol is not None else 0
-                        caud_num = caud if caud is not None else 0
-                        duracion_fase = round(vol_num / caud_num, 1) if caud_num and caud_num > 0 else 0
-                        vol = vol_num
-                        caud = caud_num
-
-                    st.caption(f"Duración: {duracion_fase} sg")
-
-                with empty_col:
-                    st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
-
-                fases_data.append({
-                    "solucion": sol,
-                    "volumen": vol,
-                    "caudal": caud,
-                    "duracion": duracion_fase,
-                })
-
-        st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
-
-        vvp_gauge = selectbox_con_placeholder(
-            "VVP (Gauge)",
-            VVP_GAUGE,
-            key="vvp_gauge_widget",
-            value=vvp_gauge,
-        )
-
-    vol_total_mc = sum(f["volumen"] for f in fases_data if f["solucion"] == "MC")
-    vol_total_sf = sum(f["volumen"] for f in fases_data if f["solucion"] == "SF")
-    dur_total = sum(f["duracion"] for f in fases_data)
-
-    caudal_alto = any(
-        (f["caudal"] or 0) > 3.0 for f in fases_data if f["solucion"] not in (None, "PAUSA")
-    )
-
-    with left_col:
-        _panel_header("🧴", "Llenado de la Inyectora")
-        st.markdown(
-            render_inyectora_svg(
-                vol_total_mc, vol_total_sf, vol_max_mc, vol_max_sf, fases_data, vvp_gauge
-            ),
-            unsafe_allow_html=True,
-        )
-
-        if vol_total_mc > vol_max_mc:
-            st.warning(
-                f"⚠️ Volumen de contraste ({vol_total_mc} mL) supera la capacidad fija ({vol_max_mc} mL)"
-            )
-
-        if vol_total_sf > vol_max_sf:
-            st.warning(
-                f"⚠️ Volumen de suero ({vol_total_sf} mL) supera la capacidad fija ({vol_max_sf} mL)"
-            )
-
-        if vvp_gauge is not None and vvp_gauge >= 22 and caudal_alto:
-            st.warning(
-                "⚠️ Calibre VVP puede ser insuficiente para el caudal seleccionado. "
-                "Se recomienda VVP 18-20G para caudales altos."
-            )
-
-    _build_store(
-        n_fases=int(n_fases),
-        fases_data=fases_data,
-        vol_total_mc=vol_total_mc,
-        vol_total_sf=vol_total_sf,
-        dur_total=dur_total,
-        vvp_gauge=vvp_gauge,
-    )
-
-    return st.session_state["inyectora_store"]
