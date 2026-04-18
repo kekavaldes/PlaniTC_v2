@@ -112,6 +112,8 @@ def aplicar_css_global():
             color: white !important;
             border: 1px solid #444 !important;
             border-radius: 10px !important;
+            min-height: 48px !important;
+            font-weight: 600 !important;
         }
 
         .stButton button:hover {
@@ -136,27 +138,6 @@ def aplicar_css_global():
             padding-top: 3rem !important;
         }
 
-        div[role="radiogroup"] {
-            display: flex !important;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-bottom: 1rem;
-        }
-
-        div[role="radiogroup"] label {
-            background: transparent !important;
-            border: 1px solid #2A2A2A !important;
-            border-radius: 10px !important;
-            padding: 0.5rem 0.9rem !important;
-            color: #BFBFBF !important;
-        }
-
-        div[role="radiogroup"] label:hover {
-            background: #1A1A1A !important;
-            color: #FFFFFF !important;
-            border-color: #444 !important;
-        }
-
         .stApp a.anchor-link,
         [data-testid="stHeaderActionElements"] {
             display: none !important;
@@ -171,36 +152,34 @@ def init_navigation():
     if "current_tab" not in st.session_state:
         st.session_state["current_tab"] = "🏠  Inicio"
 
-    if "pending_tab" not in st.session_state:
-        st.session_state["pending_tab"] = None
 
-
-def apply_pending_navigation():
-    pending = st.session_state.get("pending_tab")
-    if pending in TAB_OPTIONS:
-        st.session_state["current_tab"] = pending
-        st.session_state["pending_tab"] = None
+def go_to_tab(tab_name: str):
+    st.session_state["current_tab"] = tab_name
 
 
 def render_top_navigation():
-    current_tab = st.session_state.get("current_tab", "🏠  Inicio")
+    current = st.session_state.get("current_tab", "🏠  Inicio")
 
-    selected_tab = st.radio(
-        "Navegación",
-        TAB_OPTIONS,
-        index=TAB_OPTIONS.index(current_tab),
-        horizontal=True,
-        key="main_navigation_radio",
-        label_visibility="collapsed",
-    )
+    cols = st.columns(5)
+    labels = [
+        "🏠 Inicio",
+        "📋 Ingreso",
+        "⚡ Adquisición",
+        "🧩 Reconstrucción",
+        "💉 Inyectora",
+    ]
 
-    st.session_state["current_tab"] = selected_tab
+    for col, tab_name, label in zip(cols, TAB_OPTIONS, labels):
+        with col:
+            tipo = "primary" if current == tab_name else "secondary"
+            if st.button(label, key=f"nav_{tab_name}", use_container_width=True, type=tipo):
+                go_to_tab(tab_name)
+                st.rerun()
 
 
 def main():
     aplicar_css_global()
     init_navigation()
-    apply_pending_navigation()
     render_top_navigation()
 
     current_tab = st.session_state.get("current_tab", "🏠  Inicio")
