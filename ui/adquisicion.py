@@ -35,7 +35,7 @@ from PIL import Image
 from ui.topograma import obtener_imagen_topograma_adquirido, render_topograma_panel
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-IMG_POSICION_CORTE_DIR = BASE_DIR / "data" / "images" / "posicion_corte_bolus"
+DIR_POSICION_CORTE_BOLUS = BASE_DIR / "data" / "images" / "posicion_corte_bolus"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -994,19 +994,8 @@ def _ajustar_por_nombre(exp):
     nombre = exp.get("nombre")
     if nombre in ("BOLUS TEST", "BOLUS TRACKING"):
         exp["tipo_exp"] = "SECUENCIAL CONTIGUO"
-        exp["mod_corriente"] = "MANUAL"
         exp["mas_val"] = 20
         exp["kvp"] = 100
-        exp["ind_ruido"] = None
-        exp["ind_cal"] = None
-        exp["rango_ma"] = None
-        exp["doble_muestreo"] = "NO"
-        exp["conf_det"] = None
-        exp["cobertura_tabla"] = "—"
-        exp["grosor_prosp"] = None
-        exp["sfov"] = None
-        exp["pitch"] = None
-        exp["rot_tubo"] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1049,6 +1038,25 @@ def _render_sidebar():
                         st.session_state["exploraciones"].pop(idx)
                         st.session_state["exp_activa"] = min(idx, len(st.session_state["exploraciones"]) - 1)
                         st.rerun()
+
+
+def obtener_imagen_posicion_corte(nombre_posicion):
+    """Devuelve la ruta del PNG correspondiente a la posición de corte de bolus."""
+    if not nombre_posicion:
+        return None
+    nombre = str(nombre_posicion).strip()
+    if not nombre or nombre == "Seleccionar":
+        return None
+
+    candidatas = [
+        DIR_POSICION_CORTE_BOLUS / f"{nombre}.png",
+        DIR_POSICION_CORTE_BOLUS / f"{nombre}.jpg",
+        DIR_POSICION_CORTE_BOLUS / f"{nombre}.jpeg",
+    ]
+    for ruta in candidatas:
+        if ruta.exists():
+            return ruta
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1120,6 +1128,95 @@ def _render_topogramas_adq(exp, es_bolus):
         t["y_fin"] = get_y_position_with_offset(fin_ref, fin_mm)
 
     modo = "line" if es_bolus else "rect"
+
+    if es_bolus:
+        # En bolus se muestran los topogramas más compactos y, a la derecha,
+        # la imagen de posición de corte más grande, como en el PlaniTC original.
+        html_topo1 = None
+        html_topo2 = None
+        if len(topos) >= 1:
+            html_topo1 = render_topogramas_independientes_interactivos(
+                [topos[0]],
+                modo=modo,
+                storage_key=f"{exp['id']}_topo1",
+                color="#00D2FF",
+                show_labels=False,
+                canvas_css_width=182,
+                canvas_css_height=290,
+            )
+        if len(topos) >= 2:
+            html_topo2 = render_topogramas_independientes_interactivos(
+                [topos[1]],
+                modo=modo,
+                storage_key=f"{exp['id']}_topo2",
+                color="#00D2FF",
+                show_labels=False,
+                canvas_css_width=182,
+                canvas_css_height=290,
+            )
+
+        ruta_posicion = obtener_imagen_posicion_corte(exp.get("posicion_corte"))
+        html_roi_corte = None
+        if ruta_posicion is not None:
+            try:
+                img_pos = Image.open(ruta_posicion)
+                html_roi_corte = render_topogramas_independientes_interactivos(
+                    [{
+                        "titulo": exp.get("posicion_corte", "Posición de corte"),
+                        "subtitulo": "",
+                        "img_b64": _pil_to_b64_jpeg(img_pos),
+                    }],
+                    modo="roi",
+                    storage_key=f"{exp['id']}_roi_corte",
+                    color="#00D2FF",
+                    show_labels=False,
+                    roi_label="ROI",
+                    canvas_css_width=500,
+                    canvas_css_height=300,
+                    canvas_width=980,
+                    canvas_height=600,
+                )
+            except Exception:
+                html_roi_corte = None
+
+        if len(topos) >= 2 and html_topo1 and html_topo2 and html_roi_corte:
+            c1, c2, c3 = st.columns([0.86, 0.86, 2.08], gap="medium")
+            with c1:
+                st.components.v1.html(html_topo1, height=405)
+            with c2:
+                st.components.v1.html(html_topo2, height=405)
+            with c3:
+                st.components.v1.html(html_roi_corte, height=430)
+        elif html_roi_corte:
+            c1, c2 = st.columns([1.0, 2.0], gap="medium")
+            with c1:
+                html_topos = render_topogramas_independientes_interactivos(
+                    topos,
+                    modo=modo,
+                    storage_key=exp["id"],
+                    color="#00D2FF",
+                    show_labels=False,
+                    canvas_css_width=186 if len(topos) > 1 else 240,
+                    canvas_css_height=290 if len(topos) > 1 else 340,
+                )
+                if html_topos:
+                    st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
+            with c2:
+                st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
+        else:
+            html = render_topogramas_independientes_interactivos(
+                topos,
+                modo=modo,
+                storage_key=exp["id"],
+                color="#00D2FF",
+                show_labels=False,
+                canvas_css_width=186 if len(topos) > 1 else None,
+                canvas_css_height=290 if len(topos) > 1 else None,
+            )
+            if html:
+                st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
+        return
+
     html = render_topogramas_independientes_interactivos(
         topos,
         modo=modo,
@@ -1377,33 +1474,46 @@ def _render_normales(exp):
 
 
 def _render_bolus(exp):
-    """Parámetros específicos para BOLUS TEST / BOLUS TRACKING.
-    Según el PlaniTC original, estas exploraciones no usan el mismo bloque
-    de parámetros que las demás adquisiciones.
+    """Filas específicas para BOLUS TEST / BOLUS TRACKING.
+    Nota: 'Posición de corte' se renderiza arriba, antes de los topogramas,
+    directamente en render_adquisicion().
     """
     eid = exp["id"]
 
-    # Mantener configuración fija propia de bolus
-    exp["tipo_exp"] = "SECUENCIAL CONTIGUO"
-    exp["mod_corriente"] = "MANUAL"
-    exp["mas_val"] = 20
-    exp["kvp"] = 100
-    exp["ind_ruido"] = None
-    exp["ind_cal"] = None
-    exp["rango_ma"] = None
-    exp["doble_muestreo"] = "NO"
-    exp["conf_det"] = None
-    exp["cobertura_tabla"] = "—"
-    exp["grosor_prosp"] = None
-    exp["sfov"] = None
-    exp["pitch"] = None
-    exp["rot_tubo"] = None
-
-    # FILA 1: parámetros propios del bolus
+    # FILA 1: modulación / mAs fijo / índice ruido / kV fijo
     r1_icon, r1_body = st.columns([0.12, 1], gap="small")
     with r1_icon:
-        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>🎯</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>☢️</div>", unsafe_allow_html=True)
     with r1_body:
+        c1, c2, c3, c4 = st.columns(4, gap="small")
+
+        def _render_mod():
+            exp["mod_corriente"] = selectbox_con_placeholder(
+                "Modulación corriente", MODULACION_CORRIENTE,
+                value=exp.get("mod_corriente", "MANUAL"),
+                key=f"mod_bolus_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c1, "Modulación corriente", _render_mod)
+
+        exp["mas_val"] = 20
+        exp["kvp"] = 100
+        _adq_pair(c2, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
+
+        def _render_indruido_bolus():
+            exp["ind_ruido"] = selectbox_con_placeholder(
+                "Índice de ruido", INDICE_RUIDO,
+                value=exp.get("ind_ruido"),
+                key=f"indruido_bolus_{eid}", label_visibility="collapsed",
+            )
+        _adq_pair(c3, "Índice ruido", _render_indruido_bolus)
+
+        _adq_pair(c4, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
+
+    # FILA 2: periodo / N° imágenes / umbral (si tracking)
+    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
+    with r2_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>🎯</div>", unsafe_allow_html=True)
+    with r2_body:
         c1, c2, c3 = st.columns(3, gap="small")
 
         def _render_periodo():
@@ -1431,139 +1541,8 @@ def _render_bolus(exp):
                 )
             _adq_pair(c3, "Umbral disparo", _render_umbral)
         else:
-            exp["umbral_tracking"] = None
-            _adq_pair(
-                c3,
-                "Umbral disparo",
-                lambda: _text_disabled("Umbral NA", "No aplica", key=f"uth_na_{eid}")
-            )
-
-    # FILA 2: configuración fija de bolus
-    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
-    with r2_icon:
-        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
-    with r2_body:
-        c1, c2 = st.columns(2, gap="small")
-
-        _adq_pair(c1, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
-        _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
-
-
-def _img_file_to_b64(path: Path) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
-
-
-def _img_file_to_b64_recortada(path: Path) -> str:
-    """Recorta bordes negros/oscursos para aprovechar mejor el espacio visual."""
-    img = Image.open(path).convert("RGB")
-    gray = img.convert("L")
-
-    # Detecta contenido que no sea casi negro.
-    mask = gray.point(lambda p: 255 if p > 12 else 0)
-    bbox = mask.getbbox()
-
-    if bbox:
-        left, top, right, bottom = bbox
-        pad_x = max(6, int((right - left) * 0.02))
-        pad_y = max(6, int((bottom - top) * 0.02))
-        left = max(0, left - pad_x)
-        top = max(0, top - pad_y)
-        right = min(img.width, right + pad_x)
-        bottom = min(img.height, bottom + pad_y)
-        img = img.crop((left, top, right, bottom))
-
-    import io
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
-def _render_imagen_posicion_corte(exp, alto=430):
-    """Muestra la imagen asociada a la posición de corte en exploraciones bolus.
-    Mantiene la altura del bloque de topogramas, pero recorta márgenes negros
-    del archivo original para que la imagen se vea más ancha y mejor alineada.
-    """
-    posicion = exp.get("posicion_corte")
-    if not posicion:
-        st.markdown(
-            f"""
-            <div style="
-                height:{alto}px;
-                border:1px solid #2E2E2E;
-                border-radius:12px;
-                background:#0A0A0A;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                color:#BFBFBF;
-                font-size:0.95rem;
-                text-align:center;
-                padding:1rem;
-                box-sizing:border-box;
-                margin-top: 2.25rem;
-            ">
-                Selecciona una posición de corte para ver la imagen de referencia.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        return
-
-    ruta = IMG_POSICION_CORTE_DIR / f"{posicion}.png"
-    if ruta.exists():
-        mime = "image/png"
-        img_b64 = _img_file_to_b64_recortada(ruta)
-        st.markdown(
-            f"""
-            <div style="
-                height:{alto}px;
-                border:1px solid #2E2E2E;
-                border-radius:12px;
-                background:#000000;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                padding:6px;
-                box-sizing:border-box;
-                overflow:hidden;
-                margin-top: 2.25rem;
-            ">
-                <img src="data:{mime};base64,{img_b64}"
-                     style="
-                        width:100%;
-                        height:100%;
-                        object-fit:contain;
-                        border-radius:10px;
-                        display:block;
-                     ">
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            f"""
-            <div style="
-                height:{alto}px;
-                border:1px solid #2E2E2E;
-                border-radius:12px;
-                background:#0A0A0A;
-                display:flex;
-                align-items:center;
-                justify-content:center;
-                color:#FFB4B4;
-                font-size:0.95rem;
-                text-align:center;
-                padding:1rem;
-                box-sizing:border-box;
-                margin-top: 2.25rem;
-            ">
-                No se encontró la imagen para: {posicion}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            _adq_pair(c3, "Umbral disparo",
+                      lambda: _text_disabled("Umbral NA", "No aplica", key=f"uth_na_{eid}"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1672,14 +1651,7 @@ def render_adquisicion():
             )
 
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
-        if es_bolus:
-            col_topos, col_imagen = st.columns([3.15, 1.65], gap="medium")
-            with col_topos:
-                _render_topogramas_adq(exp, es_bolus)
-            with col_imagen:
-                _render_imagen_posicion_corte(exp, alto=430)
-        else:
-            _render_topogramas_adq(exp, es_bolus)
+        _render_topogramas_adq(exp, es_bolus)
 
         # Filas de parámetros
         if es_bolus:
