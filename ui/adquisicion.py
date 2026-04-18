@@ -1438,11 +1438,10 @@ def _render_bolus(exp):
     with r2_icon:
         st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
     with r2_body:
-        c1, c2, c3 = st.columns(3, gap="small")
+        c1, c2 = st.columns(2, gap="small")
 
-        _adq_pair(c1, "Tipo exploración", lambda: _text_disabled("Tipo exploración", "SECUENCIAL CONTIGUO", key=f"tipo_bolus_{eid}"))
-        _adq_pair(c2, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
-        _adq_pair(c3, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
+        _adq_pair(c1, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
+        _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
