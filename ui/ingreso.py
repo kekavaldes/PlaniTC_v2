@@ -19,14 +19,9 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Imagen opcional de la columna "Datos del Paciente".
-# Si el archivo no existe, la sección simplemente no renderiza la imagen.
 IMAGEN_INGRESO_PATH = BASE_DIR / "assets" / "portada_ingreso.jpg"
 
 
-# ─── Helpers reutilizables ──────────────────────────────────────────────────
-# NOTA: selectbox_con_placeholder también existe en ui/topograma.py con la
-# misma firma. Cuando centralices utilidades en core/utils.py, puedes mover
-# esta función allí e importarla desde ambos módulos.
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
     """Selectbox con opción 'Seleccionar' al inicio; devuelve None si no hay elección."""
     opciones = ["Seleccionar"] + list(options)
@@ -38,9 +33,6 @@ def selectbox_con_placeholder(label, options, key, value=None, label_visibility=
     return None if val == "Seleccionar" else val
 
 
-# ─── Lógica clínica (cálculos puros, sin Streamlit) ─────────────────────────
-# NOTA: Estos cálculos son candidatos ideales para mover a core/clinico.py
-# cuando armes ese módulo, ya que no dependen de la UI.
 def calcular_edad(fecha_nacimiento, fecha_referencia=None):
     """Calcula edad exacta en años cumplidos. Devuelve None si no hay fecha válida."""
     try:
@@ -91,9 +83,27 @@ def calc_clearance_cockcroft_gault(edad, peso_kg, creatinina_mg_dl, sexo):
         return None
 
 
-# ─── Helpers visuales ───────────────────────────────────────────────────────
+def _safe_float(value, default=1.0):
+    """Convierte a float de forma segura; usa default si value es None o inválido."""
+    try:
+        if value in (None, ""):
+            return float(default)
+        return float(value)
+    except Exception:
+        return float(default)
+
+
+def _safe_int(value, default=70):
+    """Convierte a int de forma segura; usa default si value es None o inválido."""
+    try:
+        if value in (None, ""):
+            return int(default)
+        return int(value)
+    except Exception:
+        return int(default)
+
+
 def _panel_header(emoji: str, titulo: str):
-    """Header tipo banner oscuro, consistente con ui/topograma.py."""
     st.markdown(
         f"""
         <div style="
@@ -118,7 +128,6 @@ def _panel_header(emoji: str, titulo: str):
 
 
 def _render_clearance_result(clearance):
-    """Muestra clearance estimado con semáforo clínico (verde/amarillo/rojo)."""
     if clearance is None:
         st.info("Selecciona sexo e ingresa creatinina para calcular el clearance estimado.")
         return
@@ -149,7 +158,6 @@ def _render_clearance_result(clearance):
 
 
 def _render_imagen_ingreso():
-    """Muestra la imagen decorativa de la columna izquierda si existe en assets/."""
     if not IMAGEN_INGRESO_PATH.exists():
         return
     try:
@@ -169,16 +177,13 @@ def _render_imagen_ingreso():
         pass
 
 
-# ─── Persistencia de estado ─────────────────────────────────────────────────
 def _build_store(**kwargs):
-    """Acumula valores del formulario en st.session_state['ingreso_store']."""
     prev = st.session_state.get("ingreso_store", {})
     prev.update(kwargs)
     st.session_state["ingreso_store"] = prev
 
 
 def _init_session_state():
-    """Inicializa las llaves de session_state que este módulo necesita."""
     defaults = {
         "contraste_ev": False,
         "vvp": None,
@@ -192,15 +197,12 @@ def _init_session_state():
         st.session_state.setdefault(key, value)
 
 
-# ─── Render principal ───────────────────────────────────────────────────────
 def render_ingreso():
-    """Entrypoint del módulo: renderiza la TAB 1 (Ingreso) completa."""
     _init_session_state()
     store = st.session_state.get("ingreso_store", {})
 
     col_izq, col_der = st.columns([1, 1], gap="large")
 
-    # ── Columna izquierda: Datos del Paciente ──
     with col_izq:
         _panel_header("📋", "Datos del Paciente")
 
@@ -213,14 +215,25 @@ def render_ingreso():
 
         col_fn, col_edad = st.columns([1, 1])
         with col_fn:
+            fecha_guardada = store.get("fecha_nacimiento")
+            fecha_default = date.today()
+            try:
+                if fecha_guardada:
+                    fecha_default = date.fromisoformat(fecha_guardada)
+            except Exception:
+                fecha_default = date.today()
+
             fecha_nacimiento = st.date_input(
                 "Fecha de nacimiento",
+                value=fecha_default,
                 min_value=date(1900, 1, 1),
                 max_value=date.today(),
                 format="DD/MM/YYYY",
                 key="fecha_nacimiento",
             )
+
         edad = calcular_edad(fecha_nacimiento, date.today())
+
         with col_edad:
             st.text_input(
                 "Edad",
@@ -239,7 +252,6 @@ def render_ingreso():
 
         _render_imagen_ingreso()
 
-    # ── Columna derecha: Preparación del paciente ──
     with col_der:
         _panel_header("💉", "Preparación del paciente")
 
@@ -250,7 +262,7 @@ def render_ingreso():
                 "Peso (kg)",
                 min_value=0,
                 max_value=250,
-                value=int(store.get("peso", 70)),
+                value=_safe_int(store.get("peso", 70), 70),
                 key="peso_widget",
             )
 
@@ -285,7 +297,7 @@ def render_ingreso():
                     "Creatinina sérica (mg/dL)",
                     min_value=0.1,
                     max_value=20.0,
-                    value=float(store.get("creatinina_serica", 1.0)),
+                    value=_safe_float(store.get("creatinina_serica", 1.0), 1.0),
                     step=0.1,
                     key="creatinina_serica_widget",
                 )
@@ -331,12 +343,10 @@ def render_ingreso():
                 )
                 st.session_state["cantidad_contraste"] = cantidad_contraste
             else:
-                # Si se desmarca contraste EV, limpiamos los campos dependientes
                 st.session_state["vvp"] = None
                 st.session_state["metodo_inyeccion"] = None
                 st.session_state["cantidad_contraste"] = None
 
-    # ── Persistencia ──
     _build_store(
         nombre=nombre,
         fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
