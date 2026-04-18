@@ -3,7 +3,6 @@ ui/ingreso.py
 Módulo de Ingreso del paciente para PlaniTC_v2.
 """
 
-import base64
 from datetime import date
 from pathlib import Path
 
@@ -89,17 +88,10 @@ def _render_imagen_ingreso():
     if not IMAGEN_INGRESO_PATH.exists():
         return
     try:
-        with open(IMAGEN_INGRESO_PATH, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-        mime = "image/jpeg" if IMAGEN_INGRESO_PATH.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
-        st.markdown(
-            f"""
-            <div style="text-align:center; margin-top:1rem;">
-                <img src="data:{mime};base64,{b64}"
-                     style="max-width:55%; border-radius:10px; border:1px solid #333;">
-            </div>
-            """,
-            unsafe_allow_html=True,
+        st.image(
+            str(IMAGEN_INGRESO_PATH),
+            use_container_width=False,
+            width=380,
         )
     except Exception:
         pass
@@ -164,9 +156,11 @@ def render_ingreso():
         edad = calcular_edad(fecha_nacimiento, date.today())
 
         with col_edad:
-            st.markdown("**Edad**")
             st.markdown(
                 f"""
+                <div style="margin-bottom:0.35rem;">
+                    <label style="font-size:0.875rem; font-weight:400; color:white;">Edad</label>
+                </div>
                 <div style="
                     background-color:#111111;
                     color:white;
@@ -178,6 +172,8 @@ def render_ingreso():
                     align-items:center;
                     font-size:1.05rem;
                     font-weight:500;
+                    height:42px;
+                    box-sizing:border-box;
                 ">
                     {f"{edad} años" if edad is not None else ""}
                 </div>
