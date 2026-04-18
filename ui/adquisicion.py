@@ -1,3 +1,4 @@
+
 import streamlit as st
 
 from ui.topograma import render_topograma_panel
@@ -66,11 +67,7 @@ KV_OPCIONES = [
     "140",
 ]
 
-DOBLE_MUESTREO_OPCIONES = [
-    "SELECCIONAR",
-    "NO",
-    "SI",
-]
+DOBLE_MUESTREO_OPCIONES = ["SELECCIONAR", "NO", "SI"]
 
 CONFIG_DETECTORES = [
     "SELECCIONAR",
@@ -134,16 +131,7 @@ RETARDO_OPCIONES = [
     "30 sg",
 ]
 
-PITCH_OPCIONES = [
-    "SELECCIONAR",
-    "0,5",
-    "0,6",
-    "0,8",
-    "1",
-    "1,2",
-    "1,5",
-    "1,8",
-]
+PITCH_OPCIONES = ["SELECCIONAR", "0,5", "0,6", "0,8", "1", "1,2", "1,5", "1,8"]
 
 ROTACION_TUBO_OPCIONES = [
     "SELECCIONAR",
@@ -156,29 +144,9 @@ ROTACION_TUBO_OPCIONES = [
     "1 sg.",
 ]
 
-PERIODO_TEST_BOLUS = [
-    "SELECCIONAR",
-    "0,9 sg",
-    "1 sg",
-    "1,5 sg",
-    "2 sg",
-]
-
-N_IMAGENES_TEST_BOLUS = [
-    "SELECCIONAR",
-    "10",
-    "15",
-    "20",
-    "25",
-    "30",
-]
-
-POSICION_CORTE_TEST_BOLUS = [
-    "SELECCIONAR",
-    "BOTON AORTICO",
-    "BAJO CARINA",
-]
-
+PERIODO_TEST_BOLUS = ["SELECCIONAR", "0,9 sg", "1 sg", "1,5 sg", "2 sg"]
+N_IMAGENES_TEST_BOLUS = ["SELECCIONAR", "10", "15", "20", "25", "30"]
+POSICION_CORTE_TEST_BOLUS = ["SELECCIONAR", "BOTON AORTICO", "BAJO CARINA"]
 
 
 def _next_exp_id():
@@ -189,17 +157,10 @@ def _next_exp_id():
 
 
 def _init_adquisicion_state():
-    if "exploraciones" not in st.session_state:
-        st.session_state["exploraciones"] = []
-
-    if "exploraciones_adq" not in st.session_state:
-        st.session_state["exploraciones_adq"] = []
-
-    if "exploracion_adq_counter" not in st.session_state:
-        st.session_state["exploracion_adq_counter"] = 1
-
-    if "exp_activa" not in st.session_state:
-        st.session_state["exp_activa"] = "topograma"
+    st.session_state.setdefault("exploraciones", [])
+    st.session_state.setdefault("exploraciones_adq", [])
+    st.session_state.setdefault("exploracion_adq_counter", 1)
+    st.session_state.setdefault("exp_activa", "topograma")
 
 
 def _crear_exploracion_base():
@@ -224,6 +185,7 @@ def _crear_exploracion_base():
         "config_detectores": "SELECCIONAR",
         "conf_det": "SELECCIONAR",
         "cobertura": "",
+        "cobertura_tabla": "",
         "grosor_prospectivo": "SELECCIONAR",
         "grosor_prosp": "SELECCIONAR",
         "sfov": "SELECCIONAR",
@@ -238,6 +200,7 @@ def _crear_exploracion_base():
         "n_imagenes": "SELECCIONAR",
         "n_imagenes_bolus": "SELECCIONAR",
         "posicion_corte": "SELECCIONAR",
+        "umbral_disparo": "",
         "observaciones": "",
     }
 
@@ -272,6 +235,9 @@ def _normalizar_exploracion(exp, idx=None):
     nuevo["periodo"] = nuevo["periodo_bolus"]
     nuevo["n_imagenes_bolus"] = nuevo.get("n_imagenes", nuevo.get("n_imagenes_bolus", "SELECCIONAR"))
     nuevo["n_imagenes"] = nuevo["n_imagenes_bolus"]
+    nuevo["cobertura_tabla"] = nuevo.get("cobertura_tabla", nuevo.get("cobertura", ""))
+    nuevo["cobertura"] = nuevo["cobertura_tabla"]
+    nuevo["umbral_disparo"] = str(nuevo.get("umbral_disparo", ""))
     if idx is not None:
         nuevo["orden"] = idx + 1
     return nuevo
@@ -279,10 +245,7 @@ def _normalizar_exploracion(exp, idx=None):
 
 def _sincronizar_exploraciones_adq():
     exploraciones = st.session_state.get("exploraciones", [])
-    normalizadas = []
-    for idx, exp in enumerate(exploraciones):
-        normalizadas.append(_normalizar_exploracion(exp, idx))
-
+    normalizadas = [_normalizar_exploracion(exp, idx) for idx, exp in enumerate(exploraciones)]
     st.session_state["exploraciones"] = normalizadas
     st.session_state["exploraciones_adq"] = [
         {"id": "topograma_panel", "orden": 0, "tipo": "topograma", "nombre": "Topograma"}
@@ -291,7 +254,6 @@ def _sincronizar_exploraciones_adq():
 
 def _asegurar_exploraciones():
     if st.session_state["exploraciones"]:
-        st.session_state["exploraciones"] = [_normalizar_exploracion(exp, idx) for idx, exp in enumerate(st.session_state["exploraciones"])]
         _sincronizar_exploraciones_adq()
         return
     st.session_state["exploraciones"] = [_crear_exploracion_base()]
@@ -302,7 +264,7 @@ def _calcular_cobertura(config_detectores, doble_muestreo):
     if not config_detectores or config_detectores == "SELECCIONAR":
         return ""
 
-    texto = config_detectores.replace(" ", "").replace(",", ".")
+    texto = str(config_detectores).replace(" ", "").replace(",", ".")
     if "x" not in texto:
         return ""
 
@@ -311,20 +273,16 @@ def _calcular_cobertura(config_detectores, doble_muestreo):
         filas = float(filas_txt)
         colim = float(colim_txt)
         cobertura = filas * colim
-
         if doble_muestreo == "SI":
             cobertura *= 2
-
-        if cobertura.is_integer():
-            return f"{int(cobertura)} mm"
-        return f"{round(cobertura, 1)} mm"
+        return f"{int(cobertura)} mm" if cobertura.is_integer() else f"{round(cobertura, 1)} mm"
     except Exception:
         return ""
 
 
-def _selectbox_con_indice(label, options, actual, key):
+def _selectbox_con_indice(label, options, actual, key, disabled=False):
     index = options.index(actual) if actual in options else 0
-    return st.selectbox(label, options, index=index, key=key)
+    return st.selectbox(label, options, index=index, key=key, disabled=disabled)
 
 
 def _topograma_tiene_minimo(store):
@@ -338,9 +296,7 @@ def _topograma_tiene_minimo(store):
 
 def _nombre_visible_exploracion(exp, idx):
     nombre = exp.get("nombre", "Seleccionar")
-    if not nombre or nombre == "Seleccionar":
-        return f"EXPLORACIÓN {idx + 1}"
-    return nombre
+    return f"EXPLORACIÓN {idx + 1}" if not nombre or nombre == "Seleccionar" else nombre
 
 
 def _render_lista_exploraciones():
@@ -349,12 +305,7 @@ def _render_lista_exploraciones():
     if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
         st.session_state["exp_activa"] = "topograma"
 
-    st.markdown(
-        """
-        <div style="height:10px"></div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
     for idx, exp in enumerate(st.session_state["exploraciones"]):
         etiqueta = _nombre_visible_exploracion(exp, idx)
@@ -372,7 +323,6 @@ def _render_lista_exploraciones():
         idx = st.session_state["exp_activa"]
         if 0 <= idx < len(st.session_state["exploraciones"]):
             col1, col2 = st.columns(2, gap="small")
-
             with col1:
                 if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
                     copia = dict(st.session_state["exploraciones"][idx])
@@ -381,7 +331,6 @@ def _render_lista_exploraciones():
                     _sincronizar_exploraciones_adq()
                     st.session_state["exp_activa"] = idx + 1
                     st.rerun()
-
             with col2:
                 if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
                     if len(st.session_state["exploraciones"]) > 1:
@@ -393,7 +342,6 @@ def _render_lista_exploraciones():
 
 def _render_resumen_topograma(store):
     st.markdown("### 📡 Resumen de referencia")
-
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.info(f"**Examen**\n\n{store.get('examen') or '-'}")
@@ -415,7 +363,6 @@ def _render_resumen_topograma(store):
 
 def _ajustar_tipo_segun_nombre(exp):
     nombre = exp.get("nombre", "Seleccionar")
-
     if nombre == "BOLUS TEST":
         exp["tipo_exploracion"] = "TEST BOLUS"
     elif nombre == "BOLUS TRACKING":
@@ -428,7 +375,9 @@ def _render_parametros_adquisicion(exp, idx, store):
     titulo = _nombre_visible_exploracion(exp, idx)
     st.markdown(f"## ⚙️ {titulo}")
 
-    row_head = st.columns([2, 1], gap="medium")
+    exp = _normalizar_exploracion(exp, idx)
+
+    row_head = st.columns([1], gap="medium")
     with row_head[0]:
         exp["nombre"] = _selectbox_con_indice(
             "Nombre de la exploración",
@@ -438,14 +387,19 @@ def _render_parametros_adquisicion(exp, idx, store):
         )
 
     _ajustar_tipo_segun_nombre(exp)
+    tipo = exp.get("tipo_exploracion", "HELICOIDAL")
+    es_bolus = tipo in ["TEST BOLUS", "BOLUS TRACKING"]
 
-    with row_head[1]:
-        exp["tipo_exploracion"] = _selectbox_con_indice(
-            "Tipo exploración",
-            TIPOS_EXPLORACION,
-            exp.get("tipo_exploracion", "HELICOIDAL"),
-            key=f"tipo_exp_{idx}",
-        )
+    if es_bolus:
+        exp["mas"] = "20"
+        exp["mas_val"] = "20"
+        exp["kv"] = "100"
+        exp["kvp"] = "100"
+        exp["doble_muestreo"] = "NO"
+        exp["pitch"] = "SELECCIONAR"
+        exp["instruccion_voz"] = "SELECCIONAR"
+        exp["voz_adq"] = "SELECCIONAR"
+        exp["retardo"] = "SELECCIONAR"
 
     row1 = st.columns(4, gap="medium")
     with row1[0]:
@@ -454,38 +408,63 @@ def _render_parametros_adquisicion(exp, idx, store):
             MODULACION_CORRIENTE,
             exp.get("modulacion_corriente", "SELECCIONAR"),
             key=f"modcorr_{idx}",
+            disabled=es_bolus,
         )
+        if es_bolus:
+            exp["modulacion_corriente"] = "NO"
     with row1[1]:
-        exp["mas"] = _selectbox_con_indice(
-            "mAs",
-            MAS_OPCIONES,
-            exp.get("mas", "SELECCIONAR"),
-            key=f"mas_{idx}",
-        )
+        if es_bolus:
+            st.text_input("mAs", value="20", disabled=True, key=f"mas_bolus_fix_{idx}")
+        else:
+            exp["mas"] = _selectbox_con_indice(
+                "mAs",
+                MAS_OPCIONES,
+                exp.get("mas", "SELECCIONAR"),
+                key=f"mas_{idx}",
+            )
     with row1[2]:
-        exp["indice_ruido"] = _selectbox_con_indice(
-            "Índice de ruido",
-            INDICE_RUIDO_OPCIONES,
-            exp.get("indice_ruido", "SELECCIONAR"),
-            key=f"ruido_{idx}",
-        )
+        if es_bolus:
+            st.text_input("Índice de ruido", value="No aplica", disabled=True, key=f"ruido_na_{idx}")
+            exp["indice_ruido"] = "SELECCIONAR"
+        else:
+            exp["indice_ruido"] = _selectbox_con_indice(
+                "Índice de ruido",
+                INDICE_RUIDO_OPCIONES,
+                exp.get("indice_ruido", "SELECCIONAR"),
+                key=f"ruido_{idx}",
+            )
     with row1[3]:
-        exp["kv"] = _selectbox_con_indice(
-            "kV",
-            KV_OPCIONES,
-            exp.get("kv", "SELECCIONAR"),
-            key=f"kv_{idx}",
-        )
+        if es_bolus:
+            st.text_input("kV", value="100", disabled=True, key=f"kv_bolus_fix_{idx}")
+        else:
+            exp["kv"] = _selectbox_con_indice(
+                "kV",
+                KV_OPCIONES,
+                exp.get("kv", "SELECCIONAR"),
+                key=f"kv_{idx}",
+            )
 
     row2 = st.columns(6, gap="medium")
     with row2[0]:
-        exp["doble_muestreo"] = _selectbox_con_indice(
-            "Doble muestreo",
-            DOBLE_MUESTREO_OPCIONES,
-            exp.get("doble_muestreo", "SELECCIONAR"),
-            key=f"doble_{idx}",
+        exp["tipo_exploracion"] = _selectbox_con_indice(
+            "Tipo exploración",
+            TIPOS_EXPLORACION,
+            exp.get("tipo_exploracion", "HELICOIDAL"),
+            key=f"tipo_exp_{idx}",
+            disabled=exp.get("nombre") in ["BOLUS TEST", "BOLUS TRACKING"],
         )
     with row2[1]:
+        if exp.get("tipo_exploracion") == "HELICOIDAL" and not es_bolus:
+            exp["doble_muestreo"] = _selectbox_con_indice(
+                "Doble muestreo",
+                DOBLE_MUESTREO_OPCIONES,
+                exp.get("doble_muestreo", "SELECCIONAR"),
+                key=f"doble_{idx}",
+            )
+        else:
+            exp["doble_muestreo"] = "NO"
+            st.text_input("Doble muestreo", value="No aplica", disabled=True, key=f"doble_na_{idx}")
+    with row2[2]:
         exp["config_detectores"] = _selectbox_con_indice(
             "Configuración detección",
             CONFIG_DETECTORES,
@@ -494,56 +473,59 @@ def _render_parametros_adquisicion(exp, idx, store):
         )
 
     exp["cobertura"] = _calcular_cobertura(exp.get("config_detectores"), exp.get("doble_muestreo"))
+    exp["cobertura_tabla"] = exp["cobertura"]
 
-    with row2[2]:
-        st.text_input(
-            "Cobertura",
-            value=exp.get("cobertura", ""),
-            disabled=True,
-            key=f"cobertura_{idx}",
-        )
     with row2[3]:
+        st.text_input("Cobertura", value=exp.get("cobertura", ""), disabled=True, key=f"cobertura_{idx}")
+    with row2[4]:
         exp["grosor_prospectivo"] = _selectbox_con_indice(
             "Grosor prospectivo",
             GROSOR_PROSPECTIVO_OPCIONES,
             exp.get("grosor_prospectivo", "SELECCIONAR"),
             key=f"grosor_{idx}",
         )
-    with row2[4]:
+    with row2[5]:
         exp["sfov"] = _selectbox_con_indice(
             "SFOV",
             SFOV_OPCIONES,
             exp.get("sfov", "SELECCIONAR"),
             key=f"sfov_{idx}",
         )
-    with row2[5]:
-        st.info(store.get("examen") or "-")
 
-    tipo = exp.get("tipo_exploracion")
-
-    if tipo in ["TEST BOLUS", "BOLUS TRACKING"]:
-        row3 = st.columns(3, gap="medium")
-        with row3[0]:
+    if es_bolus:
+        cols = st.columns(4, gap="medium")
+        with cols[0]:
             exp["periodo"] = _selectbox_con_indice(
                 "Periodo",
                 PERIODO_TEST_BOLUS,
-                exp.get("periodo", "SELECCIONAR"),
+                exp.get("periodo", exp.get("periodo_bolus", "SELECCIONAR")),
                 key=f"periodo_{idx}",
             )
-        with row3[1]:
+        with cols[1]:
             exp["n_imagenes"] = _selectbox_con_indice(
                 "N° de imágenes",
                 N_IMAGENES_TEST_BOLUS,
-                exp.get("n_imagenes", "SELECCIONAR"),
+                exp.get("n_imagenes", exp.get("n_imagenes_bolus", "SELECCIONAR")),
                 key=f"nimg_{idx}",
             )
-        with row3[2]:
+        with cols[2]:
             exp["posicion_corte"] = _selectbox_con_indice(
                 "Posición de corte",
                 POSICION_CORTE_TEST_BOLUS,
                 exp.get("posicion_corte", "SELECCIONAR"),
                 key=f"poscorte_{idx}",
             )
+        with cols[3]:
+            if tipo == "BOLUS TRACKING":
+                exp["umbral_disparo"] = st.text_input(
+                    "Umbral de disparo (UH)",
+                    value=str(exp.get("umbral_disparo", "")),
+                    key=f"umbral_{idx}",
+                )
+            else:
+                st.text_input("Umbral de disparo (UH)", value="No aplica", disabled=True, key=f"umbral_na_{idx}")
+                exp["umbral_disparo"] = ""
+        st.info("En Test bolus y Bolus tracking, kV y mAs quedan fijos en 100 y 20 respectivamente.")
     else:
         row3 = st.columns(4, gap="medium")
         with row3[0]:
@@ -561,12 +543,16 @@ def _render_parametros_adquisicion(exp, idx, store):
                 key=f"retardo_{idx}",
             )
         with row3[2]:
-            exp["pitch"] = _selectbox_con_indice(
-                "Pitch",
-                PITCH_OPCIONES,
-                exp.get("pitch", "SELECCIONAR"),
-                key=f"pitch_{idx}",
-            )
+            if exp.get("tipo_exploracion") == "HELICOIDAL":
+                exp["pitch"] = _selectbox_con_indice(
+                    "Pitch",
+                    PITCH_OPCIONES,
+                    exp.get("pitch", "SELECCIONAR"),
+                    key=f"pitch_{idx}",
+                )
+            else:
+                exp["pitch"] = "SELECCIONAR"
+                st.text_input("Pitch", value="No aplica", disabled=True, key=f"pitch_na_{idx}")
         with row3[3]:
             exp["rotacion_tubo"] = _selectbox_con_indice(
                 "TPO ROTACION TUBO",
@@ -584,19 +570,40 @@ def _render_parametros_adquisicion(exp, idx, store):
 
     exp = _normalizar_exploracion(exp, idx)
     st.session_state["exploraciones"][idx] = exp
+    _sincronizar_exploraciones_adq()
 
     mensajes = []
+    tipo = exp.get("tipo_exploracion")
 
     if exp.get("nombre") == "Seleccionar":
         mensajes.append("⚠️ Falta seleccionar el nombre de la exploración.")
-    if exp.get("kv") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta seleccionar kV.")
     if exp.get("config_detectores") == "SELECCIONAR":
         mensajes.append("⚠️ Falta seleccionar configuración de detectores.")
-    if tipo not in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("instruccion_voz") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta definir la instrucción de voz.")
-    if tipo in ["TEST BOLUS", "BOLUS TRACKING"] and exp.get("posicion_corte") == "SELECCIONAR":
-        mensajes.append("⚠️ Falta definir la posición de corte.")
+    if exp.get("grosor_prospectivo") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta seleccionar grosor prospectivo.")
+    if exp.get("sfov") == "SELECCIONAR":
+        mensajes.append("⚠️ Falta seleccionar SFOV.")
+
+    if tipo in ["TEST BOLUS", "BOLUS TRACKING"]:
+        if exp.get("periodo") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir el periodo.")
+        if exp.get("n_imagenes") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir el número de imágenes.")
+        if exp.get("posicion_corte") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir la posición de corte.")
+        if tipo == "BOLUS TRACKING" and not str(exp.get("umbral_disparo", "")).strip():
+            mensajes.append("⚠️ Falta definir el umbral de disparo.")
+    else:
+        if exp.get("kv") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta seleccionar kV.")
+        if exp.get("instruccion_voz") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir la instrucción de voz.")
+        if exp.get("retardo") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir el retardo.")
+        if exp.get("rotacion_tubo") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir el tiempo de rotación del tubo.")
+        if exp.get("tipo_exploracion") == "HELICOIDAL" and exp.get("pitch") == "SELECCIONAR":
+            mensajes.append("⚠️ Falta definir el pitch.")
 
     if mensajes:
         for msg in mensajes:
@@ -615,18 +622,15 @@ def render_adquisicion():
     _sincronizar_exploraciones_adq()
 
     col_sidebar, col_main = st.columns([1.05, 4.8], gap="large")
-
     with col_sidebar:
         _render_lista_exploraciones()
 
     with col_main:
         activa = st.session_state.get("exp_activa", "topograma")
-
         if activa == "topograma":
             render_topograma_panel()
         else:
             store = st.session_state.get("topograma_store", {})
-
             if not _topograma_tiene_minimo(store):
                 st.warning("Primero debes completar al menos el Topograma 1.")
                 render_topograma_panel()
@@ -641,4 +645,3 @@ def render_adquisicion():
 
             exp = exploraciones[activa]
             _render_parametros_adquisicion(exp, activa, store)
-            _sincronizar_exploraciones_adq()
