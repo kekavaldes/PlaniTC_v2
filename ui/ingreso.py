@@ -120,7 +120,7 @@ def _init_session_state():
 
 
 def _ir_a_inyectora():
-    st.session_state["pending_tab"] = "💉  Inyectora"
+    st.session_state["current_tab"] = "💉  Inyectora"
     st.rerun()
 
 
@@ -330,7 +330,6 @@ def render_ingreso():
                             "Parámetros de Inyectora",
                             key="btn_ir_inyectora",
                             use_container_width=True,
-                            type="primary",
                         ):
                             _ir_a_inyectora()
             else:
