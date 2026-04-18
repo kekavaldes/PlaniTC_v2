@@ -9,6 +9,32 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 
+# =========================
+# GRUPOS DE TOPOGRAMA
+# =========================
+def _init_grupos_topograma():
+    if "grupos_topograma" not in st.session_state:
+        st.session_state["grupos_topograma"] = []
+
+    if "grupo_topograma_activo" not in st.session_state:
+        st.session_state["grupo_topograma_activo"] = 0
+
+    if len(st.session_state["grupos_topograma"]) == 0:
+        st.session_state["grupos_topograma"].append({
+            "nombre": "Grupo 1",
+            "data": st.session_state.get("topograma_store", {}).copy()
+        })
+
+
+def _guardar_en_grupo_actual():
+    idx = st.session_state["grupo_topograma_activo"]
+    st.session_state["grupos_topograma"][idx]["data"] = st.session_state.get("topograma_store", {}).copy()
+
+
+def _cargar_grupo(idx):
+    grupo = st.session_state["grupos_topograma"][idx]
+    st.session_state["topograma_store"] = grupo["data"].copy()
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 ZIP_PATH = BASE_DIR / "data/images/IMAGENES TOPOGRAMA.zip"
 EXCEL_PATH = BASE_DIR / "data/excel/imagenes_topograma.xlsx"
