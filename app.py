@@ -2,6 +2,7 @@ import streamlit as st
 
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
+from ui.reconstruccion import render_reconstruccion
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
