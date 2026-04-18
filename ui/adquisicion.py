@@ -936,9 +936,12 @@ def _new_id() -> str:
     return f"exp_{uuid.uuid4().hex[:8]}"
 
 
-def _crear_exploracion_base():
+def _crear_exploracion_base(topo_set_idx=None):
+    if topo_set_idx is None:
+        topo_set_idx = st.session_state.get("topograma_set_activo", 0)
     return {
         "id": _new_id(),
+        "topo_set_idx": topo_set_idx,
         "nombre": None,
         "tipo_exp": None,
         "mod_corriente": "MANUAL",
@@ -976,9 +979,24 @@ def _init_state():
         st.session_state["exploraciones"] = [_crear_exploracion_base()]
 
 
-def _region_grupo():
-    """Determina el grupo anatómico para REFS_INICIO/REFS_FIN a partir del topograma."""
-    store = st.session_state.get("topograma_store", {})
+def _get_set_exp(exp) -> dict:
+    """Devuelve el dict del set de topograma asociado a una exploración.
+    Fallback: topograma_store legado."""
+    sets = st.session_state.get("topograma_sets")
+    if sets:
+        idx = exp.get("topo_set_idx", 0) if exp else 0
+        if 0 <= idx < len(sets):
+            return sets[idx]
+    return st.session_state.get("topograma_store", {}) or {}
+
+
+def _region_grupo(exp=None):
+    """Determina el grupo anatómico para REFS_INICIO/REFS_FIN a partir del
+    topograma de la exploración. Si no se pasa exp, cae al store legado."""
+    if exp is not None:
+        store = _get_set_exp(exp)
+    else:
+        store = st.session_state.get("topograma_store", {}) or {}
     region = (store.get("region_anat") or store.get("region") or st.session_state.get("region_anat", "") or "").upper()
     examen = (store.get("examen") or st.session_state.get("examen", "") or "").upper()
     if "ANGIO" in region or examen.startswith("ATC"):
@@ -1010,17 +1028,66 @@ def _name_visible(exp, idx):
 
 def _render_sidebar():
     st.markdown("### 📋 Exploraciones")
-    if st.button("📡 Topograma", key="btn_topograma_sidebar", use_container_width=True):
+
+    # Asegurar que exista al menos un set (defensivo: la pestaña Topograma
+    # normalmente ya lo creó)
+    sets = st.session_state.setdefault("topograma_sets", [])
+    if not sets:
+        sets.append({
+            "label": "Topograma 1",
+            "topograma_iniciado": False,
+            "topograma2_iniciado": False,
+        })
+        st.session_state.setdefault("topograma_set_activo", 0)
+
+    for i, s in enumerate(sets):
+        lbl = s.get("label") or f"Topograma {i+1}"
+        reg = s.get("region_anat") or "sin región"
+
+        # Header del set
+        st.markdown(
+            f"<div style='margin-top:10px;margin-bottom:4px;padding:8px 10px;"
+            f"background:#1a1a1a;border:1px solid #333;border-radius:8px;"
+            f"font-weight:600;font-size:0.92rem;'>"
+            f"📡 {lbl}<br>"
+            f"<span style='font-size:0.78rem;opacity:0.75;font-weight:400;'>{reg}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button("Ver topograma", key=f"btn_topograma_sidebar_{i}", use_container_width=True):
+            st.session_state["topograma_set_activo"] = i
+            st.session_state["exp_activa"] = "topograma"
+            st.rerun()
+
+        # Exploraciones asociadas a este set
+        for idx_exp, exp in enumerate(st.session_state["exploraciones"]):
+            if exp.get("topo_set_idx", 0) != i:
+                continue
+            if st.button(
+                f"⚡ {_name_visible(exp, idx_exp)}",
+                key=f"btn_sidebar_exp_{exp['id']}",
+                use_container_width=True,
+            ):
+                st.session_state["exp_activa"] = idx_exp
+
+        if st.button("➕ Exploración", key=f"btn_add_exp_s{i}", use_container_width=True):
+            st.session_state["exploraciones"].append(_crear_exploracion_base(topo_set_idx=i))
+            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+            st.rerun()
+
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    if st.button("➕ Nuevo topograma", key="btn_add_set_sidebar", use_container_width=True):
+        sets.append({
+            "label": f"Topograma {len(sets) + 1}",
+            "topograma_iniciado": False,
+            "topograma2_iniciado": False,
+        })
+        st.session_state["topograma_set_activo"] = len(sets) - 1
         st.session_state["exp_activa"] = "topograma"
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    for idx, exp in enumerate(st.session_state["exploraciones"]):
-        if st.button(f"⚡ {_name_visible(exp, idx)}", key=f"btn_sidebar_exp_{exp['id']}", use_container_width=True):
-            st.session_state["exp_activa"] = idx
-    st.markdown(" ")
-    if st.button("➕ Agregar exploración", key="btn_agregar_exploracion", use_container_width=True):
-        st.session_state["exploraciones"].append(_crear_exploracion_base())
-        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
         st.rerun()
+
+    # Duplicar / eliminar la exploración activa
     if isinstance(st.session_state.get("exp_activa"), int):
         idx = st.session_state["exp_activa"]
         if 0 <= idx < len(st.session_state["exploraciones"]):
@@ -1063,11 +1130,12 @@ def obtener_imagen_posicion_corte(nombre_posicion):
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
 def _render_topogramas_adq(exp, es_bolus):
-    """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus)."""
-    tstore = st.session_state.get("topograma_store", {}) or {}
-    hay_topo1 = bool(st.session_state.get("topograma_iniciado", False))
+    """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
+    Lee del set de topograma asociado a la exploración."""
+    tstore = _get_set_exp(exp)
+    hay_topo1 = bool(tstore.get("topograma_iniciado", False))
     hay_topo2 = bool(
-        tstore.get("aplica_topo2") and st.session_state.get("topograma2_iniciado", False)
+        tstore.get("aplica_topo2") and tstore.get("topograma2_iniciado", False)
     )
 
     topos = []
@@ -1111,7 +1179,7 @@ def _render_topogramas_adq(exp, es_bolus):
         return
 
     # Enriquecer con inicio/fin para posicionar la caja
-    grupo = _region_grupo()
+    grupo = _region_grupo(exp)
     refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
     refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
     ini_ref = exp.get("inicio_ref") or refs_ini[0]
@@ -1235,7 +1303,7 @@ def _render_topogramas_adq(exp, es_bolus):
 def _render_normales(exp):
     """Filas 1-4 para exploraciones que no son BOLUS."""
     eid = exp["id"]
-    grupo = _region_grupo()
+    grupo = _region_grupo(exp)
     refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
     refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
 
@@ -1629,6 +1697,34 @@ def render_adquisicion():
             return
 
         exp = st.session_state["exploraciones"][idx]
+
+        # ── Selector de topograma de referencia (solo si hay >1 set) ──
+        sets = st.session_state.get("topograma_sets", [])
+        if len(sets) > 1:
+            opciones = list(range(len(sets)))
+
+            def _fmt_set(i):
+                s = sets[i]
+                lbl = s.get("label") or f"Topograma {i+1}"
+                reg = s.get("region_anat") or "sin región"
+                return f"{lbl} — {reg}"
+
+            cur = exp.get("topo_set_idx", 0)
+            if cur not in opciones:
+                cur = 0
+            nuevo_set = st.selectbox(
+                "Topograma de referencia",
+                opciones,
+                index=opciones.index(cur),
+                format_func=_fmt_set,
+                key=f"toposet_{exp['id']}",
+            )
+            if nuevo_set != exp.get("topo_set_idx"):
+                exp["topo_set_idx"] = nuevo_set
+                # Las refs anatómicas del otro set pueden ser distintas: reset
+                exp["inicio_ref"] = None
+                exp["fin_ref"] = None
+                st.rerun()
 
         # Nombre de la exploración (arriba, ancho completo)
         nombre_prev = exp.get("nombre")
