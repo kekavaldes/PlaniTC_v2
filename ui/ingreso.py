@@ -88,11 +88,12 @@ def _render_imagen_ingreso():
     if not IMAGEN_INGRESO_PATH.exists():
         return
     try:
-        st.image(
-            str(IMAGEN_INGRESO_PATH),
-            use_container_width=False,
-            width=380,
-        )
+        col_esp_izq, col_img, col_esp_der = st.columns([1, 2, 1])
+        with col_img:
+            st.image(
+                str(IMAGEN_INGRESO_PATH),
+                use_container_width=True,
+            )
     except Exception:
         pass
 
