@@ -989,8 +989,19 @@ def _ajustar_por_nombre(exp):
     nombre = exp.get("nombre")
     if nombre in ("BOLUS TEST", "BOLUS TRACKING"):
         exp["tipo_exp"] = "SECUENCIAL CONTIGUO"
+        exp["mod_corriente"] = "MANUAL"
         exp["mas_val"] = 20
         exp["kvp"] = 100
+        exp["ind_ruido"] = None
+        exp["ind_cal"] = None
+        exp["rango_ma"] = None
+        exp["doble_muestreo"] = "NO"
+        exp["conf_det"] = None
+        exp["cobertura_tabla"] = "—"
+        exp["grosor_prosp"] = None
+        exp["sfov"] = None
+        exp["pitch"] = None
+        exp["rot_tubo"] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1361,46 +1372,33 @@ def _render_normales(exp):
 
 
 def _render_bolus(exp):
-    """Filas específicas para BOLUS TEST / BOLUS TRACKING.
-    Nota: 'Posición de corte' se renderiza arriba, antes de los topogramas,
-    directamente en render_adquisicion().
+    """Parámetros específicos para BOLUS TEST / BOLUS TRACKING.
+    Según el PlaniTC original, estas exploraciones no usan el mismo bloque
+    de parámetros que las demás adquisiciones.
     """
     eid = exp["id"]
 
-    # FILA 1: modulación / mAs fijo / índice ruido / kV fijo
+    # Mantener configuración fija propia de bolus
+    exp["tipo_exp"] = "SECUENCIAL CONTIGUO"
+    exp["mod_corriente"] = "MANUAL"
+    exp["mas_val"] = 20
+    exp["kvp"] = 100
+    exp["ind_ruido"] = None
+    exp["ind_cal"] = None
+    exp["rango_ma"] = None
+    exp["doble_muestreo"] = "NO"
+    exp["conf_det"] = None
+    exp["cobertura_tabla"] = "—"
+    exp["grosor_prosp"] = None
+    exp["sfov"] = None
+    exp["pitch"] = None
+    exp["rot_tubo"] = None
+
+    # FILA 1: parámetros propios del bolus
     r1_icon, r1_body = st.columns([0.12, 1], gap="small")
     with r1_icon:
-        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>☢️</div>", unsafe_allow_html=True)
-    with r1_body:
-        c1, c2, c3, c4 = st.columns(4, gap="small")
-
-        def _render_mod():
-            exp["mod_corriente"] = selectbox_con_placeholder(
-                "Modulación corriente", MODULACION_CORRIENTE,
-                value=exp.get("mod_corriente", "MANUAL"),
-                key=f"mod_bolus_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(c1, "Modulación corriente", _render_mod)
-
-        exp["mas_val"] = 20
-        exp["kvp"] = 100
-        _adq_pair(c2, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
-
-        def _render_indruido_bolus():
-            exp["ind_ruido"] = selectbox_con_placeholder(
-                "Índice de ruido", INDICE_RUIDO,
-                value=exp.get("ind_ruido"),
-                key=f"indruido_bolus_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(c3, "Índice ruido", _render_indruido_bolus)
-
-        _adq_pair(c4, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
-
-    # FILA 2: periodo / N° imágenes / umbral (si tracking)
-    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
-    with r2_icon:
         st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>🎯</div>", unsafe_allow_html=True)
-    with r2_body:
+    with r1_body:
         c1, c2, c3 = st.columns(3, gap="small")
 
         def _render_periodo():
@@ -1428,8 +1426,23 @@ def _render_bolus(exp):
                 )
             _adq_pair(c3, "Umbral disparo", _render_umbral)
         else:
-            _adq_pair(c3, "Umbral disparo",
-                      lambda: _text_disabled("Umbral NA", "No aplica", key=f"uth_na_{eid}"))
+            exp["umbral_tracking"] = None
+            _adq_pair(
+                c3,
+                "Umbral disparo",
+                lambda: _text_disabled("Umbral NA", "No aplica", key=f"uth_na_{eid}")
+            )
+
+    # FILA 2: configuración fija de bolus
+    r2_icon, r2_body = st.columns([0.12, 1], gap="small")
+    with r2_icon:
+        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
+    with r2_body:
+        c1, c2, c3 = st.columns(3, gap="small")
+
+        _adq_pair(c1, "Tipo exploración", lambda: _text_disabled("Tipo exploración", "SECUENCIAL CONTIGUO", key=f"tipo_bolus_{eid}"))
+        _adq_pair(c2, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
+        _adq_pair(c3, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
