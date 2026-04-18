@@ -1,5 +1,7 @@
 import streamlit as st
 
+from ui.ingreso import render_ingreso
+from ui.topograma import render_topograma_panel
 from ui.adquisicion import render_adquisicion
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
@@ -131,23 +133,24 @@ def aplicar_css_global():
             border-radius: 10px;
         }
 
-        /* Header de Streamlit transparente pero SIN ocultar (para que no se corten las pestañas arriba) */
+        /* Header transparente */
         .stApp > header,
         [data-testid="stHeader"] {
             background: transparent !important;
         }
 
-        /* Dar respiro arriba para que las pestañas no queden pegadas al borde */
+        /* Espacio arriba */
         .block-container {
             padding-top: 3.5rem !important;
         }
 
-        /* Pestañas: más espaciadas, con mejor estilo */
+        /* Tabs */
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.5rem;
             background: transparent;
             border-bottom: 1px solid #2A2A2A;
         }
+
         .stTabs [data-baseweb="tab"] {
             background: transparent !important;
             color: #BFBFBF !important;
@@ -156,18 +159,22 @@ def aplicar_css_global():
             font-size: 1rem !important;
             border-radius: 8px 8px 0 0;
         }
+
         .stTabs [data-baseweb="tab"]:hover {
             background: #1A1A1A !important;
             color: #FFFFFF !important;
         }
+
         .stTabs [aria-selected="true"] {
             color: #FFFFFF !important;
             font-weight: 600 !important;
         }
 
-        /* Ocultar íconos de anchor (🔗) que Streamlit pone al lado de headers */
+        /* Ocultar anchors */
         .stApp a.anchor-link,
-        [data-testid="stHeaderActionElements"] { display: none !important; }
+        [data-testid="stHeaderActionElements"] {
+            display: none !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -180,6 +187,7 @@ def main():
     tabs = st.tabs([
         "🏠  Inicio",
         "📋  Ingreso",
+        "🖼️  Topograma",
         "⚡  Adquisición",
         "🧩  Reconstrucción",
         "💉  Inyectora",
@@ -190,17 +198,19 @@ def main():
         st.info("Pendiente de modularizar")
 
     with tabs[1]:
-        st.subheader("Ingreso")
-        st.info("Pendiente de modularizar")
+        render_ingreso()
 
     with tabs[2]:
-        render_adquisicion()
+        render_topograma_panel()
 
     with tabs[3]:
+        render_adquisicion()
+
+    with tabs[4]:
         st.subheader("Reconstrucción")
         st.info("Pendiente de modularizar")
 
-    with tabs[4]:
+    with tabs[5]:
         st.subheader("Inyectora")
         st.info("Pendiente de modularizar")
 
