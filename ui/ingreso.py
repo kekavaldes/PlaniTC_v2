@@ -120,8 +120,7 @@ def _init_session_state():
 
 
 def _ir_a_inyectora():
-    st.session_state["current_tab"] = "💉  Inyectora"
-    st.session_state["main_navigation_radio"] = "💉  Inyectora"
+    st.session_state["pending_tab"] = "💉  Inyectora"
     st.rerun()
 
 
