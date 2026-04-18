@@ -3,6 +3,7 @@ import streamlit as st
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
 from ui.reconstruccion import render_reconstruccion
+from ui.inyectora import render_inyectora
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
@@ -206,8 +207,7 @@ def main():
         render_reconstruccion()
 
     with tabs[4]:
-        st.subheader("Inyectora")
-        st.info("Pendiente de modularizar")
+        render_inyectora()
 
 
 if __name__ == "__main__":
