@@ -20,7 +20,6 @@ def aplicar_css_global():
     st.markdown(
         """
         <style>
-        /* Fondo general */
         .stApp {
             background-color: #0e1117 !important;
             color: white !important;
@@ -30,7 +29,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Títulos y textos */
         h1, h2, h3, h4, h5, h6, p, label, span, div {
             color: white !important;
         }
@@ -43,7 +41,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Select cerrado */
         div[data-baseweb="select"] > div {
             background-color: #111111 !important;
             color: white !important;
@@ -55,7 +52,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Inputs */
         .stTextInput input,
         .stNumberInput input,
         .stDateInput input,
@@ -69,7 +65,6 @@ def aplicar_css_global():
             -webkit-text-fill-color: white !important;
         }
 
-        /* Popover / portal del dropdown */
         div[data-baseweb="popover"] {
             background-color: #111111 !important;
             color: white !important;
@@ -79,7 +74,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Lista de opciones */
         ul[role="listbox"] {
             background-color: #111111 !important;
             border: 1px solid #444 !important;
@@ -113,7 +107,6 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Botones */
         .stButton button {
             background-color: #1c1f26 !important;
             color: white !important;
@@ -126,27 +119,23 @@ def aplicar_css_global():
             color: white !important;
         }
 
-        /* Checkbox */
         .stCheckbox label {
             color: white !important;
         }
 
-        /* Alertas */
         .stAlert {
             border-radius: 10px;
         }
 
-        /* Header de Streamlit transparente */
         .stApp > header,
         [data-testid="stHeader"] {
             background: transparent !important;
         }
 
         .block-container {
-            padding-top: 3.0rem !important;
+            padding-top: 3rem !important;
         }
 
-        /* Navegación superior */
         div[role="radiogroup"] {
             display: flex !important;
             gap: 0.5rem;
@@ -168,7 +157,6 @@ def aplicar_css_global():
             border-color: #444 !important;
         }
 
-        /* Ocultar anchors */
         .stApp a.anchor-link,
         [data-testid="stHeaderActionElements"] {
             display: none !important;
@@ -183,20 +171,26 @@ def init_navigation():
     if "current_tab" not in st.session_state:
         st.session_state["current_tab"] = "🏠  Inicio"
 
+    if "main_navigation_radio" not in st.session_state:
+        st.session_state["main_navigation_radio"] = st.session_state["current_tab"]
+
+
+def sync_tab_from_radio():
+    st.session_state["current_tab"] = st.session_state["main_navigation_radio"]
+
 
 def render_top_navigation():
-    current_tab = st.session_state.get("current_tab", "🏠  Inicio")
+    # mantener siempre sincronizados ambos estados antes de dibujar
+    st.session_state["main_navigation_radio"] = st.session_state["current_tab"]
 
-    selected_tab = st.radio(
+    st.radio(
         "Navegación",
         TAB_OPTIONS,
-        index=TAB_OPTIONS.index(current_tab) if current_tab in TAB_OPTIONS else 0,
-        horizontal=True,
         key="main_navigation_radio",
+        horizontal=True,
         label_visibility="collapsed",
+        on_change=sync_tab_from_radio,
     )
-
-    st.session_state["current_tab"] = selected_tab
 
 
 def main():
