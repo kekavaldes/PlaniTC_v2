@@ -534,6 +534,33 @@ def _placeholder_topograma(proyeccion: str = "AP", tubo: str = "", alto_px: int 
 
 
 def render_topograma_panel():
+_init_grupos_topograma()
+
+nombres = [g["nombre"] for g in st.session_state["grupos_topograma"]]
+
+col_sel, col_btn = st.columns([2,1])
+
+with col_sel:
+    idx = st.selectbox(
+        "Grupo de topogramas",
+        range(len(nombres)),
+        format_func=lambda i: nombres[i],
+        key="selector_grupo_topo"
+    )
+
+with col_btn:
+    if st.button("➕ Nuevo grupo"):
+        nuevo_idx = len(st.session_state["grupos_topograma"]) + 1
+        st.session_state["grupos_topograma"].append({
+            "nombre": f"Grupo {nuevo_idx}",
+            "data": {}
+        })
+        st.session_state["grupo_topograma_activo"] = len(st.session_state["grupos_topograma"]) - 1
+        st.rerun()
+
+if idx != st.session_state["grupo_topograma_activo"]:
+    st.session_state["grupo_topograma_activo"] = idx
+    _cargar_grupo(idx)
     store = st.session_state.get("topograma_store", {})
 
     col1, col2, col3 = st.columns([1, 1, 1], gap="large")
@@ -598,6 +625,8 @@ def render_topograma_panel():
                 _placeholder_topograma(proyeccion="AP", tubo=tubo or "", alto_px=420)
         else:
             _placeholder_topograma(proyeccion="AP", tubo=tubo or "", alto_px=420)
+            
+    _guardar_en_grupo_actual()
 
     st.markdown("---")
     st.markdown("### 📡 Topograma 1")
