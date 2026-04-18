@@ -27,10 +27,14 @@ import json
 import math
 import uuid
 import base64
+from pathlib import Path
 
 import streamlit as st
 
 from ui.topograma import obtener_imagen_topograma_adquirido, render_topograma_panel
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+IMG_POSICION_CORTE_DIR = BASE_DIR / "data" / "images" / "posicion_corte_bolus"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1444,6 +1448,20 @@ def _render_bolus(exp):
         _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
 
 
+def _render_imagen_posicion_corte(exp):
+    """Muestra la imagen asociada a la posición de corte en exploraciones bolus."""
+    posicion = exp.get("posicion_corte")
+    if not posicion:
+        st.info("Selecciona una posición de corte para ver la imagen de referencia.")
+        return
+
+    ruta = IMG_POSICION_CORTE_DIR / f"{posicion}.png"
+    if ruta.exists():
+        st.image(str(ruta), use_container_width=True)
+    else:
+        st.warning(f"No se encontró la imagen para: {posicion}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # RESUMEN CALCULADO: CTDI, duración, ruido, cobertura
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1550,7 +1568,14 @@ def render_adquisicion():
             )
 
         # Topogramas con DFOV (sustituye el "Resumen de referencia")
-        _render_topogramas_adq(exp, es_bolus)
+        if es_bolus:
+            col_topos, col_imagen = st.columns([3.6, 1.15], gap="medium")
+            with col_topos:
+                _render_topogramas_adq(exp, es_bolus)
+            with col_imagen:
+                _render_imagen_posicion_corte(exp)
+        else:
+            _render_topogramas_adq(exp, es_bolus)
 
         # Filas de parámetros
         if es_bolus:
