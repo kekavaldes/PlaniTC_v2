@@ -6,7 +6,7 @@ Cubre la TAB 4 del simulador:
 - Número de fases de inyección (1 a 6)
 - Configuración por fase: solución (MC / SF / PAUSA), volumen, caudal, duración
 - Visualización SVG de ambas jeringas (A = Medio de Contraste, B = Suero Fisiológico)
-- Resumen del protocolo: volúmenes totales, duración total
+- Resumen lateral del protocolo: volúmenes totales, duración total
 - Validaciones: capacidad de jeringas y calibre VVP vs caudal
 - Diagrama de fases de colores
 
@@ -17,15 +17,12 @@ import streamlit as st
 
 
 # ─── Constantes del módulo ──────────────────────────────────────────────────
-# NOTA: cuando centralices constantes en constants.py, mueve estas tres allí
-# y haz `from constants import MAX_JERINGA, CAUDAL_OPCIONES, VVP_GAUGE`.
 MAX_JERINGA = 180  # mL fijos para ambas jeringas (MC y SF)
 CAUDAL_OPCIONES = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0]
 VVP_GAUGE = [18, 20, 22, 24]
 
 
 # ─── Helpers reutilizables ──────────────────────────────────────────────────
-# NOTA: también existe en ui/ingreso.py y ui/topograma.py. Candidato a core/utils.py.
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
     """Selectbox con opción 'Seleccionar' al inicio; devuelve None si no hay elección."""
     opciones = ["Seleccionar"] + list(options)
@@ -56,6 +53,31 @@ def _panel_header(emoji: str, titulo: str):
         ">
             <span style="font-size:1.15rem;">{emoji}</span>
             <span>{titulo}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _info_card(title: str, value: str, subtitle: str = ""):
+    st.markdown(
+        f"""
+        <div style="
+            background:#1A1A1A;
+            border:1px solid #2E2E2E;
+            border-radius:12px;
+            padding:0.9rem 1rem;
+            min-height:92px;
+        ">
+            <div style="font-size:0.86rem; font-weight:700; color:#C9D1D9; margin-bottom:0.35rem;">
+                {title}
+            </div>
+            <div style="font-size:1.35rem; font-weight:800; color:#F3F4F6; line-height:1.1;">
+                {value}
+            </div>
+            <div style="font-size:0.78rem; color:#AEB6BE; margin-top:0.35rem;">
+                {subtitle}
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -184,181 +206,192 @@ def render_inyectora():
     n_fases_default = int(st.session_state.get("n_fases_iny", 2))
     fases_data = []
 
-    top_left, top_right = st.columns([1.05, 1.35], gap="large")
-
-    # ── Columna derecha: Configuración de fases ──
-    with top_right:
-        _panel_header("💉", "Fases de inyección")
-
-        n_fases = st.number_input(
-            "Número de fases",
-            min_value=1,
-            max_value=6,
-            value=n_fases_default,
-            key="n_fases_iny",
-        )
-
-        for i in range(int(n_fases)):
-            with st.expander(f"Fase {i+1}", expanded=(i == 0)):
-                sol = selectbox_con_placeholder(
-                    "Solución",
-                    ["MC", "SF", "PAUSA"],
-                    key=f"sol_{i}",
-                    value=st.session_state.get(f"sol_{i}"),
-                )
-
-                if sol == "PAUSA":
-                    duracion_fase = st.number_input(
-                        "Duración (sg)",
-                        min_value=2,
-                        max_value=30,
-                        value=int(st.session_state.get(f"dur_pause_{i}", 10)),
-                        step=1,
-                        key=f"dur_pause_{i}",
-                    )
-                    vol = 0
-                    caud = 0
-                elif sol is None:
-                    # Fase sin solución seleccionada: no contribuye a totales
-                    duracion_fase = 0
-                    vol = 0
-                    caud = 0
-                else:
-                    col_vol, col_caud = st.columns(2)
-                    with col_vol:
-                        vol = selectbox_con_placeholder(
-                            "Volumen (mL)",
-                            list(range(0, 185, 5)),
-                            key=f"vol_{i}",
-                            value=st.session_state.get(f"vol_{i}_val", 50),
-                        )
-                    with col_caud:
-                        caud = selectbox_con_placeholder(
-                            "Caudal (mL/sg)",
-                            CAUDAL_OPCIONES,
-                            key=f"caud_{i}",
-                            value=st.session_state.get(f"caud_{i}_val", CAUDAL_OPCIONES[5]),
-                        )
-
-                    # Normalizar a numéricos para el cálculo
-                    vol_num = vol if vol is not None else 0
-                    caud_num = caud if caud is not None else 0
-                    duracion_fase = round(vol_num / caud_num, 1) if caud_num and caud_num > 0 else 0
-                    vol = vol_num
-                    caud = caud_num
-
-                st.caption(f"Duración: {duracion_fase} sg")
-                fases_data.append({
-                    "solucion": sol,
-                    "volumen": vol,
-                    "caudal": caud,
-                    "duracion": duracion_fase,
-                })
-
-    # ── Cálculos agregados ──
-    vol_total_mc = sum(f["volumen"] for f in fases_data if f["solucion"] == "MC")
-    vol_total_sf = sum(f["volumen"] for f in fases_data if f["solucion"] == "SF")
-    dur_total = sum(f["duracion"] for f in fases_data)
-
     # VVP actual (si ya estaba seleccionado en esta tab o viene de Ingreso)
     vvp_default = st.session_state.get("vvp_gauge_widget", VVP_GAUGE[1])
     vvp_gauge = vvp_default if vvp_default in VVP_GAUGE else VVP_GAUGE[1]
 
+    # Layout principal
+    left_col, right_col = st.columns([1.25, 1.75], gap="large")
+
+    # ── Columna derecha: configuración + resumen lateral ──
+    with right_col:
+        cfg_col, resumen_col = st.columns([0.82, 1.18], gap="medium")
+
+        with cfg_col:
+            _panel_header("💉", "Fases de inyección")
+
+            n_fases = st.number_input(
+                "Número de fases",
+                min_value=1,
+                max_value=6,
+                value=n_fases_default,
+                key="n_fases_iny",
+            )
+
+            for i in range(int(n_fases)):
+                with st.expander(f"Fase {i+1}", expanded=(i == 0)):
+                    # columna angosta para que los selectbox queden más estrechos
+                    form_col, empty_col = st.columns([1, 1])
+
+                    with form_col:
+                        sol = selectbox_con_placeholder(
+                            "Solución",
+                            ["MC", "SF", "PAUSA"],
+                            key=f"sol_{i}",
+                            value=st.session_state.get(f"sol_{i}"),
+                        )
+
+                        if sol == "PAUSA":
+                            duracion_fase = st.number_input(
+                                "Duración (sg)",
+                                min_value=2,
+                                max_value=30,
+                                value=int(st.session_state.get(f"dur_pause_{i}", 10)),
+                                step=1,
+                                key=f"dur_pause_{i}",
+                            )
+                            vol = 0
+                            caud = 0
+
+                        elif sol is None:
+                            duracion_fase = 0
+                            vol = 0
+                            caud = 0
+
+                        else:
+                            vol = selectbox_con_placeholder(
+                                "Volumen (mL)",
+                                list(range(0, 185, 5)),
+                                key=f"vol_{i}",
+                                value=st.session_state.get(f"vol_{i}_val", 50),
+                            )
+
+                            caud = selectbox_con_placeholder(
+                                "Caudal (mL/sg)",
+                                CAUDAL_OPCIONES,
+                                key=f"caud_{i}",
+                                value=st.session_state.get(f"caud_{i}_val", CAUDAL_OPCIONES[5]),
+                            )
+
+                            vol_num = vol if vol is not None else 0
+                            caud_num = caud if caud is not None else 0
+                            duracion_fase = round(vol_num / caud_num, 1) if caud_num and caud_num > 0 else 0
+                            vol = vol_num
+                            caud = caud_num
+
+                        st.caption(f"Duración: {duracion_fase} sg")
+
+                    with empty_col:
+                        st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
+
+                    fases_data.append({
+                        "solucion": sol,
+                        "volumen": vol,
+                        "caudal": caud,
+                        "duracion": duracion_fase,
+                    })
+
+        # ── Cálculos agregados ──
+        vol_total_mc = sum(f["volumen"] for f in fases_data if f["solucion"] == "MC")
+        vol_total_sf = sum(f["volumen"] for f in fases_data if f["solucion"] == "SF")
+        dur_total = sum(f["duracion"] for f in fases_data)
+        vol_total = vol_total_mc + vol_total_sf
+
+        caudal_alto = any(
+            (f["caudal"] or 0) > 3.0 for f in fases_data if f["solucion"] not in (None, "PAUSA")
+        )
+
+        with resumen_col:
+            _panel_header("📊", "Resumen seleccionado")
+
+            r1c1, r1c2 = st.columns(2)
+            with r1c1:
+                _info_card("Vol. total MC", f"{vol_total_mc} mL", "Canal A")
+            with r1c2:
+                _info_card("Vol. total SF", f"{vol_total_sf} mL", "Canal B")
+
+            r2c1, r2c2 = st.columns(2)
+            with r2c1:
+                _info_card("Duración total", f"{dur_total} sg", "Suma de fases")
+            with r2c2:
+                _info_card("Volumen total", f"{vol_total} mL", "MC + SF")
+
+            st.markdown("<div style='height:0.45rem;'></div>", unsafe_allow_html=True)
+
+            _panel_header("🩺", "Acceso y carga de jeringas")
+
+            vvp_gauge = selectbox_con_placeholder(
+                "VVP (Gauge)",
+                VVP_GAUGE,
+                key="vvp_gauge_widget",
+                value=vvp_gauge,
+            )
+
+            cap1, cap2 = st.columns(2)
+            with cap1:
+                _info_card("Jeringa A", f"{vol_total_mc} / {MAX_JERINGA} mL", "Medio de contraste")
+            with cap2:
+                _info_card("Jeringa B", f"{vol_total_sf} / {MAX_JERINGA} mL", "Suero fisiológico")
+
+            estado_msgs = []
+
+            if vol_total_mc > vol_max_mc:
+                estado_msgs.append(
+                    "<div style='background:#3A1F1F;border:1px solid #7A2F2F;color:#FFD6D6;padding:0.75rem 0.9rem;border-radius:10px;margin-bottom:0.45rem;'>⚠️ El volumen de contraste supera la capacidad de la jeringa.</div>"
+                )
+            else:
+                estado_msgs.append(
+                    "<div style='background:#15261B;border:1px solid #2C6B43;color:#D8FFE4;padding:0.75rem 0.9rem;border-radius:10px;margin-bottom:0.45rem;'>✅ El volumen de contraste está dentro del límite permitido.</div>"
+                )
+
+            if vol_total_sf > vol_max_sf:
+                estado_msgs.append(
+                    "<div style='background:#3A1F1F;border:1px solid #7A2F2F;color:#FFD6D6;padding:0.75rem 0.9rem;border-radius:10px;margin-bottom:0.45rem;'>⚠️ El volumen de suero supera la capacidad de la jeringa.</div>"
+                )
+            else:
+                estado_msgs.append(
+                    "<div style='background:#15261B;border:1px solid #2C6B43;color:#D8FFE4;padding:0.75rem 0.9rem;border-radius:10px;margin-bottom:0.45rem;'>✅ El volumen de suero está dentro del límite permitido.</div>"
+                )
+
+            if vvp_gauge is not None and vvp_gauge >= 22 and caudal_alto:
+                estado_msgs.append(
+                    "<div style='background:#3A2E16;border:1px solid #8A6A22;color:#FFE9B3;padding:0.75rem 0.9rem;border-radius:10px;margin-bottom:0.45rem;'>⚠️ El calibre VVP puede ser insuficiente para un caudal alto. Se recomienda 18–20G.</div>"
+                )
+
+            st.markdown("".join(estado_msgs), unsafe_allow_html=True)
+
+            st.markdown("<div style='height:0.45rem;'></div>", unsafe_allow_html=True)
+
+            _panel_header("🧪", "Diagrama de fases")
+            for i, f in enumerate(fases_data):
+                sol = f["solucion"]
+                if sol == "MC":
+                    color, text_color = "#8FD16A", "#11212B"
+                elif sol == "SF":
+                    color, text_color = "#63BFEA", "#11212B"
+                elif sol == "PAUSA":
+                    color, text_color = "#757575", "white"
+                else:
+                    color, text_color = "#2A2A2A", "#BFBFBF"
+
+                sol_label = sol if sol is not None else "—"
+                st.markdown(
+                    f"""
+                    <div style="background:{color}; color:{text_color}; border-radius:6px;
+                                padding:6px 10px; margin:3px 0; font-size:0.85rem; font-weight:700;">
+                        Fase {i+1} — {sol_label} | {f["volumen"]} mL | {f["caudal"]} mL/sg | {f["duracion"]} sg
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
     # ── Columna izquierda: visualización SVG de la inyectora ──
-    with top_left:
+    with left_col:
+        _panel_header("🧴", "Llenado de la Inyectora")
         st.markdown(
             render_inyectora_svg(
                 vol_total_mc, vol_total_sf, vol_max_mc, vol_max_sf, fases_data, vvp_gauge
             ),
-            unsafe_allow_html=True,
-        )
-
-    # ── Resumen del protocolo ──
-    st.markdown("---")
-    _panel_header("📊", "Resumen del Protocolo")
-
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-        st.metric("Vol. total MC", f"{vol_total_mc} mL")
-        st.metric("Duración total", f"{dur_total} sg")
-    with col_m2:
-        st.metric("Vol. total SF", f"{vol_total_sf} mL")
-        st.metric("Vol. total", f"{vol_total_mc + vol_total_sf} mL")
-
-    st.markdown("**Acceso venoso y capacidades**")
-    col_vvp, col_cap = st.columns(2)
-    with col_vvp:
-        vvp_gauge = selectbox_con_placeholder(
-            "VVP (Gauge)",
-            VVP_GAUGE,
-            key="vvp_gauge_widget",
-            value=vvp_gauge,
-        )
-    with col_cap:
-        st.markdown("<div style='height: 0.2rem;'></div>", unsafe_allow_html=True)
-        st.markdown(
-            f"""
-            <div style="padding:0.85rem 1rem; background:#1A1A1A;
-                        border:1px solid #2E2E2E; border-radius:10px;">
-                <div style="font-size:0.92rem; font-weight:700; margin-bottom:0.35rem; color:#FFFFFF;">
-                    Capacidad fija de jeringas
-                </div>
-                <div style="font-size:1.1rem; font-weight:800; color:#F3F4F6;">
-                    {MAX_JERINGA} mL / {MAX_JERINGA} cc
-                </div>
-                <div style="font-size:0.82rem; color:#C9D1D9;">
-                    Aplicada por defecto a medio de contraste y suero.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # ── Validaciones de volumen y caudal ──
-    if vol_total_mc > vol_max_mc:
-        st.warning(
-            f"⚠️ Volumen de contraste ({vol_total_mc} mL) supera la capacidad fija ({vol_max_mc} mL)"
-        )
-    elif vol_total_mc > 0:
-        st.info(
-            f"✅ Volumen de contraste dentro del límite ({vol_total_mc}/{vol_max_mc} mL)"
-        )
-
-    if vol_total_sf > vol_max_sf:
-        st.warning(
-            f"⚠️ Volumen de suero ({vol_total_sf} mL) supera la capacidad fija ({vol_max_sf} mL)"
-        )
-
-    caudal_alto = any(
-        (f["caudal"] or 0) > 3.0 for f in fases_data if f["solucion"] not in (None, "PAUSA")
-    )
-    if vvp_gauge is not None and vvp_gauge >= 22 and caudal_alto:
-        st.warning(
-            "⚠️ Calibre VVP puede ser insuficiente para el caudal seleccionado. "
-            "Se recomienda VVP 18-20G para caudales altos."
-        )
-
-    # ── Diagrama de fases en bloques de colores ──
-    st.markdown("**Diagrama de fases:**")
-    for i, f in enumerate(fases_data):
-        sol = f["solucion"]
-        if sol == "MC":
-            color, text_color = "#8FD16A", "#11212B"
-        elif sol == "SF":
-            color, text_color = "#63BFEA", "#11212B"
-        elif sol == "PAUSA":
-            color, text_color = "#757575", "white"
-        else:
-            color, text_color = "#2A2A2A", "#BFBFBF"
-
-        sol_label = sol if sol is not None else "—"
-        st.markdown(
-            f"""
-            <div style="background:{color}; color:{text_color}; border-radius:6px;
-                        padding:6px 10px; margin:3px 0; font-size:0.85rem; font-weight:700;">
-                Fase {i+1} — {sol_label} | {f["volumen"]} mL | {f["caudal"]} mL/sg | {f["duracion"]} sg
-            </div>
-            """,
             unsafe_allow_html=True,
         )
 
