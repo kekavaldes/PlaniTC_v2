@@ -1,8 +1,3 @@
-"""
-ui/ingreso.py
-Módulo de Ingreso del paciente para PlaniTC_v2.
-"""
-
 import base64
 from datetime import date
 from pathlib import Path
@@ -69,12 +64,6 @@ def _panel_header(emoji: str, titulo: str):
 
 def _init_session_state():
     defaults = {
-        "contraste_ev": False,
-        "vvp": None,
-        "metodo_inyeccion": None,
-        "cantidad_contraste": None,
-        "sexo_clearance": None,
-        "requiere_creatinina": False,
         "embarazo": None,
     }
     for key, value in defaults.items():
@@ -84,55 +73,58 @@ def _init_session_state():
 def render_ingreso():
     _init_session_state()
 
-    col_izq, col_der = st.columns([1, 1], gap="large")
+    _panel_header("📋", "Datos del Paciente")
 
-    with col_izq:
-        _panel_header("📋", "Datos del Paciente")
+    nombre = st.text_input(
+        "Nombre del paciente",
+        placeholder="Ej: Juan Pérez",
+        key="nombre_paciente_widget",
+    )
 
-        nombre = st.text_input(
-            "Nombre del paciente",
-            placeholder="Ej: Juan Pérez",
+    col_fn, col_edad = st.columns([1, 1])
+
+    # ───────────── FECHA NACIMIENTO ─────────────
+    with col_fn:
+        fecha_nacimiento = st.date_input(
+            "Fecha de nacimiento",
+            value=date.today(),
+            min_value=date(1900, 1, 1),
+            max_value=date.today(),
+            format="DD/MM/YYYY",
+            key="fecha_nacimiento",
         )
 
-        col_fn, col_edad = st.columns([1, 1])
+    edad = calcular_edad(fecha_nacimiento, date.today())
 
-        with col_fn:
-            fecha_nacimiento = st.date_input(
-                "Fecha de nacimiento",
-                value=date.today(),
-                min_value=date(1900, 1, 1),
-                max_value=date.today(),
-                format="DD/MM/YYYY",
-                key="fecha_nacimiento",
-            )
+    # ───────────── EDAD (ALINEADA) ─────────────
+    with col_edad:
+        st.markdown("**Edad**")
 
-        edad = calcular_edad(fecha_nacimiento, date.today())
-
-        with col_edad:
-            st.markdown("**Edad**")
-
-            st.markdown(
-                f"""
-                <div style="
-                    margin-top:4px;
-                    background-color:#111111;
-                    color:white;
-                    border:1px solid #444;
-                    border-radius:10px;
-                    padding:0.72rem 0.9rem;
-                    height:48px;
-                    display:flex;
-                    align-items:center;
-                    font-size:1.05rem;
-                ">
-                    {f"{edad} años" if edad is not None else ""}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        diagnostico = st.text_area(
-            "Diagnóstico",
-            placeholder="Indicación clínica del examen",
-            height=120,
+        st.markdown(
+            f"""
+            <div style="
+                margin-top:4px;
+                background-color:#111111;
+                color:white;
+                border:1px solid #444;
+                border-radius:10px;
+                padding:0.72rem 0.9rem;
+                height:48px;
+                display:flex;
+                align-items:center;
+                font-size:1.05rem;
+            ">
+                {edad if edad is not None else ""}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
+
+    # ───────────── DIAGNÓSTICO ─────────────
+    st.markdown("### Diagnóstico")
+
+    diagnostico = st.text_area(
+        "Indicación clínica del examen",
+        height=120,
+        key="diagnostico",
+    )
