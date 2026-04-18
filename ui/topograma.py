@@ -583,55 +583,37 @@ def _placeholder_topograma(proyeccion: str = "AP", tubo: str = "", alto_px: int 
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BARRA SUPERIOR: sets de topograma
+# HEADER DEL SET ACTIVO (título + renombrado inline)
+# La selección / agregado / eliminación de sets vive en el sidebar de
+# Adquisición (ui/adquisicion.py: _render_sidebar).
 # ═══════════════════════════════════════════════════════════════════════════
-def _render_barra_sets():
-    """Barra superior con los sets de topograma + botón de agregar/eliminar/renombrar."""
+def _render_header_set_activo():
     _init_topograma_sets()
     sets = st.session_state["topograma_sets"]
-    activo = _set_activo_idx()
+    idx = _set_activo_idx()
+    cur = sets[idx]
 
-    st.markdown("#### 🗂️ Topogramas del estudio")
-
-    n = len(sets)
-    cols = st.columns(n + 1)
-    for i, s in enumerate(sets):
-        with cols[i]:
-            lbl = s.get("label") or f"Topograma {i+1}"
-            region_lbl = s.get("region_anat") or "sin región"
-            tipo = "primary" if i == activo else "secondary"
-            if st.button(
-                f"📡 {lbl}\n{region_lbl}",
-                key=f"btn_set_{i}",
-                type=tipo,
-                use_container_width=True,
-            ):
-                st.session_state["topograma_set_activo"] = i
-                _build_store_in_set(i)
-                st.rerun()
-
-    with cols[-1]:
-        if st.button("➕ Nuevo topograma", key="btn_nuevo_set", use_container_width=True):
-            _agregar_set_topograma()
-            st.rerun()
-
-    # Línea de edición de label + eliminar
-    c_lbl, c_del = st.columns([3, 1])
-    with c_lbl:
-        cur = sets[activo]
+    c_title, c_rename = st.columns([2, 3], gap="medium")
+    with c_title:
+        lbl = cur.get("label") or f"Topograma {idx+1}"
+        region_lbl = cur.get("region_anat") or "sin región"
+        st.markdown(
+            f"<div style='padding-top:4px;'>"
+            f"<div style='font-size:1.25rem;font-weight:700;'>📡 {lbl}</div>"
+            f"<div style='font-size:0.85rem;opacity:0.7;'>{region_lbl}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    with c_rename:
         nuevo_lbl = st.text_input(
-            "Nombre del topograma activo",
-            value=cur.get("label") or f"Topograma {activo+1}",
-            key=f"lbl_set_{activo}",
+            "Renombrar este topograma",
+            value=cur.get("label") or f"Topograma {idx+1}",
+            key=f"lbl_set_{idx}",
+            label_visibility="collapsed",
+            placeholder="Renombrar este topograma",
         )
         if nuevo_lbl and nuevo_lbl != cur.get("label"):
             cur["label"] = nuevo_lbl
-    with c_del:
-        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-        if len(sets) > 1:
-            if st.button("🗑️ Eliminar este topograma", key=f"del_set_{activo}", use_container_width=True):
-                _eliminar_set_topograma(activo)
-                st.rerun()
 
     st.markdown("---")
 
@@ -641,7 +623,7 @@ def _render_barra_sets():
 # ═══════════════════════════════════════════════════════════════════════════
 def render_topograma_panel():
     _init_topograma_sets()
-    _render_barra_sets()
+    _render_header_set_activo()
 
     idx = _set_activo_idx()
     store = st.session_state["topograma_sets"][idx]
