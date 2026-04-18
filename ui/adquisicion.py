@@ -981,6 +981,11 @@ def _crear_exploracion_base(topo_set_idx=None):
 
 
 def _init_state():
+    # IMPORTANTE: primero inicializamos los sets de topograma. Así el
+    # topograma legacy recibe su `order` antes de que creemos la primera
+    # exploración por defecto, y queda correctamente ANTES de ella en
+    # el sidebar cronológico.
+    _init_topograma_sets()
     st.session_state.setdefault("exploraciones", [])
     st.session_state.setdefault("exp_activa", "topograma")
     if not st.session_state["exploraciones"]:
@@ -1058,7 +1063,7 @@ def _render_sidebar():
 
     hay_varios_sets = len(sets) > 1
 
-    # Renderizar en orden de creación
+    # Renderizar ítems en orden de creación
     for item_type, item_idx, _ord in items:
         if item_type == "set":
             i = item_idx
@@ -1078,33 +1083,16 @@ def _render_sidebar():
                 st.session_state["exp_activa"] = "topograma"
                 st.rerun()
 
-            # Acciones del set: agregar exploración / eliminar topograma
+            # Eliminar este topograma (solo si hay más de uno)
             if hay_varios_sets:
-                c_add, c_del = st.columns(2, gap="small")
-                with c_add:
-                    if st.button("➕ Exp.", key=f"btn_add_exp_s{i}",
-                                 use_container_width=True,
-                                 help=f"Agregar exploración vinculada a {lbl}"):
-                        st.session_state["exploraciones"].append(
-                            _crear_exploracion_base(topo_set_idx=i)
-                        )
-                        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-                        st.rerun()
-                with c_del:
-                    if st.button("🗑️ Topo", key=f"del_set_sidebar_{i}",
-                                 use_container_width=True,
-                                 help=f"Eliminar {lbl}"):
-                        _eliminar_set_topograma(i)
-                        st.rerun()
-            else:
-                if st.button("➕ Exploración", key=f"btn_add_exp_s{i}", use_container_width=True):
-                    st.session_state["exploraciones"].append(
-                        _crear_exploracion_base(topo_set_idx=i)
-                    )
-                    st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+                if st.button(
+                    "🗑️ Eliminar topograma",
+                    key=f"del_set_sidebar_{i}",
+                    use_container_width=True,
+                    help=f"Eliminar {lbl}",
+                ):
+                    _eliminar_set_topograma(i)
                     st.rerun()
-
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         else:
             i_exp = item_idx
@@ -1112,7 +1100,6 @@ def _render_sidebar():
             es_exp_activa = (st.session_state.get("exp_activa") == i_exp)
             tipo_exp = "primary" if es_exp_activa else "secondary"
 
-            # Sufijo que indica a qué topograma pertenece (solo si hay varios)
             topo_idx = exp.get("topo_set_idx", 0)
             sufijo = f"  ·  T{topo_idx + 1}" if hay_varios_sets else ""
 
@@ -1125,12 +1112,43 @@ def _render_sidebar():
                 st.session_state["exp_activa"] = i_exp
                 st.rerun()
 
-    # Botón global para crear un nuevo topograma
+    # ── Determinar a qué topograma se asociará la próxima exploración ──
+    # Si hay una exploración seleccionada, usamos su topograma (más intuitivo).
+    # Si estamos en la pestaña topograma, usamos el set activo.
+    activa = st.session_state.get("exp_activa")
+    if isinstance(activa, int) and 0 <= activa < len(exploraciones):
+        target_idx = exploraciones[activa].get("topo_set_idx", set_activo)
+    else:
+        target_idx = set_activo
+    if not (0 <= target_idx < len(sets)):
+        target_idx = 0
+    target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
+    target_reg = sets[target_idx].get("region_anat") or "sin región"
+
+    # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
-    if st.button("➕ Nuevo topograma", key="btn_add_set_sidebar", use_container_width=True):
-        _agregar_set_topograma()
-        st.session_state["exp_activa"] = "topograma"
-        st.rerun()
+    c_exp, c_topo = st.columns(2, gap="small")
+    with c_exp:
+        if st.button(
+            "➕ Exploración",
+            key="btn_add_exp_global",
+            use_container_width=True,
+            help=f"Se agregará a {target_lbl} · {target_reg}",
+        ):
+            st.session_state["exploraciones"].append(
+                _crear_exploracion_base(topo_set_idx=target_idx)
+            )
+            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+            st.rerun()
+    with c_topo:
+        if st.button(
+            "➕ Nuevo topograma",
+            key="btn_add_set_sidebar",
+            use_container_width=True,
+        ):
+            _agregar_set_topograma()
+            st.session_state["exp_activa"] = "topograma"
+            st.rerun()
 
     # Duplicar / eliminar la exploración activa
     if isinstance(st.session_state.get("exp_activa"), int):
