@@ -1056,6 +1056,25 @@ def _ajustar_por_nombre(exp):
 # ═══════════════════════════════════════════════════════════════════════════
 # SIDEBAR: lista de exploraciones
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _render_dot_for_exp(exp):
+    color = _color_exploracion(exp)
+    st.markdown(
+        f"""
+        <div style="
+            width: 0.78rem;
+            height: 0.78rem;
+            border-radius: 50%;
+            background: {color};
+            margin: 0 auto;
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.14);
+        "></div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _name_visible(exp, idx):
     n = exp.get("nombre")
     if n and n != "Seleccionar":
@@ -1192,7 +1211,9 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
+                c_dot, c_main, c_del = st.columns([0.45, 6.2, 0.55], gap="small", vertical_alignment="center")
+                with c_dot:
+                    _render_dot_for_exp(exp)
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1216,14 +1237,18 @@ def _render_sidebar():
                         st.session_state["exp_activa"] = nueva_activa
                         st.rerun()
             else:
-                if st.button(
-                    f"⚡ {nombre_exp}{sufijo}",
-                    key=f"btn_sidebar_exp_{exp['id']}",
-                    type=tipo_exp,
-                    use_container_width=True,
-                ):
-                    st.session_state["exp_activa"] = i_exp
-                    st.rerun()
+                c_dot, c_main = st.columns([0.45, 6.2], gap="small", vertical_alignment="center")
+                with c_dot:
+                    _render_dot_for_exp(exp)
+                with c_main:
+                    if st.button(
+                        f"⚡ {nombre_exp}{sufijo}",
+                        key=f"btn_sidebar_exp_{exp['id']}",
+                        type=tipo_exp,
+                        use_container_width=True,
+                    ):
+                        st.session_state["exp_activa"] = i_exp
+                        st.rerun()
 
     # ── Determinar a qué topograma se asociará la próxima exploración ──
     activa = st.session_state.get("exp_activa")
