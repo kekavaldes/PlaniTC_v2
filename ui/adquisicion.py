@@ -1062,6 +1062,7 @@ def _render_sidebar():
     items.sort(key=lambda x: x[2])
 
     hay_varios_sets = len(sets) > 1
+    hay_varias_exp = len(exploraciones) > 1
 
     # Renderizar ítems en orden de creación
     for item_type, item_idx, _ord in items:
@@ -1073,25 +1074,36 @@ def _render_sidebar():
             es_activo_topo = (viendo_topo and set_activo == i)
             tipo = "primary" if es_activo_topo else "secondary"
 
-            if st.button(
-                f"📡 {lbl}  \n{reg}",
-                key=f"btn_topograma_sidebar_{i}",
-                type=tipo,
-                use_container_width=True,
-            ):
-                st.session_state["topograma_set_activo"] = i
-                st.session_state["exp_activa"] = "topograma"
-                st.rerun()
-
-            # Eliminar este topograma (solo si hay más de uno)
             if hay_varios_sets:
+                c_main, c_del = st.columns([5, 1], gap="small")
+                with c_main:
+                    if st.button(
+                        f"📡 {lbl}  \n{reg}",
+                        key=f"btn_topograma_sidebar_{i}",
+                        type=tipo,
+                        use_container_width=True,
+                    ):
+                        st.session_state["topograma_set_activo"] = i
+                        st.session_state["exp_activa"] = "topograma"
+                        st.rerun()
+                with c_del:
+                    if st.button(
+                        "🗑️",
+                        key=f"del_set_sidebar_{i}",
+                        use_container_width=True,
+                        help=f"Eliminar {lbl} · {reg}",
+                    ):
+                        _eliminar_set_topograma(i)
+                        st.rerun()
+            else:
                 if st.button(
-                    "🗑️ Eliminar topograma",
-                    key=f"del_set_sidebar_{i}",
+                    f"📡 {lbl}  \n{reg}",
+                    key=f"btn_topograma_sidebar_{i}",
+                    type=tipo,
                     use_container_width=True,
-                    help=f"Eliminar {lbl}",
                 ):
-                    _eliminar_set_topograma(i)
+                    st.session_state["topograma_set_activo"] = i
+                    st.session_state["exp_activa"] = "topograma"
                     st.rerun()
 
         else:
@@ -1113,14 +1125,48 @@ def _render_sidebar():
             else:
                 sufijo = ""
 
-            if st.button(
-                f"⚡ {_name_visible(exp, i_exp)}{sufijo}",
-                key=f"btn_sidebar_exp_{exp['id']}",
-                type=tipo_exp,
-                use_container_width=True,
-            ):
-                st.session_state["exp_activa"] = i_exp
-                st.rerun()
+            nombre_exp = _name_visible(exp, i_exp)
+
+            if hay_varias_exp:
+                c_main, c_dup, c_del = st.columns([5, 1, 1], gap="small")
+            else:
+                c_main, c_dup = st.columns([5, 1], gap="small")
+                c_del = None
+
+            with c_main:
+                if st.button(
+                    f"⚡ {nombre_exp}{sufijo}",
+                    key=f"btn_sidebar_exp_{exp['id']}",
+                    type=tipo_exp,
+                    use_container_width=True,
+                ):
+                    st.session_state["exp_activa"] = i_exp
+                    st.rerun()
+            with c_dup:
+                if st.button(
+                    "📄",
+                    key=f"dup_exp_{exp['id']}",
+                    use_container_width=True,
+                    help=f"Duplicar {nombre_exp}",
+                ):
+                    copia = dict(exp)
+                    copia["id"] = _new_id()
+                    copia["order"] = _next_order()
+                    st.session_state["exploraciones"].insert(i_exp + 1, copia)
+                    st.session_state["exp_activa"] = i_exp + 1
+                    st.rerun()
+            if c_del is not None:
+                with c_del:
+                    if st.button(
+                        "🗑️",
+                        key=f"del_exp_{exp['id']}",
+                        use_container_width=True,
+                        help=f"Eliminar {nombre_exp}",
+                    ):
+                        st.session_state["exploraciones"].pop(i_exp)
+                        nueva_activa = min(i_exp, len(st.session_state["exploraciones"]) - 1)
+                        st.session_state["exp_activa"] = nueva_activa
+                        st.rerun()
 
     # ── Determinar a qué topograma se asociará la próxima exploración ──
     # Si hay una exploración seleccionada, usamos su topograma (más intuitivo).
@@ -1159,27 +1205,6 @@ def _render_sidebar():
             _agregar_set_topograma()
             st.session_state["exp_activa"] = "topograma"
             st.rerun()
-
-    # Duplicar / eliminar la exploración activa
-    if isinstance(st.session_state.get("exp_activa"), int):
-        idx = st.session_state["exp_activa"]
-        if 0 <= idx < len(st.session_state["exploraciones"]):
-            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2, gap="small")
-            with c1:
-                if st.button("📄 Duplicar", key="btn_duplicar_exp", use_container_width=True):
-                    copia = dict(st.session_state["exploraciones"][idx])
-                    copia["id"] = _new_id()
-                    copia["order"] = _next_order()   # la copia queda al final
-                    st.session_state["exploraciones"].insert(idx + 1, copia)
-                    st.session_state["exp_activa"] = idx + 1
-                    st.rerun()
-            with c2:
-                if st.button("🗑️ Eliminar", key="btn_eliminar_exp", use_container_width=True):
-                    if len(st.session_state["exploraciones"]) > 1:
-                        st.session_state["exploraciones"].pop(idx)
-                        st.session_state["exp_activa"] = min(idx, len(st.session_state["exploraciones"]) - 1)
-                        st.rerun()
 
 
 def obtener_imagen_posicion_corte(nombre_posicion):
