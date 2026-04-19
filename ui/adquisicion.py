@@ -1056,6 +1056,16 @@ def _ajustar_por_nombre(exp):
 # ═══════════════════════════════════════════════════════════════════════════
 # SIDEBAR: lista de exploraciones
 # ═══════════════════════════════════════════════════════════════════════════
+
+def _badge_color_html(exp):
+    color = _color_exploracion(exp)
+    return (
+        f"<span style='display:inline-block;width:0.62rem;height:0.62rem;"
+        f"border-radius:50%;background:{color};margin-right:0.42rem;"
+        f"vertical-align:middle;box-shadow:0 0 0 1px rgba(255,255,255,0.16);'></span>"
+    )
+
+
 def _name_visible(exp, idx):
     n = exp.get("nombre")
     if n and n != "Seleccionar":
@@ -1093,7 +1103,15 @@ def _inject_sidebar_css():
             margin: 0 !important;
             line-height: 1 !important;
         }
-        </style>
+        button[kind="secondary"] p,
+        button[kind="primary"] p {
+            display: none !important;
+        }
+        button[kind="secondary"],
+        button[kind="primary"] {
+            min-height: 3.2rem !important;
+        }
+                </style>
         """,
         unsafe_allow_html=True,
     )
@@ -1194,8 +1212,14 @@ def _render_sidebar():
             if hay_varias_exp:
                 c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
                 with c_main:
+                    st.markdown(
+                        f"<div style='margin-bottom:-0.18rem;padding-left:0.18rem;font-size:0.92rem;"
+                        f"color:#FFFFFF;opacity:0.98;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
+                        f"{_badge_color_html(exp)}⚡ {nombre_exp}{sufijo}</div>",
+                        unsafe_allow_html=True,
+                    )
                     if st.button(
-                        f"⚡ {nombre_exp}{sufijo}",
+                        " ",
                         key=f"btn_sidebar_exp_{exp['id']}",
                         type=tipo_exp,
                         use_container_width=True,
@@ -1216,8 +1240,14 @@ def _render_sidebar():
                         st.session_state["exp_activa"] = nueva_activa
                         st.rerun()
             else:
+                st.markdown(
+                    f"<div style='margin-bottom:-0.18rem;padding-left:0.18rem;font-size:0.92rem;"
+                    f"color:#FFFFFF;opacity:0.98;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
+                    f"{_badge_color_html(exp)}⚡ {nombre_exp}{sufijo}</div>",
+                    unsafe_allow_html=True,
+                )
                 if st.button(
-                    f"⚡ {nombre_exp}{sufijo}",
+                    " ",
                     key=f"btn_sidebar_exp_{exp['id']}",
                     type=tipo_exp,
                     use_container_width=True,
