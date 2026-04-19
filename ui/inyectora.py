@@ -32,6 +32,7 @@ def selectbox_con_placeholder(label, options, key, value=None, label_visibility=
     return None if val == "Seleccionar" else val
 
 
+
 def _panel_header(emoji: str, titulo: str):
     """Header tipo banner oscuro, consistente con el resto de la app."""
     st.markdown(
@@ -98,7 +99,7 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
         sol_label = "Pausa" if sol == "PAUSA" else (sol if sol else "None")
 
         phase_rows.append(
-            f'<g transform="translate(470,{95 + i*78})">'
+            f'<g transform="translate(360,{78 + i*68})">'
             f'<rect x="0" y="0" width="72" height="42" rx="4" fill="{box_fill_left}" opacity="0.95"/>'
             f'<rect x="84" y="0" width="72" height="42" rx="4" fill="{box_fill_mid}" opacity="0.95"/>'
             f'<rect x="168" y="0" width="72" height="42" rx="4" fill="#CFE0EC" opacity="0.95"/>'
@@ -111,20 +112,27 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
 
     phase_rows_str = "".join(phase_rows)
 
-    def syringe(x, label, ratio, fill):
+    def syringe(x, label, ratio, vol, maxv, fill):
         h = 240
         y = 10
         inner_h = int(round(h * ratio))
         inner_y = y + h - inner_h
 
+        try:
+            vol_txt = int(vol) if float(vol).is_integer() else vol
+            max_txt = int(maxv) if float(maxv).is_integer() else maxv
+        except Exception:
+            vol_txt = vol
+            max_txt = maxv
+
         return (
-            f'<g transform="translate({x},28)">'
-            f'<rect x="0" y="0" width="120" height="18" rx="5" fill="{colors["BODY"]}" stroke="{colors["OUTLINE"]}" stroke-width="2"/>'
-            f'<rect x="18" y="18" width="84" height="290" rx="18" fill="{colors["EMPTY"]}" stroke="{colors["OUTLINE"]}" stroke-width="4"/>'
-            f'<rect x="18" y="{inner_y + 18}" width="84" height="{max(inner_h,0)}" rx="0" fill="{fill}"/>'
-            f'<rect x="18" y="163" width="84" height="3" fill="{colors["OUTLINE"]}" opacity="0.45"/>'
-            f'<polygon points="50,308 70,308 70,350 80,362 80,380 40,380 40,362 50,350" fill="{colors["EMPTY"]}" stroke="{colors["OUTLINE"]}" stroke-width="4"/>'
-            f'<text x="60" y="215" text-anchor="middle" font-size="58" font-weight="900" fill="#11212B">{label}</text>'
+            f'<g transform="translate({x},58)">'
+            f'<rect x="0" y="0" width="72" height="12" rx="3" fill="{colors["BODY"]}" stroke="{colors["OUTLINE"]}" stroke-width="1.5"/>'
+            f'<rect x="8" y="12" width="56" height="240" rx="8" fill="{colors["EMPTY"]}" stroke="{colors["OUTLINE"]}" stroke-width="2"/>'
+            f'<rect x="8" y="{inner_y}" width="56" height="{max(inner_h,0)}" fill="{fill}"/>'
+            f'<rect x="8" y="120" width="56" height="2" fill="{colors["OUTLINE"]}" opacity="0.75"/>'
+            f'<polygon points="30,252 42,252 42,270 46,275 46,282 26,282 26,275 30,270" fill="{colors["EMPTY"]}" stroke="{colors["OUTLINE"]}" stroke-width="2"/>'
+            f'<text x="36" y="136" text-anchor="middle" font-size="40" font-weight="900" fill="#11212B">{label}</text>'
             f'</g>'
         )
 
@@ -134,35 +142,37 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
     max_sf_txt = int(max_sf) if float(max_sf).is_integer() else max_sf
 
     svg = (
-        f'<div style="background:transparent;padding:0;margin:0;display:flex;justify-content:center;">'
-        f'<svg viewBox="0 0 760 680" width="100%" xmlns="http://www.w3.org/2000/svg">'
-        f'{syringe(80, "A", ratio_mc, colors["MC"])}'
-        f'{syringe(370, "B", ratio_sf, colors["SF"])}'
+        f'<div style="background:transparent;padding:0;margin:0;">'
+        f'<svg viewBox="0 0 640 440" width="100%" xmlns="http://www.w3.org/2000/svg">'
+        f'{syringe(22, "A", ratio_mc, vol_mc, max_mc, colors["MC"])}'
+        f'{syringe(122, "B", ratio_sf, vol_sf, max_sf, colors["SF"])}'
 
-        f'<g transform="translate(380,470)">'
-        f'<text x="0" y="0" text-anchor="middle" font-size="26" font-weight="900" fill="{colors["TEXT"]}">A {mc_txt}/{max_mc_txt} mL  •  B {sf_txt}/{max_sf_txt} mL</text>'
-        f'<text x="0" y="54" text-anchor="middle" font-size="22" font-weight="800" fill="{colors["TEXT"]}">Canales de inyección</text>'
+        f'<g transform="translate(22,344)">'
+        f'<text x="0" y="0" font-size="10" font-weight="700" fill="{colors["TEXT"]}">Canales de inyección</text>'
 
-        f'<g transform="translate(-120,92)">'
-        f'<rect x="0" y="0" width="240" height="58" rx="22" fill="#15191E" stroke="#2E3943" stroke-width="2.2"/>'
-        f'<rect x="18" y="12" width="56" height="34" rx="12" fill="{colors["MC"]}"/>'
-        f'<text x="46" y="37" text-anchor="middle" font-size="20" font-weight="900" fill="#11212B">A</text>'
-        f'<line x1="95" y1="29" x2="178" y2="29" stroke="#F6F7FB" stroke-width="7" stroke-linecap="round"/>'
-        f'<polygon points="178,12 212,29 178,46" fill="#F6F7FB"/>'
-        f'<text x="224" y="38" text-anchor="middle" font-size="21" font-weight="900" fill="{colors["TEXT"]}">MC</text>'
+        f'<text x="0" y="14" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{mc_txt} / {max_mc_txt} mL</text>'
+        f'<text x="88" y="14" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{sf_txt} / {max_sf_txt} mL</text>'
+
+        f'<g transform="translate(0,24)">'
+        f'<rect x="0" y="0" width="76" height="20" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.1"/>'
+        f'<rect x="5" y="3" width="20" height="14" rx="4" fill="{colors["MC"]}"/>'
+        f'<text x="15" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="#11212B">A</text>'
+        f'<line x1="31" y1="10" x2="56" y2="10" stroke="#F6F7FB" stroke-width="2" stroke-linecap="round"/>'
+        f'<polygon points="56,5 64,10 56,15" fill="#F6F7FB"/>'
+        f'<text x="70" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="{colors["TEXT"]}">MC</text>'
         f'</g>'
 
-        f'<g transform="translate(-120,168)">'
-        f'<rect x="0" y="0" width="240" height="58" rx="22" fill="#15191E" stroke="#2E3943" stroke-width="2.2"/>'
-        f'<rect x="18" y="12" width="56" height="34" rx="12" fill="{colors["SF"]}"/>'
-        f'<text x="46" y="37" text-anchor="middle" font-size="20" font-weight="900" fill="#11212B">B</text>'
-        f'<line x1="95" y1="29" x2="178" y2="29" stroke="#F6F7FB" stroke-width="7" stroke-linecap="round"/>'
-        f'<polygon points="178,12 212,29 178,46" fill="#F6F7FB"/>'
-        f'<text x="224" y="38" text-anchor="middle" font-size="21" font-weight="900" fill="{colors["TEXT"]}">SF</text>'
+        f'<g transform="translate(0,48)">'
+        f'<rect x="0" y="0" width="76" height="20" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.1"/>'
+        f'<rect x="5" y="3" width="20" height="14" rx="4" fill="{colors["SF"]}"/>'
+        f'<text x="15" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="#11212B">B</text>'
+        f'<line x1="31" y1="10" x2="56" y2="10" stroke="#F6F7FB" stroke-width="2" stroke-linecap="round"/>'
+        f'<polygon points="56,5 64,10 56,15" fill="#F6F7FB"/>'
+        f'<text x="70" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="{colors["TEXT"]}">SF</text>'
         f'</g>'
         f'</g>'
 
-        f'<g transform="translate(470,40)">'
+        f'<g transform="translate(360,24)">'
         f'<rect x="0" y="0" width="72" height="34" rx="4" fill="#97B8D0"/>'
         f'<rect x="84" y="0" width="72" height="34" rx="4" fill="#97B8D0"/>'
         f'<rect x="168" y="0" width="72" height="34" rx="4" fill="#97B8D0"/>'
