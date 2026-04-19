@@ -410,8 +410,18 @@ def render_reconstruccion():
 
     # Inicializar contenedores para adquisiciones nuevas (sin crear recons automáticas)
     for exp in adquisiciones_validas:
-        exp_id = exp.get("id")
-        st.session_state["reconstrucciones_por_exp"].setdefault(exp_id, [])
+    exp_id = exp.get("id")
+
+    if exp_id not in st.session_state["reconstrucciones_por_exp"]:
+        st.session_state["reconstrucciones_por_exp"][exp_id] = []
+
+    # 👇 SOLO UNA reconstrucción inicial
+    if not st.session_state["reconstrucciones_por_exp"][exp_id]:
+        region_anat = _get_region_group_for_exp(exp)
+        nueva = _crear_reconstruccion_base(exp, 1, region_anat)
+
+        st.session_state["reconstrucciones_por_exp"][exp_id].append(nueva)
+        st.session_state["recon_activa_por_exp"][exp_id] = nueva["id"]
 
     # Auto-seleccionar la primera adquisición si no hay ninguna activa
     if st.session_state["exploracion_rec_activa"] not in ids_adq_validos:
