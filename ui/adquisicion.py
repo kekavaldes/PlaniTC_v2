@@ -1159,12 +1159,18 @@ def _inject_sidebar_css():
         }
 
         /* ── Botones de acción global (+ Exploración / + Topograma) ──
-           Los botones están dentro de columnas (stHorizontalBlock), por lo
-           que el selector debe bajar con descendant combinator. Además
-           incluimos `div[data-testid="stButton"] > button` para que la
-           especificidad supere a las reglas generales definidas arriba. */
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+           Para superar el CSS global de app.py (`.stApp .stButton button`
+           con !important), duplicamos selectores con :is() para inflar
+           la especificidad. Esto garantiza que nuestro color de fondo
+           gane la cascada sin importar el orden de inyección. */
+        :is(div[data-testid="stElementContainer"]):is(:has(.sb-add-buttons-zone))
+        ~ :is(div[data-testid="stElementContainer"])
+        :is(div[data-testid="stButton"]) > button[kind="secondary"],
+        div.stApp div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"],
+        body div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] {
+            background-color: #6b6f7a !important;
             background: #6b6f7a !important;
             border: 1px solid #80848f !important;
             color: #ffffff !important;
@@ -1179,8 +1185,14 @@ def _inject_sidebar_css():
             align-items: center !important;
             justify-content: center !important;
         }
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        :is(div[data-testid="stElementContainer"]):is(:has(.sb-add-buttons-zone))
+        ~ :is(div[data-testid="stElementContainer"])
+        :is(div[data-testid="stButton"]) > button[kind="secondary"]:hover,
+        div.stApp div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover,
+        body div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover {
+            background-color: #7c808a !important;
             background: #7c808a !important;
             border-color: #90949e !important;
             color: #ffffff !important;
