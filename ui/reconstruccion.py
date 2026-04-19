@@ -361,6 +361,7 @@ def render_reconstruccion():
                     st.rerun()
 
         c_add, c_del, c_spacer = st.columns([0.5, 0.5, 2.0], gap="small")
+        st.markdown("<div style='height:0.15rem;'></div>", unsafe_allow_html=True)
 
         with c_add:
             max_recons = len(recs_exp) >= 6
