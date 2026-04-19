@@ -1165,20 +1165,24 @@ def _inject_sidebar_css():
            especificidad supere a las reglas generales definidas arriba. */
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] {
-            background: #3a3d47 !important;
-            border: 1px solid #4d5059 !important;
+            background: #4a4e58 !important;
+            border: 1px solid #5d616c !important;
             color: #ffffff !important;
+            box-sizing: border-box !important;
             min-height: 2.75rem !important;
             height: 2.75rem !important;
             max-height: 2.75rem !important;
             font-size: 0.9rem !important;
-            padding: 0.5rem 1rem !important;
-            line-height: 1.2 !important;
+            padding: 0 1rem !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover {
-            background: #484c57 !important;
-            border-color: #5d616c !important;
+            background: #5a5e69 !important;
+            border-color: #6e7280 !important;
             color: #ffffff !important;
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
@@ -1188,8 +1192,10 @@ def _inject_sidebar_css():
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] div {
             font-size: 0.9rem !important;
-            line-height: 1.2 !important;
+            line-height: 1 !important;
             color: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         /* Marker invisible (no ocupa espacio ni se ve) */
@@ -1377,7 +1383,6 @@ def _render_sidebar():
             key="btn_add_exp_global",
             use_container_width=True,
             type="secondary",
-            help=f"Se agregará a {target_lbl} · {target_reg}",
         ):
             st.session_state["exploraciones"].append(
                 _crear_exploracion_base(topo_set_idx=target_idx)
