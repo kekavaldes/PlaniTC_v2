@@ -1159,17 +1159,13 @@ def _inject_sidebar_css():
         }
 
         /* ── Botones de acción global (+ Exploración / + Topograma) ──
-           Para superar el CSS global de app.py (`.stApp .stButton button`
-           con !important), duplicamos selectores con :is() para inflar
-           la especificidad. Esto garantiza que nuestro color de fondo
-           gane la cascada sin importar el orden de inyección. */
-        :is(div[data-testid="stElementContainer"]):is(:has(.sb-add-buttons-zone))
-        ~ :is(div[data-testid="stElementContainer"])
-        :is(div[data-testid="stButton"]) > button[kind="secondary"],
-        div.stApp div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"],
-        body div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] {
+           Streamlit genera una clase `st-key-<key>` en el contenedor del
+           widget según el key que le pasemos. Esto nos permite apuntarlos
+           con precisión quirúrgica, sin depender de markers ni :has(). */
+        .st-key-btn_add_exp_global button[kind="secondary"],
+        .st-key-btn_add_set_sidebar button[kind="secondary"],
+        div.stApp .st-key-btn_add_exp_global button[kind="secondary"],
+        div.stApp .st-key-btn_add_set_sidebar button[kind="secondary"] {
             background-color: #6b6f7a !important;
             background: #6b6f7a !important;
             border: 1px solid #80848f !important;
@@ -1185,24 +1181,21 @@ def _inject_sidebar_css():
             align-items: center !important;
             justify-content: center !important;
         }
-        :is(div[data-testid="stElementContainer"]):is(:has(.sb-add-buttons-zone))
-        ~ :is(div[data-testid="stElementContainer"])
-        :is(div[data-testid="stButton"]) > button[kind="secondary"]:hover,
-        div.stApp div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover,
-        body div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover {
+        .st-key-btn_add_exp_global button[kind="secondary"]:hover,
+        .st-key-btn_add_set_sidebar button[kind="secondary"]:hover,
+        div.stApp .st-key-btn_add_exp_global button[kind="secondary"]:hover,
+        div.stApp .st-key-btn_add_set_sidebar button[kind="secondary"]:hover {
             background-color: #7c808a !important;
             background: #7c808a !important;
             border-color: #90949e !important;
             color: #ffffff !important;
         }
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] p,
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] span,
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] div {
+        .st-key-btn_add_exp_global button[kind="secondary"] p,
+        .st-key-btn_add_exp_global button[kind="secondary"] span,
+        .st-key-btn_add_exp_global button[kind="secondary"] div,
+        .st-key-btn_add_set_sidebar button[kind="secondary"] p,
+        .st-key-btn_add_set_sidebar button[kind="secondary"] span,
+        .st-key-btn_add_set_sidebar button[kind="secondary"] div {
             font-size: 0.9rem !important;
             line-height: 1 !important;
             color: #ffffff !important;
