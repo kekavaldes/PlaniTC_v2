@@ -1040,25 +1040,26 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS que iguala la altura de los botones dentro de cada fila de columnas
-    del sidebar, para que el botón principal y el ícono de eliminar queden
-    perfectamente alineados. Además, convierte los botones marcados con
-    `.sb-ghost` en botones 'fantasma' (sin fondo ni borde, solo el ícono)."""
+    """CSS del sidebar para mantener las tarjetas principales con altura pareja
+    y dejar los botones de eliminar como íconos limpios, centrados y sin el
+    fondo gris detrás."""
     st.markdown(
         """
         <style>
-        /* Estirar todos los botones dentro de filas horizontales (st.columns)
-           a la altura de la fila, para alinear iconos con botones multilínea. */
+        /* Cada fila del sidebar se comporta como una sola hilera alineada */
         div[data-testid="stHorizontalBlock"] {
             align-items: stretch !important;
         }
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
+            justify-content: center !important;
         }
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
             height: 100%;
         }
+
+        /* Botón principal de cada exploración / topograma */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
             height: 100%;
             display: flex;
@@ -1066,7 +1067,6 @@ def _inject_sidebar_css():
         }
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
             flex: 1 1 auto !important;
-            height: 100% !important;
             min-height: 56px;
             width: 100%;
             white-space: normal;
@@ -1074,21 +1074,61 @@ def _inject_sidebar_css():
             box-sizing: border-box;
         }
 
-        /* Botones "fantasma": los que vienen inmediatamente después de un
-           marker .sb-ghost. Sin fondo ni borde, solo el ícono visible,
-           integrado con el fondo de la app. Hover suave para feedback. */
+        /* Columna del botón eliminar: centrar contenido vertical y horizontal */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] {
+            height: 100%;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton {
+            height: auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
-            background: transparent !important;
+            width: 42px !important;
+            min-width: 42px !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            padding: 0 !important;
+            margin: 0 auto !important;
             border: none !important;
+            border-radius: 999px !important;
+            background: transparent !important;
             box-shadow: none !important;
-            color: #cccccc !important;
-            font-size: 1.2rem !important;
+            color: #cfcfcf !important;
+            font-size: 1.15rem !important;
+            line-height: 1 !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255, 255, 255, 0.06) !important;
+            background: rgba(255, 255, 255, 0.07) !important;
             color: #ffffff !important;
+            border: none !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:focus,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:focus-visible,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:active {
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            background: rgba(255, 255, 255, 0.10) !important;
+            color: #ffffff !important;
+        }
+
+        /* El marcador invisible no debe ocupar espacio visual */
+        .sb-ghost {
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         </style>
         """,
@@ -1133,7 +1173,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6, 1], gap="small")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1187,7 +1227,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6, 1], gap="small")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
