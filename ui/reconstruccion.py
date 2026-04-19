@@ -199,49 +199,11 @@ def _fase_por_nombre_exploracion(nombre: str):
     return mapa.get(nombre or "", FASES_RECONS[0])
 
 
-def _get_set_exp_recon(exp) -> dict:
-    """Devuelve el set de topograma asociado a la exploración en reconstrucción."""
-    sets = st.session_state.get("topograma_sets") or []
-    if exp is not None and sets:
-        idx = exp.get("topo_set_idx", 0)
-        if isinstance(idx, int) and 0 <= idx < len(sets):
-            return sets[idx] or {}
-    return st.session_state.get("topograma_store", {}) or {}
-
-
-def _get_region_label_exp(exp) -> str:
-    store = _get_set_exp_recon(exp)
-    return (store.get("examen") or store.get("region_anat") or store.get("region") or "").strip()
-
-
-def _get_region_group_exp(exp) -> str:
-    store = _get_set_exp_recon(exp)
-    region = (store.get("region_anat") or store.get("region") or "").upper()
-    examen = (store.get("examen") or "").upper()
-    if "ANGIO" in region or examen.startswith("ATC"):
-        return "ANGIO"
-    if "ORBIT" in region or "ORBIT" in examen:
-        return "CABEZA"
-    if "CEREBRO" in region or "SENO" in region or "MAXILOFACIAL" in region or "OIDO" in region or "CABEZA" in region:
-        return "CABEZA"
-    if "CUELLO" in region or "CUELLO" in examen:
-        return "CUELLO"
-    if "COLUMNA" in region:
-        return "COLUMNA"
-    if any(x in region for x in ["HOMBRO", "BRAZO", "CODO", "ANTEBRAZO", "MUNECA", "MUÑECA", "MANO"]):
-        return "EESS"
-    if any(x in region for x in ["CADERA", "MUSLO", "RODILLA", "PIERNA", "TOBILLO", "PIE"]):
-        return "EEII"
-    return "CUERPO"
-
-
-def _crear_reconstruccion_base(exp, numero, region_anat=None):
+def _crear_reconstruccion_base(exp, numero, region_anat):
     exp_id = exp.get("id")
     ventana_def = list(VENTANAS.keys())[0]
     ww_def = VENTANAS[ventana_def]["ww"]
     wl_def = VENTANAS[ventana_def]["wl"]
-    if not region_anat:
-        region_anat = _get_region_group_exp(exp)
     refs_ini_local = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
     refs_fin_local = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
     algoritmo_def = ALGORITMOS_ITERATIVOS[0]
@@ -264,6 +226,29 @@ def _crear_reconstruccion_base(exp, numero, region_anat=None):
         "inicio_recons": refs_ini_local[0],
         "fin_recons": refs_fin_local[0],
     }
+
+
+def _get_topograma_set_for_exp(exp):
+    sets = st.session_state.get("topograma_sets", [])
+    idx = exp.get("topo_set_idx", 0) if isinstance(exp, dict) else 0
+    if isinstance(idx, int) and 0 <= idx < len(sets):
+        return sets[idx] or {}
+    return st.session_state.get("topograma_store", {}) or {}
+
+
+def _get_region_label_for_exp(exp) -> str:
+    store = _get_topograma_set_for_exp(exp)
+    return (store.get("examen") or store.get("region_anat") or store.get("region") or "").strip()
+
+
+def _get_region_group_for_exp(exp) -> str:
+    region = _get_region_label_for_exp(exp).upper()
+    if "ANGIO" in region or region.startswith("ATC"):
+        return "ANGIO"
+    for key in REFS_INICIO:
+        if key in region:
+            return key
+    return "CUERPO"
 
 
 def _reindexar_reconstrucciones(exp_id):
@@ -293,7 +278,7 @@ def _obtener_adquisiciones_validas():
             exp_id = f"{exp_id}_{idx}"
         ids_vistos.add(exp_id)
         nuevo["id"] = exp_id
-        nuevo["orden"] = nuevo.get("orden", idx)
+        nuevo["orden"] = nuevo.get("orden") or nuevo.get("order") or idx
         nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
         adquisiciones.append(nuevo)
 
@@ -313,8 +298,9 @@ def render_reconstruccion():
 
     for exp in adquisiciones_validas:
         exp_id = exp.get("id")
+        region_anat = _get_region_group_for_exp(exp)
         if exp_id not in st.session_state["reconstrucciones_por_exp"] or not st.session_state["reconstrucciones_por_exp"][exp_id]:
-            st.session_state["reconstrucciones_por_exp"][exp_id] = [_crear_reconstruccion_base(exp, 1)]
+            st.session_state["reconstrucciones_por_exp"][exp_id] = [_crear_reconstruccion_base(exp, 1, region_anat)]
 
         _reindexar_reconstrucciones(exp_id)
         ids_rec = [r.get("id") for r in st.session_state["reconstrucciones_por_exp"][exp_id]]
@@ -343,7 +329,7 @@ def render_reconstruccion():
                 n_rec = len(st.session_state["reconstrucciones_por_exp"].get(exp_id, []))
                 color = _color_exploracion(exp)
                 nombre_base = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
-                region = _get_region_label_exp(exp)
+                region = _get_region_label_for_exp(exp)
                 nombre_visible = f"{nombre_base} {region}".strip()
 
                 _mini_chip(
@@ -379,7 +365,7 @@ def render_reconstruccion():
         st.session_state["recon_activa_por_exp"][exp_id] = rec_actual.get("id")
 
         nombre_base_exp = exp_activa.get("nombre") if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
-        region_exp = _get_region_label_exp(exp_activa)
+        region_exp = _get_region_label_for_exp(exp_activa)
         nombre_exp = f"{nombre_base_exp} {region_exp}".strip().upper()
 
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
@@ -435,7 +421,7 @@ def render_reconstruccion():
             ):
                 nuevo_num = len(recs_exp) + 1
                 st.session_state["reconstrucciones_por_exp"][exp_id].append(
-                    _crear_reconstruccion_base(exp_activa, nuevo_num)
+                    _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
                 )
                 _reindexar_reconstrucciones(exp_id)
                 st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
@@ -529,9 +515,9 @@ def render_reconstruccion():
 
                 _panel_header("📍", "Rango de Reconstrucción")
 
-                region_anat_actual = _get_region_group_exp(exp_activa)
-                refs_ini_r = REFS_INICIO.get(region_anat_actual, REFS_INICIO["CUERPO"])
-                refs_fin_r = REFS_FIN.get(region_anat_actual, REFS_FIN["CUERPO"])
+                region_anat_activa = _get_region_group_for_exp(exp_activa)
+                refs_ini_r = REFS_INICIO.get(region_anat_activa, REFS_INICIO["CUERPO"])
+                refs_fin_r = REFS_FIN.get(region_anat_activa, REFS_FIN["CUERPO"])
 
                 col_ini, col_fin = st.columns([1, 1], gap="small")
                 with col_ini:
