@@ -387,17 +387,41 @@ def _render_sidebar(recons_planas):
     rec_order = st.session_state["_ref_rec_order"]
     activa = st.session_state["ref_activa"]
 
+    # Determinar qué reconstrucción está "expandida" (solo una a la vez):
+    #   - Si el usuario está viendo una rec (kind="rec"), es esa.
+    #   - Si tiene una reformación abierta, es la rec madre de esa ref.
+    #   - Si no hay nada, ninguna (todas colapsadas).
+    rec_id_expandida = None
+    if isinstance(activa, dict) and activa.get("kind") == "rec":
+        rec_id_expandida = activa.get("rec_id")
+    elif isinstance(activa, str):
+        for rid, lista in reformaciones_map.items():
+            for ref in lista:
+                if ref.get("id") == activa:
+                    rec_id_expandida = rid
+                    break
+            if rec_id_expandida:
+                break
+
     # Orden de las reconstrucciones: por su `order` de aparición
     recons_ordenadas = sorted(
         recons_planas,
         key=lambda r: rec_order.get(r["id"], 0),
     )
 
-    # Renderizar AGRUPADO: cada reconstrucción y debajo sus reformaciones
+    # Renderizar AGRUPADO: cada reconstrucción, y debajo SOLO sus
+    # reformaciones si es la reconstrucción expandida. El resto se
+    # mantiene colapsado con un contador.
     for r in recons_ordenadas:
         rec_id = r["id"]
         lbl = r["nombre"]
         reg = r["exp_nombre"]
+        refs_de_esta_rec = sorted(
+            reformaciones_map.get(rec_id, []),
+            key=lambda x: x.get("order", 0),
+        )
+        n_refs = len(refs_de_esta_rec)
+        esta_expandida = (rec_id == rec_id_expandida)
 
         # Botón de la reconstrucción
         es_activo_rec = (
@@ -407,8 +431,11 @@ def _render_sidebar(recons_planas):
         )
         tipo_btn = "primary" if es_activo_rec else "secondary"
 
+        # Indicador de cuántas reformaciones tiene cuando NO está expandida
+        contador = f"  ({n_refs})" if (n_refs > 0 and not esta_expandida) else ""
+
         if st.button(
-            f"🧩 {lbl} · {reg}",
+            f"🧩 {lbl} · {reg}{contador}",
             key=f"ref_btn_rec_{rec_id}",
             type=tipo_btn,
             use_container_width=True,
@@ -416,39 +443,35 @@ def _render_sidebar(recons_planas):
             st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
             st.rerun()
 
-        # Reformaciones de esta reconstrucción (ordenadas por su propio order)
-        refs_de_esta_rec = sorted(
-            reformaciones_map.get(rec_id, []),
-            key=lambda x: x.get("order", 0),
-        )
+        # Reformaciones: solo visibles si esta rec está expandida
+        if esta_expandida:
+            for ref in refs_de_esta_rec:
+                es_activo_ref = (isinstance(activa, str) and activa == ref["id"])
+                tipo_btn_ref = "primary" if es_activo_ref else "secondary"
+                nombre_legible = _nombre_reformacion(ref)
 
-        for ref in refs_de_esta_rec:
-            es_activo_ref = (isinstance(activa, str) and activa == ref["id"])
-            tipo_btn_ref = "primary" if es_activo_ref else "secondary"
-            nombre_legible = _nombre_reformacion(ref)
+                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
+                with c_main:
+                    if st.button(
+                        f"📐 {nombre_legible}",
+                        key=f"ref_btn_ref_{ref['id']}",
+                        type=tipo_btn_ref,
+                        use_container_width=True,
+                    ):
+                        st.session_state["ref_activa"] = ref["id"]
+                        st.rerun()
+                with c_del:
+                    if st.button(
+                        "✕",
+                        key=f"ref_btn_del_{ref['id']}",
+                        type="tertiary",
+                        use_container_width=True,
+                        help=f"Eliminar {nombre_legible}",
+                    ):
+                        _eliminar_reformacion(ref["id"], ref.get("rec_id"))
+                        st.rerun()
 
-            c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
-            with c_main:
-                if st.button(
-                    f"📐 {nombre_legible}",
-                    key=f"ref_btn_ref_{ref['id']}",
-                    type=tipo_btn_ref,
-                    use_container_width=True,
-                ):
-                    st.session_state["ref_activa"] = ref["id"]
-                    st.rerun()
-            with c_del:
-                if st.button(
-                    "✕",
-                    key=f"ref_btn_del_{ref['id']}",
-                    type="tertiary",
-                    use_container_width=True,
-                    help=f"Eliminar {nombre_legible}",
-                ):
-                    _eliminar_reformacion(ref["id"], ref.get("rec_id"))
-                    st.rerun()
-
-        # Pequeño espacio vertical entre grupos de rec + sus reformaciones
+        # Pequeño espacio vertical entre grupos de rec
         st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
 
     # ── Botón "+ Reformación" ──
