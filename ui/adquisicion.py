@@ -1158,18 +1158,13 @@ def _inject_sidebar_css():
             margin: 0 !important;
         }
 
-        /* ── Botones de acción global (➕ Exploración / ➕ Topograma) ──
-           Estructura DOM en Streamlit:
-             <stElementContainer> <div><div class="sb-add-buttons-zone"></div></div> </stElementContainer>
-             <stElementContainer> <div style="height:..."></div> </stElementContainer>   <- spacer
-             <stElementContainer> ...botón ➕ Exploración... </stElementContainer>
-             <stElementContainer> ...spacer... </stElementContainer>
-             <stElementContainer> ...botón ➕ Topograma... </stElementContainer>
-
-           El selector :has() + ~ alcanza todos los hermanos siguientes
-           del contenedor que tiene el marker. */
+        /* ── Botones de acción global (+ Exploración / + Topograma) ──
+           Los botones están dentro de columnas (stHorizontalBlock), por lo
+           que el selector debe bajar con descendant combinator. Además
+           incluimos `div[data-testid="stButton"] > button` para que la
+           especificidad supere a las reglas generales definidas arriba. */
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"] {
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] {
             background: #3a3d47 !important;
             border: 1px solid #4d5059 !important;
             color: #ffffff !important;
@@ -1181,27 +1176,20 @@ def _inject_sidebar_css():
             line-height: 1.2 !important;
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"]:hover {
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover {
             background: #484c57 !important;
             border-color: #5d616c !important;
             color: #ffffff !important;
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"] p,
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] p,
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"] span,
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] span,
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"] div {
+        ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] div {
             font-size: 0.9rem !important;
             line-height: 1.2 !important;
             color: #ffffff !important;
-        }
-
-        /* El símbolo "+" suele ser un emoji (➕) con color propio.
-           Forzamos a que se renderice monocromo blanco. */
-        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
-        ~ div[data-testid="stElementContainer"] button[kind="secondary"] {
-            -webkit-font-feature-settings: "tnum";
         }
 
         /* Marker invisible (no ocupa espacio ni se ve) */
