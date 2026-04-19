@@ -318,7 +318,10 @@ def render_reconstruccion():
         if imagen_recon is not None:
             st.image(imagen_recon, caption="Imagen cargada", width=360)
 
-        for rec_btn in recs_exp[:6]:
+        recs_visibles = recs_exp[:6]
+        cols_rec = st.columns(len(recs_visibles)) if recs_visibles else []
+
+        for idx_rec, rec_btn in enumerate(recs_visibles):
             nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
             ancho_estimado = max(220, min(460, 110 + (len(nombre_btn) * 8)))
 
@@ -337,14 +340,15 @@ def render_reconstruccion():
                 unsafe_allow_html=True,
             )
 
-            if st.button(
-                nombre_btn,
-                key=f"btn_rec_item_{rec_btn['id']}",
-                use_container_width=False,
-                type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
-            ):
-                st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                st.rerun()
+            with cols_rec[idx_rec]:
+                if st.button(
+                    nombre_btn,
+                    key=f"btn_rec_item_{rec_btn['id']}",
+                    use_container_width=False,
+                    type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
+                ):
+                    st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                    st.rerun()
 
         c_add, c_del, c_spacer = st.columns([0.5, 0.5, 2.0], gap="small")
 
