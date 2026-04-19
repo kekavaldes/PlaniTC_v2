@@ -3,21 +3,6 @@ import copy
 import streamlit as st
 
 
-def _inject_recon_css():
-    st.markdown(
-        """
-        <style>
-        /* Botones de agregar / eliminar más angostos visualmente */
-        div[data-testid="stButton"] > button[kind] {
-            white-space: normal;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-
 REFS_INICIO = {
     "CABEZA": ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE",
                 "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR",
@@ -211,7 +196,6 @@ def _obtener_adquisiciones_validas():
 
 
 def render_reconstruccion():
-    _inject_recon_css()
     topo_store = st.session_state.get("topograma_store", {})
     region_anat = topo_store.get("region_anat") or st.session_state.get("region_anat") or "CUERPO"
     adquisiciones_validas = _obtener_adquisiciones_validas()
@@ -300,20 +284,21 @@ def render_reconstruccion():
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
-        for rec_btn in recs_exp[:6]:
-            if st.button(
-                f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}",
-                key=f"btn_rec_item_{rec_btn['id']}",
-                use_container_width=True,
-                type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
-            ):
-                st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                st.rerun()
+        cols_nav_rec = st.columns(min(max(len(recs_exp), 1), 4))
+        for idx, rec_btn in enumerate(recs_exp[:4]):
+            with cols_nav_rec[idx]:
+                if st.button(
+                    f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}",
+                    key=f"btn_rec_item_{rec_btn['id']}",
+                    use_container_width=True,
+                    type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
+                ):
+                    st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                    st.rerun()
 
-        c_add, c_dup, c_del, c_spacer = st.columns([0.32, 1.0, 0.32, 1.36], gap="small")
+        c_add, c_dup, c_del = st.columns(3)
         with c_add:
-            max_recons = len(recs_exp) >= 6
-            if st.button("➕ Agregar reconstrucción", use_container_width=True, key=f"add_rec_{exp_id}", disabled=max_recons):
+            if st.button("➕ Agregar reconstrucción", use_container_width=True, key=f"add_rec_{exp_id}"):
                 nuevo_num = len(recs_exp) + 1
                 st.session_state["reconstrucciones_por_exp"][exp_id].append(_crear_reconstruccion_base(exp_activa, nuevo_num, region_anat))
                 _reindexar_reconstrucciones(exp_id)
@@ -321,8 +306,7 @@ def render_reconstruccion():
                 st.rerun()
 
         with c_dup:
-            max_recons = len(recs_exp) >= 6
-            if st.button("📄 Duplicar reconstrucción", use_container_width=True, key=f"dup_rec_{exp_id}", disabled=max_recons):
+            if st.button("📄 Duplicar reconstrucción", use_container_width=True, key=f"dup_rec_{exp_id}"):
                 copia = copy.deepcopy(rec_actual)
                 st.session_state["reconstrucciones_por_exp"][exp_id].append(copia)
                 _reindexar_reconstrucciones(exp_id)
@@ -338,9 +322,6 @@ def render_reconstruccion():
                 primer_id = st.session_state["reconstrucciones_por_exp"][exp_id][0]["id"]
                 st.session_state["recon_activa_por_exp"][exp_id] = primer_id
                 st.rerun()
-
-        with c_spacer:
-            st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
         col_r1, col_r2 = st.columns([1, 1], gap="large")
