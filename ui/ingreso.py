@@ -160,6 +160,7 @@ def _sync_store_to_widgets():
     st.session_state["creatinina_serica_widget"] = _safe_float(store.get("creatinina_serica", 1.0), 1.0)
 
     st.session_state["contraste_ev"] = bool(store.get("contraste_ev", False))
+    st.session_state.setdefault("contraste_ev", bool(store.get("contraste_ev", False)))
     st.session_state["vvp_widget"] = store.get("vvp")
     st.session_state["metodo_inyeccion_widget"] = store.get("metodo_inyeccion")
     st.session_state["cantidad_contraste_widget"] = store.get("cantidad_contraste")
