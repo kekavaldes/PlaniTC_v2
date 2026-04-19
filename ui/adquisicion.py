@@ -1040,75 +1040,54 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS del sidebar para mantener las tarjetas principales con altura pareja
-    y dejar los botones de eliminar como íconos limpios, centrados y sin el
-    fondo gris detrás.
+    """CSS del sidebar para alinear el botón de eliminar al centro de cada fila.
 
-    Clave del alineamiento: el marker `.sb-ghost` queda con display:none, por
-    lo que no ocupa espacio vertical en la columna. El botón queda como único
-    flex item visible y se estira a la altura de la fila, quedando perfectamente
-    centrado con el botón principal sin importar cuántas líneas tenga.
+    Esta versión evita depender del estirado global de columnas, que en Safari
+    puede desalinear el botón cuadrado respecto de la tarjeta principal.
     """
     st.markdown(
         """
         <style>
-        /* 1. Cada fila del sidebar alinea a sus hijos con "stretch" */
+        /* Fila del sidebar: centrar verticalmente sus columnas */
         div[data-testid="stHorizontalBlock"] {
-            align-items: stretch !important;
-        }
-        /* 2. Cada columna es flex-column para apilar sus widgets */
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-        }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
-            height: 100%;
+            align-items: center !important;
         }
 
-        /* 3. Botones principales: se estiran a la altura de la fila */
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
-            height: 100%;
-            display: flex;
-            align-items: stretch;
-        }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
-            flex: 1 1 auto !important;
-            min-height: 56px;
-            width: 100%;
-            white-space: normal;
-            line-height: 1.25;
-            box-sizing: border-box;
-        }
-
-        /* 4. El marker ghost NO debe ocupar espacio — display:none permite
-              que el botón hermano quede como único flex item visible y se
-              centre naturalmente dentro de la columna.
-              Los selectores :has() + ~ siguen funcionando con display:none
-              porque operan sobre el DOM. */
+        /* Columna del botón eliminar: centrado limpio */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
             display: none !important;
         }
-
-        /* 5. Botón de eliminar: transparente, sin borde y con el ícono
-              dibujado por CSS para evitar el desalineado vertical del emoji. */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton {
-            height: 100% !important;
+        ~ div[data-testid="stElementContainer"] {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            height: 100% !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
             position: relative !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
+            width: 52px !important;
+            min-width: 52px !important;
+            max-width: 52px !important;
+            height: 52px !important;
+            min-height: 52px !important;
+            margin: 0 auto !important;
             padding: 0 !important;
-            margin: 0 !important;
-            min-height: 56px !important;
-            width: 100% !important;
+            border-radius: 16px !important;
+            background: rgba(255,255,255,0.04) !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            box-shadow: none !important;
             color: transparent !important;
             font-size: 0 !important;
             line-height: 0 !important;
@@ -1119,20 +1098,20 @@ def _inject_sidebar_css():
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button::before {
             content: "🗑️";
-            position: absolute;
-            inset: 0;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #cfcfcf;
-            font-size: 1.18rem;
+            width: 100%;
+            height: 100%;
+            color: #d7d7d7;
+            font-size: 1.10rem;
             line-height: 1;
-            transform: translateY(-2px);
+            transform: translateY(-1px);
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255, 255, 255, 0.06) !important;
-            border: none !important;
+            background: rgba(255,255,255,0.08) !important;
+            border: 1px solid rgba(255,255,255,0.22) !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover::before,
@@ -1146,8 +1125,8 @@ def _inject_sidebar_css():
         ~ div[data-testid="stElementContainer"] .stButton > button:focus,
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:active {
-            background: rgba(255, 255, 255, 0.10) !important;
-            border: none !important;
+            background: rgba(255,255,255,0.10) !important;
+            border: 1px solid rgba(255,255,255,0.24) !important;
             box-shadow: none !important;
             outline: none !important;
         }
@@ -1194,7 +1173,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.2, 0.8], gap="small")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1248,7 +1227,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.2, 0.8], gap="small")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1293,7 +1272,7 @@ def _render_sidebar():
 
     # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
-    c_exp, c_topo = st.columns(2, gap="small")
+    c_exp, c_topo = st.columns(2, gap="small", vertical_alignment="center")
     with c_exp:
         if st.button(
             "➕ Exploración",
@@ -1818,7 +1797,7 @@ def _render_bolus(exp):
     with r2_icon:
         st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
     with r2_body:
-        c1, c2 = st.columns(2, gap="small")
+        c1, c2 = st.columns(2, gap="small", vertical_alignment="center")
 
         _adq_pair(c1, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
         _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
