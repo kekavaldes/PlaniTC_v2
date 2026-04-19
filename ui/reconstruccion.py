@@ -105,7 +105,7 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
         <div style="
             border:1px solid {color};
             border-radius:12px;
-            height:0.45rem;
+            height:0.22rem;
             background:{color};
             margin-bottom:0.45rem;
         "></div>
