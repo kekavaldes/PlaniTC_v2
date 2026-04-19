@@ -56,6 +56,27 @@ def _inject_recon_css():
             white-space: nowrap !important;
         }
 
+
+        /* Botones de cada reconstrucción */
+        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] {
+            min-height: 3.05rem !important;
+            height: 3.05rem !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 16px !important;
+        }
+
+        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] p {
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 100% !important;
+        }
+
         /* Botones X para eliminar reconstrucción individual */
         div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"] {
             background-color: transparent !important;
