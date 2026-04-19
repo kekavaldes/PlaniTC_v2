@@ -606,15 +606,8 @@ def _render_header_set_activo():
     sets = st.session_state["topograma_sets"]
     idx = _set_activo_idx()
     cur = sets[idx]
-    hay_varios_sets = len(sets) > 1
 
-    # Layout: título | renombrar | eliminar
-    if hay_varios_sets:
-        c_title, c_rename, c_del = st.columns([2, 3, 1.2], gap="medium")
-    else:
-        c_title, c_rename = st.columns([2, 3], gap="medium")
-        c_del = None
-
+    c_title, c_rename = st.columns([2, 3], gap="medium")
     with c_title:
         lbl = cur.get("label") or f"Topograma {idx+1}"
         region_lbl = cur.get("examen") or cur.get("region_anat") or "sin región"
@@ -635,17 +628,6 @@ def _render_header_set_activo():
         )
         if nuevo_lbl and nuevo_lbl != cur.get("label"):
             cur["label"] = nuevo_lbl
-
-    if c_del is not None:
-        with c_del:
-            if st.button(
-                "🗑️ Eliminar",
-                key=f"del_topo_header_{idx}",
-                use_container_width=True,
-                help=f"Eliminar {lbl}",
-            ):
-                _eliminar_set_topograma(idx)
-                st.rerun()
 
     st.markdown("---")
 
