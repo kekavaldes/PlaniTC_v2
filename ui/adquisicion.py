@@ -1074,20 +1074,35 @@ def _inject_sidebar_css():
             box-sizing: border-box;
         }
 
-        /* Botones "fantasma": los que vienen inmediatamente después de un
-           marker .sb-ghost. Sin fondo ni borde, solo el ícono visible,
-           integrado con el fondo de la app. Hover suave para feedback. */
+        /* Botón del basurero sin cápsula/óvalo detrás */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton {
+            height: auto !important;
+            display: block !important;
+        }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
+            outline: none !important;
+            min-height: auto !important;
+            height: auto !important;
+            width: auto !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
             color: #cccccc !important;
-            font-size: 1.2rem !important;
+            font-size: 1.35rem !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255, 255, 255, 0.06) !important;
+        ~ div[data-testid="stElementContainer"] .stButton > button:hover,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:focus,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:active {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
             color: #ffffff !important;
         }
         </style>
