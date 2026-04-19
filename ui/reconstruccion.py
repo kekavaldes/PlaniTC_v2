@@ -275,7 +275,11 @@ def render_reconstruccion():
         rec_actual = next((r for r in recs_exp if r.get("id") == rec_activa_id), recs_exp[0])
         st.session_state["recon_activa_por_exp"][exp_id] = rec_actual.get("id")
 
-        nombre_exp = exp_activa.get("nombre") if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
+        nombre_base_exp = exp_activa.get("nombre") if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
+        region_exp = (st.session_state.get("topograma_store", {}).get("examen")
+                      or st.session_state.get("topograma_store", {}).get("region_anat")
+                      or "")
+        nombre_exp = f"{nombre_base_exp} {region_exp}".strip()
 
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
