@@ -279,7 +279,7 @@ def render_reconstruccion():
         region_exp = (st.session_state.get("topograma_store", {}).get("examen")
                       or st.session_state.get("topograma_store", {}).get("region_anat")
                       or "")
-        nombre_exp = f"{nombre_base_exp} {region_exp}".strip()
+        nombre_exp = f"{nombre_base_exp} {region_exp}".strip().upper()
 
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
