@@ -308,18 +308,7 @@ def render_reconstruccion():
         nombre_exp = f"{nombre_base_exp} {region_exp}".strip().upper()
 
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
-        st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")        st.markdown("---")
-
-        imagen_recon = st.file_uploader(
-            "Subir imagen de reconstrucción",
-            type=["png", "jpg", "jpeg", "webp"],
-            key=f"img_recon_{exp_id}_{rec_actual['id']}",
-        )
-        if imagen_recon is not None:
-            st.image(imagen_recon, caption="Imagen cargada", width=360)
-
-
-
+        st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
         for rec_btn in recs_exp[:6]:
             nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
@@ -354,8 +343,7 @@ def render_reconstruccion():
         with c_add:
             max_recons = len(recs_exp) >= 6
             if st.button(
-                "➕
-reconstrucción",
+                "➕\nreconstrucción",
                 key=f"add_rec_{exp_id}",
                 use_container_width=False,
                 disabled=max_recons,
@@ -371,8 +359,7 @@ reconstrucción",
         with c_del:
             deshabilitar = len(recs_exp) <= 1
             if st.button(
-                "🗑
-reconstrucción",
+                "🗑\nreconstrucción",
                 key=f"del_rec_{exp_id}",
                 use_container_width=False,
                 disabled=deshabilitar,
@@ -389,6 +376,15 @@ reconstrucción",
         with c_spacer:
             st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
 
+        st.markdown("---")
+
+        imagen_recon = st.file_uploader(
+            "Subir imagen de reconstrucción",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"img_recon_{exp_id}_{rec_actual['id']}",
+        )
+        if imagen_recon is not None:
+            st.image(imagen_recon, caption="Imagen cargada", width=360)
 
         col_r1, col_r2 = st.columns([1, 1], gap="large")
 
