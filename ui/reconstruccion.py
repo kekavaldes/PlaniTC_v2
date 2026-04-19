@@ -384,7 +384,7 @@ def render_reconstruccion():
             key=f"img_recon_{exp_id}_{rec_actual['id']}",
         )
         if imagen_recon is not None:
-            st.image(imagen_recon, caption="Imagen cargada", width=180)
+            st.image(imagen_recon, caption="Imagen cargada", width=360)
 
         col_r1, col_r2 = st.columns([1, 1], gap="large")
 
