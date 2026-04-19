@@ -1115,23 +1115,21 @@ def _inject_sidebar_css():
 
         /* Botones superiores del sidebar */
         div[data-testid="stButton"] > button[kind="secondary"] {
-            min-height: 2.15rem !important;
-            height: 2.15rem !important;
-            padding-top: 0.10rem !important;
-            padding-bottom: 0.10rem !important;
+            min-height: 2.2rem !important;
+            height: 2.2rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
             white-space: nowrap !important;
-            font-size: 0.84rem !important;
-            line-height: 1 !important;
+            font-size: 0.88rem !important;
         }
 
         div[data-testid="stButton"] > button[kind="primary"] {
-            min-height: 2.15rem !important;
-            height: 2.15rem !important;
-            padding-top: 0.10rem !important;
-            padding-bottom: 0.10rem !important;
+            min-height: 2.2rem !important;
+            height: 2.2rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
             white-space: nowrap !important;
-            font-size: 0.84rem !important;
-            line-height: 1 !important;
+            font-size: 0.88rem !important;
         }
         </style>
         """,
@@ -1226,8 +1224,7 @@ def _render_sidebar():
                     )
                 with c_main:
                     if st.button(
-                        f"📡 {lbl}  
-{reg}",
+                        f"📡 {lbl} · {reg}",
                         key=f"btn_topograma_sidebar_{i}",
                         type=tipo,
                         use_container_width=True,
@@ -1255,8 +1252,7 @@ def _render_sidebar():
                     )
                 with c_main:
                     if st.button(
-                        f"📡 {lbl}  
-{reg}",
+                        f"📡 {lbl} · {reg}",
                         key=f"btn_topograma_sidebar_{i}",
                         type=tipo,
                         use_container_width=True,
