@@ -1040,95 +1040,71 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS del sidebar para alinear el botón de eliminar al centro de cada fila.
+    """Ajustes mínimos del sidebar para que las filas de exploraciones no se
+    desplacen verticalmente.
 
-    Esta versión evita depender del estirado global de columnas, que en Safari
-    puede desalinear el botón cuadrado respecto de la tarjeta principal.
+    El problema real de desalineación viene del emoji 🗑️ dentro del botón de
+    Streamlit, que en Safari suele renderizarse más abajo que el centro óptico.
+    La solución aquí es usar un glifo simple (✕) y centrarlo con CSS, evitando
+    hacks con elementos ocultos que terminan desplazando toda la columna.
     """
     st.markdown(
         """
         <style>
-        /* Fila del sidebar: centrar verticalmente sus columnas */
-        div[data-testid="stHorizontalBlock"] {
-            align-items: center !important;
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
         }
 
-        /* Columna del botón eliminar: centrado limpio */
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
+        /* tarjeta principal del sidebar */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
+            min-height: 56px;
+            width: 100%;
+            white-space: normal;
+            line-height: 1.2;
+            box-sizing: border-box;
+        }
+
+        /* marcador vacío para los botones de eliminar: no ocupa espacio */
+        .sb-ghost {
             display: none !important;
         }
+
+        /* botón de eliminar: pequeño, centrado y sin fondo gris duro */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] {
+        + div[data-testid="stElementContainer"] .stButton {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
             height: 100% !important;
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
+            min-height: 56px !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 100% !important;
-            height: 100% !important;
-        }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button {
-            position: relative !important;
-            width: 52px !important;
-            min-width: 52px !important;
-            max-width: 52px !important;
-            height: 52px !important;
-            min-height: 52px !important;
-            margin: 0 auto !important;
+        + div[data-testid="stElementContainer"] .stButton > button {
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
             padding: 0 !important;
-            border-radius: 16px !important;
-            background: rgba(255,255,255,0.04) !important;
+            margin: 0 auto !important;
+            border-radius: 14px !important;
             border: 1px solid rgba(255,255,255,0.14) !important;
+            background: rgba(255,255,255,0.03) !important;
             box-shadow: none !important;
-            color: transparent !important;
-            font-size: 0 !important;
-            line-height: 0 !important;
+            color: #d7d7d7 !important;
+            font-size: 1.05rem !important;
+            line-height: 1 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button::before {
-            content: "🗑️";
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-            color: #d7d7d7;
-            font-size: 1.10rem;
-            line-height: 1;
-            transform: translateY(-1px);
-        }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:hover {
+        + div[data-testid="stElementContainer"] .stButton > button:hover {
             background: rgba(255,255,255,0.08) !important;
-            border: 1px solid rgba(255,255,255,0.22) !important;
-        }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:hover::before,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:focus::before,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:active::before {
-            color: #ffffff;
-        }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:focus,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:active {
-            background: rgba(255,255,255,0.10) !important;
-            border: 1px solid rgba(255,255,255,0.24) !important;
-            box-shadow: none !important;
-            outline: none !important;
+            border-color: rgba(255,255,255,0.20) !important;
+            color: #ffffff !important;
         }
         </style>
         """,
@@ -1173,7 +1149,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.95], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1187,7 +1163,7 @@ def _render_sidebar():
                 with c_del:
                     st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
-                        "🗑",
+                        "✕",
                         key=f"del_set_sidebar_{i}",
                         use_container_width=True,
                         help=f"Eliminar {lbl} · {reg}",
@@ -1227,7 +1203,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.95], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1240,7 +1216,7 @@ def _render_sidebar():
                 with c_del:
                     st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
-                        "🗑",
+                        "✕",
                         key=f"del_exp_{exp['id']}",
                         use_container_width=True,
                         help=f"Eliminar {nombre_exp}",
@@ -1272,7 +1248,7 @@ def _render_sidebar():
 
     # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
-    c_exp, c_topo = st.columns(2, gap="small", vertical_alignment="center")
+    c_exp, c_topo = st.columns(2, gap="small")
     with c_exp:
         if st.button(
             "➕ Exploración",
@@ -1797,7 +1773,7 @@ def _render_bolus(exp):
     with r2_icon:
         st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>⚙️</div>", unsafe_allow_html=True)
     with r2_body:
-        c1, c2 = st.columns(2, gap="small", vertical_alignment="center")
+        c1, c2 = st.columns(2, gap="small")
 
         _adq_pair(c1, "mAs", lambda: _text_disabled("mAs fijo", "20", key=f"mas_bolus_{eid}"))
         _adq_pair(c2, "kV", lambda: _text_disabled("kV fijo", "100", key=f"kv_bolus_{eid}"))
