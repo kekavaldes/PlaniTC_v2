@@ -1157,6 +1157,8 @@ def _render_sidebar():
 
             if hay_varios_sets:
                 c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
+                with c_dot:
+                    st.markdown('<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>', unsafe_allow_html=True)
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1214,6 +1216,8 @@ def _render_sidebar():
                 c_dot, c_main, c_del = st.columns([0.45, 6.2, 0.55], gap="small", vertical_alignment="center")
                 with c_dot:
                     _render_dot_for_exp(exp)
+                with c_dot:
+                    st.markdown('<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>', unsafe_allow_html=True)
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1240,6 +1244,8 @@ def _render_sidebar():
                 c_dot, c_main = st.columns([0.45, 6.2], gap="small", vertical_alignment="center")
                 with c_dot:
                     _render_dot_for_exp(exp)
+                with c_dot:
+                    st.markdown('<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>', unsafe_allow_html=True)
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
