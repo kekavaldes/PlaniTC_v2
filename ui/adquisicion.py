@@ -1194,6 +1194,14 @@ def _inject_sidebar_css():
         ~ div[data-testid="stElementContainer"] button[kind="secondary"] div {
             font-size: 0.9rem !important;
             line-height: 1.2 !important;
+            color: #ffffff !important;
+        }
+
+        /* El símbolo "+" suele ser un emoji (➕) con color propio.
+           Forzamos a que se renderice monocromo blanco. */
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"] {
+            -webkit-font-feature-settings: "tnum";
         }
 
         /* Marker invisible (no ocupa espacio ni se ve) */
@@ -1367,30 +1375,47 @@ def _render_sidebar():
     # Marker para que el CSS identifique los botones de agregar
     st.markdown('<div class="sb-add-buttons-zone"></div>', unsafe_allow_html=True)
 
-    if st.button(
-        "➕ Exploración",
-        key="btn_add_exp_global",
-        use_container_width=True,
-        type="secondary",
-        help=f"Se agregará a {target_lbl} · {target_reg}",
-    ):
-        st.session_state["exploraciones"].append(
-            _crear_exploracion_base(topo_set_idx=target_idx)
+    # ➕ Exploración — con dot invisible a la izquierda, igual al layout
+    # de las exploraciones, para que todo quede alineado
+    c_dot_e, c_main_e = st.columns([0.45, 6.2], gap="small", vertical_alignment="center")
+    with c_dot_e:
+        st.markdown(
+            '<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>',
+            unsafe_allow_html=True,
         )
-        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        st.rerun()
+    with c_main_e:
+        if st.button(
+            "+ Exploración",
+            key="btn_add_exp_global",
+            use_container_width=True,
+            type="secondary",
+            help=f"Se agregará a {target_lbl} · {target_reg}",
+        ):
+            st.session_state["exploraciones"].append(
+                _crear_exploracion_base(topo_set_idx=target_idx)
+            )
+            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+            st.rerun()
 
     st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
 
-    if st.button(
-        "➕ Topograma",
-        key="btn_add_set_sidebar",
-        use_container_width=True,
-        type="secondary",
-    ):
-        _agregar_set_topograma()
-        st.session_state["exp_activa"] = "topograma"
-        st.rerun()
+    # ➕ Topograma — mismo patrón para alineación visual
+    c_dot_t, c_main_t = st.columns([0.45, 6.2], gap="small", vertical_alignment="center")
+    with c_dot_t:
+        st.markdown(
+            '<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>',
+            unsafe_allow_html=True,
+        )
+    with c_main_t:
+        if st.button(
+            "+ Topograma",
+            key="btn_add_set_sidebar",
+            use_container_width=True,
+            type="secondary",
+        ):
+            _agregar_set_topograma()
+            st.session_state["exp_activa"] = "topograma"
+            st.rerun()
 
 
 def obtener_imagen_posicion_corte(nombre_posicion):
