@@ -25,17 +25,38 @@ def _inject_recon_css():
             overflow: hidden !important;
             text-overflow: ellipsis !important;
             white-space: nowrap !important;
+            color: white !important;
         }
 
-        /* Botones Agregar / Eliminar más bajos y compactos */
+        /* Botones Agregar / Eliminar reconstrucción */
         div[data-testid="stButton"] > button[kind][id*="add_rec"],
         div[data-testid="stButton"] > button[kind][id*="del_rec"] {
-            white-space: pre-line !important;
-            width: auto !important;
-            min-width: fit-content !important;
-            padding: 0.30rem 0.65rem !important;
-            line-height: 1.0 !important;
-            min-height: 2.0rem !important;
+            background-color: #4a4f5d !important;
+            border: 1px solid #6b7280 !important;
+            border-radius: 16px !important;
+            white-space: nowrap !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            padding: 0.55rem 0.95rem !important;
+            line-height: 1.05 !important;
+            min-height: 3.35rem !important;
+            color: white !important;
+            box-shadow: none !important;
+        }
+
+        div[data-testid="stButton"] > button[kind][id*="add_rec"]:hover,
+        div[data-testid="stButton"] > button[kind][id*="del_rec"]:hover {
+            background-color: #565c6b !important;
+            border-color: #7c8596 !important;
+            color: white !important;
+        }
+
+        div[data-testid="stButton"] > button[kind][id*="add_rec"] p,
+        div[data-testid="stButton"] > button[kind][id*="del_rec"] p {
+            color: white !important;
+            font-weight: 700 !important;
+            font-size: 0.95rem !important;
+            white-space: nowrap !important;
         }
 
         /* Selects y number inputs un poco más angostos visualmente */
@@ -47,7 +68,6 @@ def _inject_recon_css():
         """,
         unsafe_allow_html=True,
     )
-
 
 
 REFS_INICIO = {
@@ -372,16 +392,55 @@ def render_reconstruccion():
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
 
+        c_add, c_del, c_spacer = st.columns([0.62, 0.62, 2.26], gap="small")
+        with c_add:
+            max_recons = len(recs_exp) >= 6
+            if st.button(
+                "➕ reconstrucción",
+                key=f"add_rec_{exp_id}",
+                use_container_width=True,
+                disabled=max_recons,
+            ):
+                nuevo_num = len(recs_exp) + 1
+                st.session_state["reconstrucciones_por_exp"][exp_id].append(
+                    _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
+                )
+                _reindexar_reconstrucciones(exp_id)
+                st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
+                st.rerun()
+
+        with c_del:
+            deshabilitar = len(recs_exp) <= 1
+            if st.button(
+                "🗑 reconstrucción",
+                key=f"del_rec_{exp_id}",
+                use_container_width=True,
+                disabled=deshabilitar,
+            ):
+                st.session_state["reconstrucciones_por_exp"][exp_id] = [
+                    r for r in st.session_state["reconstrucciones_por_exp"][exp_id]
+                    if r.get("id") != rec_actual.get("id")
+                ]
+                _reindexar_reconstrucciones(exp_id)
+                primer_id = st.session_state["reconstrucciones_por_exp"][exp_id][0]["id"]
+                st.session_state["recon_activa_por_exp"][exp_id] = primer_id
+                st.rerun()
+
+        with c_spacer:
+            st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:0.22rem;'></div>", unsafe_allow_html=True)
+
         recs_visibles = recs_exp[:6]
         if recs_visibles:
-            spec = [1] * len(recs_visibles) + [max(0.2, 6 - len(recs_visibles))]
+            spec = [1] * len(recs_visibles) + [max(0.25, 6 - len(recs_visibles))]
             cols_rec = st.columns(spec, gap="small")
         else:
             cols_rec = []
 
         for idx_rec, rec_btn in enumerate(recs_visibles):
             nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
-            ancho_estimado = max(180, min(260, 100 + (len(nombre_btn) * 7)))
+            ancho_estimado = max(180, min(260, 104 + (len(nombre_btn) * 7)))
 
             st.markdown(
                 f"""
@@ -408,46 +467,8 @@ def render_reconstruccion():
                     st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
                     st.rerun()
 
-        c_add, c_del, c_spacer = st.columns([0.5, 0.5, 2.0], gap="small")
-        st.markdown("<div style='height:0.15rem;'></div>", unsafe_allow_html=True)
-
-        with c_add:
-            max_recons = len(recs_exp) >= 6
-            if st.button(
-                "➕\nreconstrucción",
-                key=f"add_rec_{exp_id}",
-                use_container_width=False,
-                disabled=max_recons,
-            ):
-                nuevo_num = len(recs_exp) + 1
-                st.session_state["reconstrucciones_por_exp"][exp_id].append(
-                    _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
-                )
-                _reindexar_reconstrucciones(exp_id)
-                st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
-                st.rerun()
-
-        with c_del:
-            deshabilitar = len(recs_exp) <= 1
-            if st.button(
-                "🗑\nreconstrucción",
-                key=f"del_rec_{exp_id}",
-                use_container_width=False,
-                disabled=deshabilitar,
-            ):
-                st.session_state["reconstrucciones_por_exp"][exp_id] = [
-                    r for r in st.session_state["reconstrucciones_por_exp"][exp_id]
-                    if r.get("id") != rec_actual.get("id")
-                ]
-                _reindexar_reconstrucciones(exp_id)
-                primer_id = st.session_state["reconstrucciones_por_exp"][exp_id][0]["id"]
-                st.session_state["recon_activa_por_exp"][exp_id] = primer_id
-                st.rerun()
-
-        with c_spacer:
-            st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
-
         st.markdown("---")
+
         if rec_actual is not None:
             col_img_param = st.columns([1.0, 1.15], gap="medium")
 
