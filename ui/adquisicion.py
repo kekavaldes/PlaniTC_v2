@@ -1041,14 +1041,14 @@ def _name_visible(exp, idx):
 
 def _inject_sidebar_css():
     """CSS que iguala la altura de los botones dentro de cada fila de columnas
-    del sidebar, para que el botón principal y los íconos de acción queden
-    perfectamente alineados sin importar cuántas líneas ocupe el texto."""
+    del sidebar, para que el botón principal y el ícono de eliminar queden
+    perfectamente alineados. Además, convierte los botones marcados con
+    `.sb-ghost` en botones 'fantasma' (sin fondo ni borde, solo el ícono)."""
     st.markdown(
         """
         <style>
-        /* Estirar todos los botones dentro de filas horizontales
-           (st.columns) a la altura de la fila, para alinear iconos
-           con botones de varias líneas. */
+        /* Estirar todos los botones dentro de filas horizontales (st.columns)
+           a la altura de la fila, para alinear iconos con botones multilínea. */
         div[data-testid="stHorizontalBlock"] {
             align-items: stretch !important;
         }
@@ -1056,14 +1056,39 @@ def _inject_sidebar_css():
             display: flex !important;
             flex-direction: column !important;
         }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
             height: 100%;
         }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
             height: 100%;
+            display: flex;
+            align-items: stretch;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
+            flex: 1 1 auto !important;
+            height: 100% !important;
             min-height: 56px;
+            width: 100%;
             white-space: normal;
             line-height: 1.25;
+            box-sizing: border-box;
+        }
+
+        /* Botones "fantasma": los que vienen inmediatamente después de un
+           marker .sb-ghost. Sin fondo ni borde, solo el ícono visible,
+           integrado con el fondo de la app. Hover suave para feedback. */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #cccccc !important;
+            font-size: 1.2rem !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:hover {
+            background: rgba(255, 255, 255, 0.06) !important;
+            color: #ffffff !important;
         }
         </style>
         """,
@@ -1108,7 +1133,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([5, 1], gap="small")
+                c_main, c_del = st.columns([6, 1], gap="small")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1120,6 +1145,7 @@ def _render_sidebar():
                         st.session_state["exp_activa"] = "topograma"
                         st.rerun()
                 with c_del:
+                    st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
                         "🗑",
                         key=f"del_set_sidebar_{i}",
@@ -1161,35 +1187,18 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_dup, c_del = st.columns([5, 1, 1], gap="small")
-            else:
-                c_main, c_dup = st.columns([5, 1], gap="small")
-                c_del = None
-
-            with c_main:
-                if st.button(
-                    f"⚡ {nombre_exp}{sufijo}",
-                    key=f"btn_sidebar_exp_{exp['id']}",
-                    type=tipo_exp,
-                    use_container_width=True,
-                ):
-                    st.session_state["exp_activa"] = i_exp
-                    st.rerun()
-            with c_dup:
-                if st.button(
-                    "📄",
-                    key=f"dup_exp_{exp['id']}",
-                    use_container_width=True,
-                    help=f"Duplicar {nombre_exp}",
-                ):
-                    copia = dict(exp)
-                    copia["id"] = _new_id()
-                    copia["order"] = _next_order()
-                    st.session_state["exploraciones"].insert(i_exp + 1, copia)
-                    st.session_state["exp_activa"] = i_exp + 1
-                    st.rerun()
-            if c_del is not None:
+                c_main, c_del = st.columns([6, 1], gap="small")
+                with c_main:
+                    if st.button(
+                        f"⚡ {nombre_exp}{sufijo}",
+                        key=f"btn_sidebar_exp_{exp['id']}",
+                        type=tipo_exp,
+                        use_container_width=True,
+                    ):
+                        st.session_state["exp_activa"] = i_exp
+                        st.rerun()
                 with c_del:
+                    st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
                         "🗑",
                         key=f"del_exp_{exp['id']}",
@@ -1200,6 +1209,15 @@ def _render_sidebar():
                         nueva_activa = min(i_exp, len(st.session_state["exploraciones"]) - 1)
                         st.session_state["exp_activa"] = nueva_activa
                         st.rerun()
+            else:
+                if st.button(
+                    f"⚡ {nombre_exp}{sufijo}",
+                    key=f"btn_sidebar_exp_{exp['id']}",
+                    type=tipo_exp,
+                    use_container_width=True,
+                ):
+                    st.session_state["exp_activa"] = i_exp
+                    st.rerun()
 
     # ── Determinar a qué topograma se asociará la próxima exploración ──
     activa = st.session_state.get("exp_activa")
