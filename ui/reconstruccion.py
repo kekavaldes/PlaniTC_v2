@@ -310,6 +310,14 @@ def render_reconstruccion():
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
+        imagen_recon = st.file_uploader(
+            "Subir imagen de reconstrucción",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"img_recon_{exp_id}_{rec_actual['id']}",
+        )
+        if imagen_recon is not None:
+            st.image(imagen_recon, caption="Imagen cargada", width=360)
+
         for rec_btn in recs_exp[:6]:
             nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
             ancho_estimado = max(220, min(460, 110 + (len(nombre_btn) * 8)))
@@ -377,15 +385,6 @@ def render_reconstruccion():
             st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
-
-        imagen_recon = st.file_uploader(
-            "Subir imagen de reconstrucción",
-            type=["png", "jpg", "jpeg", "webp"],
-            key=f"img_recon_{exp_id}_{rec_actual['id']}",
-        )
-        if imagen_recon is not None:
-            st.image(imagen_recon, caption="Imagen cargada", width=360)
-
         col_r1, col_r2 = st.columns([1, 1], gap="large")
 
         with col_r1:
