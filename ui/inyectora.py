@@ -6,7 +6,7 @@ Cubre la TAB 4 del simulador:
 - Número de fases de inyección (1 a 6)
 - Configuración por fase: solución (MC / SF / PAUSA), volumen, caudal, duración
 - Visualización SVG de ambas jeringas (A = Medio de Contraste, B = Suero Fisiológico)
-- Validaciones: capacidad de jeringas y calibre VVP vs caudal
+- Validaciones: capacidad de jeringas
 
 Entrypoint: render_inyectora()
 """
@@ -17,7 +17,6 @@ import streamlit as st
 # ─── Constantes del módulo ──────────────────────────────────────────────────
 MAX_JERINGA = 180  # mL fijos para ambas jeringas (MC y SF)
 CAUDAL_OPCIONES = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0]
-VVP_GAUGE = [18, 20, 22, 24]
 
 
 # ─── Helpers reutilizables ──────────────────────────────────────────────────
@@ -59,7 +58,7 @@ def _panel_header(emoji: str, titulo: str):
 
 
 # ─── Renderizado SVG de la jeringa inyectora ────────────────────────────────
-def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data, gauge):
+def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data):
     """Genera el SVG de la inyectora con ambas jeringas y la tabla de fases."""
 
     def clamp_ratio(v, m):
@@ -204,9 +203,6 @@ def render_inyectora():
     n_fases_default = int(st.session_state.get("n_fases_iny", 2))
     fases_data = []
 
-    vvp_default = st.session_state.get("vvp_gauge_widget", VVP_GAUGE[1])
-    vvp_gauge = vvp_default if vvp_default in VVP_GAUGE else VVP_GAUGE[1]
-
     left_col, right_col = st.columns([1.45, 1.0], gap="large")
 
     with right_col:
@@ -284,26 +280,15 @@ def render_inyectora():
 
         st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
 
-        vvp_gauge = selectbox_con_placeholder(
-            "VVP (Gauge)",
-            VVP_GAUGE,
-            key="vvp_gauge_widget",
-            value=vvp_gauge,
-        )
-
     vol_total_mc = sum(f["volumen"] for f in fases_data if f["solucion"] == "MC")
     vol_total_sf = sum(f["volumen"] for f in fases_data if f["solucion"] == "SF")
     dur_total = sum(f["duracion"] for f in fases_data)
-
-    caudal_alto = any(
-        (f["caudal"] or 0) > 3.0 for f in fases_data if f["solucion"] not in (None, "PAUSA")
-    )
 
     with left_col:
         _panel_header("🧴", "Llenado de la Inyectora")
         st.markdown(
             render_inyectora_svg(
-                vol_total_mc, vol_total_sf, vol_max_mc, vol_max_sf, fases_data, vvp_gauge
+                vol_total_mc, vol_total_sf, vol_max_mc, vol_max_sf, fases_data
             ),
             unsafe_allow_html=True,
         )
@@ -318,19 +303,12 @@ def render_inyectora():
                 f"⚠️ Volumen de suero ({vol_total_sf} mL) supera la capacidad fija ({vol_max_sf} mL)"
             )
 
-        if vvp_gauge is not None and vvp_gauge >= 22 and caudal_alto:
-            st.warning(
-                "⚠️ Calibre VVP puede ser insuficiente para el caudal seleccionado. "
-                "Se recomienda VVP 18-20G para caudales altos."
-            )
-
     _build_store(
         n_fases=int(n_fases),
         fases_data=fases_data,
         vol_total_mc=vol_total_mc,
         vol_total_sf=vol_total_sf,
         dur_total=dur_total,
-        vvp_gauge=vvp_gauge,
     )
 
     return st.session_state["inyectora_store"]
