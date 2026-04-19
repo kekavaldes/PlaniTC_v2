@@ -1083,7 +1083,7 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS mínimo para los botones de eliminar del sidebar."""
+    """CSS del sidebar."""
     st.markdown(
         """
         <style>
@@ -1112,6 +1112,25 @@ def _inject_sidebar_css():
             margin: 0 !important;
             line-height: 1 !important;
         }
+
+        /* Botones superiores del sidebar */
+        div[data-testid="stButton"] > button[kind="secondary"] {
+            min-height: 2.2rem !important;
+            height: 2.2rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
+            white-space: nowrap !important;
+            font-size: 0.88rem !important;
+        }
+
+        div[data-testid="stButton"] > button[kind="primary"] {
+            min-height: 2.2rem !important;
+            height: 2.2rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
+            white-space: nowrap !important;
+            font-size: 0.88rem !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1128,6 +1147,46 @@ def _render_sidebar():
     set_activo = st.session_state.get("topograma_set_activo", 0)
     viendo_topo = st.session_state.get("exp_activa") == "topograma"
     exploraciones = st.session_state["exploraciones"]
+
+    # ── Determinar a qué topograma se asociará la próxima exploración ──
+    activa = st.session_state.get("exp_activa")
+    if isinstance(activa, int) and 0 <= activa < len(exploraciones):
+        target_idx = exploraciones[activa].get("topo_set_idx", set_activo)
+    else:
+        target_idx = set_activo
+    if not (0 <= target_idx < len(sets)):
+        target_idx = 0
+
+    target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
+    target_reg = sets[target_idx].get("examen") or sets[target_idx].get("region_anat") or "sin región"
+
+    # Botones arriba, justo bajo el título, uno debajo del otro
+    if st.button(
+        "➕ Exploración",
+        key="btn_add_exp_global",
+        use_container_width=True,
+        type="secondary",
+        help=f"Se agregará a {target_lbl} · {target_reg}",
+    ):
+        st.session_state["exploraciones"].append(
+            _crear_exploracion_base(topo_set_idx=target_idx)
+        )
+        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+        st.rerun()
+
+    st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
+
+    if st.button(
+        "➕ Nuevo topograma",
+        key="btn_add_set_sidebar",
+        use_container_width=True,
+        type="secondary",
+    ):
+        _agregar_set_topograma()
+        st.session_state["exp_activa"] = "topograma"
+        st.rerun()
+
+    st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
 
     # Asegurar que toda exploración tenga `order` (defensivo / migración)
     for i_exp, exp in enumerate(exploraciones):
@@ -1164,7 +1223,7 @@ def _render_sidebar():
                     )
                 with c_main:
                     if st.button(
-                        f"📡 {lbl}  \n{reg}",
+                        f"📡 {lbl} · {reg}",
                         key=f"btn_topograma_sidebar_{i}",
                         type=tipo,
                         use_container_width=True,
@@ -1192,7 +1251,7 @@ def _render_sidebar():
                     )
                 with c_main:
                     if st.button(
-                        f"📡 {lbl}  \n{reg}",
+                        f"📡 {lbl} · {reg}",
                         key=f"btn_topograma_sidebar_{i}",
                         type=tipo,
                         use_container_width=True,
@@ -1261,42 +1320,6 @@ def _render_sidebar():
                     ):
                         st.session_state["exp_activa"] = i_exp
                         st.rerun()
-
-    # ── Determinar a qué topograma se asociará la próxima exploración ──
-    activa = st.session_state.get("exp_activa")
-    if isinstance(activa, int) and 0 <= activa < len(exploraciones):
-        target_idx = exploraciones[activa].get("topo_set_idx", set_activo)
-    else:
-        target_idx = set_activo
-    if not (0 <= target_idx < len(sets)):
-        target_idx = 0
-    target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
-    target_reg = sets[target_idx].get("examen") or sets[target_idx].get("region_anat") or "sin región"
-
-    # Fila con las dos acciones globales: nueva exploración / nuevo topograma
-    st.markdown("---")
-    c_exp, c_topo = st.columns(2, gap="small")
-    with c_exp:
-        if st.button(
-            "➕ Exploración",
-            key="btn_add_exp_global",
-            use_container_width=True,
-            help=f"Se agregará a {target_lbl} · {target_reg}",
-        ):
-            st.session_state["exploraciones"].append(
-                _crear_exploracion_base(topo_set_idx=target_idx)
-            )
-            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-            st.rerun()
-    with c_topo:
-        if st.button(
-            "➕ Nuevo topograma",
-            key="btn_add_set_sidebar",
-            use_container_width=True,
-        ):
-            _agregar_set_topograma()
-            st.session_state["exp_activa"] = "topograma"
-            st.rerun()
 
 
 def obtener_imagen_posicion_corte(nombre_posicion):
