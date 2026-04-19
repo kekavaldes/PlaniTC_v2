@@ -7,9 +7,9 @@ def _inject_recon_css():
     st.markdown(
         """
         <style>
-        /* Botones de agregar / eliminar más angostos visualmente */
+        /* Botones con texto en una sola línea */
         div[data-testid="stButton"] > button[kind] {
-            white-space: normal;
+            white-space: nowrap !important;
         }
         </style>
         """,
@@ -301,18 +301,32 @@ def render_reconstruccion():
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
         for rec_btn in recs_exp[:6]:
-            c_rec_btn, c_rec_spacer = st.columns([0.25, 1.75], gap="small")
-            with c_rec_btn:
-                if st.button(
-                    f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}",
-                    key=f"btn_rec_item_{rec_btn['id']}",
-                    use_container_width=True,
-                    type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
-                ):
-                    st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                    st.rerun()
-            with c_rec_spacer:
-                st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
+            nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
+            ancho_estimado = max(220, min(460, 110 + (len(nombre_btn) * 8)))
+
+            st.markdown(
+                f"""
+                <style>
+                div[data-testid="stButton"] button[kind][data-testid="stBaseButton-secondary"][id*="{rec_btn['id']}"],
+                div[data-testid="stButton"] button[kind][data-testid="stBaseButton-primary"][id*="{rec_btn['id']}"] {{
+                    width: {ancho_estimado}px !important;
+                    min-width: {ancho_estimado}px !important;
+                    max-width: {ancho_estimado}px !important;
+                    white-space: nowrap !important;
+                }}
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if st.button(
+                nombre_btn,
+                key=f"btn_rec_item_{rec_btn['id']}",
+                use_container_width=False,
+                type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
+            ):
+                st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                st.rerun()
 
         c_add, c_del, c_spacer = st.columns([0.32, 0.32, 2.04], gap="small")
         with c_add:
