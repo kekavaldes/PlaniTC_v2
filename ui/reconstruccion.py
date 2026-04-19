@@ -7,9 +7,19 @@ def _inject_recon_css():
     st.markdown(
         """
         <style>
-        /* Botones con texto en una sola línea */
+        /* Botones de reconstrucción en una sola línea */
         div[data-testid="stButton"] > button[kind] {
             white-space: nowrap !important;
+        }
+
+        /* Botones Agregar / Eliminar con 2 líneas y ancho según contenido */
+        div[data-testid="stButton"] > button[kind][id*="add_rec"],
+        div[data-testid="stButton"] > button[kind][id*="del_rec"] {
+            white-space: pre-line !important;
+            width: auto !important;
+            min-width: fit-content !important;
+            padding: 0.65rem 0.95rem !important;
+            line-height: 1.2 !important;
         }
         </style>
         """,
@@ -328,20 +338,36 @@ def render_reconstruccion():
                 st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
                 st.rerun()
 
-        c_add, c_del, c_spacer = st.columns([0.32, 0.32, 2.04], gap="small")
+        c_add, c_del, c_spacer = st.columns([0.5, 0.5, 2.0], gap="small")
+
         with c_add:
             max_recons = len(recs_exp) >= 6
-            if st.button("➕ Agregar reconstrucción", use_container_width=True, key=f"add_rec_{exp_id}", disabled=max_recons):
+            if st.button(
+                "➕ Agregar\nreconstrucción",
+                key=f"add_rec_{exp_id}",
+                use_container_width=False,
+                disabled=max_recons,
+            ):
                 nuevo_num = len(recs_exp) + 1
-                st.session_state["reconstrucciones_por_exp"][exp_id].append(_crear_reconstruccion_base(exp_activa, nuevo_num, region_anat))
+                st.session_state["reconstrucciones_por_exp"][exp_id].append(
+                    _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
+                )
                 _reindexar_reconstrucciones(exp_id)
                 st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
                 st.rerun()
 
         with c_del:
             deshabilitar = len(recs_exp) <= 1
-            if st.button("🗑️ Eliminar reconstrucción", use_container_width=True, key=f"del_rec_{exp_id}", disabled=deshabilitar):
-                st.session_state["reconstrucciones_por_exp"][exp_id] = [r for r in st.session_state["reconstrucciones_por_exp"][exp_id] if r.get("id") != rec_actual.get("id")]
+            if st.button(
+                "🗑 Eliminar\nreconstrucción",
+                key=f"del_rec_{exp_id}",
+                use_container_width=False,
+                disabled=deshabilitar,
+            ):
+                st.session_state["reconstrucciones_por_exp"][exp_id] = [
+                    r for r in st.session_state["reconstrucciones_por_exp"][exp_id]
+                    if r.get("id") != rec_actual.get("id")
+                ]
                 _reindexar_reconstrucciones(exp_id)
                 primer_id = st.session_state["reconstrucciones_por_exp"][exp_id][0]["id"]
                 st.session_state["recon_activa_por_exp"][exp_id] = primer_id
