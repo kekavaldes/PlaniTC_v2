@@ -61,14 +61,18 @@ def _inject_recon_css():
             background-color: transparent !important;
             border: 1px solid #666 !important;
             border-radius: 999px !important;
-            min-height: 2.1rem !important;
-            height: 2.1rem !important;
-            width: 2.1rem !important;
-            min-width: 2.1rem !important;
+            min-height: 3.05rem !important;
+            height: 3.05rem !important;
+            width: 2.35rem !important;
+            min-width: 2.35rem !important;
             padding: 0 !important;
+            margin-left: -0.55rem !important;
             color: white !important;
-            font-size: 0.95rem !important;
+            font-size: 1.05rem !important;
             line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
 
         div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"]:hover {
@@ -79,8 +83,9 @@ def _inject_recon_css():
         div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"] p {
             color: white !important;
             font-weight: 700 !important;
-            font-size: 0.95rem !important;
+            font-size: 1.05rem !important;
             line-height: 1 !important;
+            margin: 0 !important;
         }
 
         /* Selects y number inputs un poco más angostos visualmente */
@@ -441,11 +446,13 @@ def render_reconstruccion():
 
         recs_visibles = recs_exp[:6]
         if recs_visibles:
-            spec = []
-            for _ in recs_visibles:
-                spec.extend([1.25, 0.22])
-            spec.append(max(0.25, 6 - len(recs_visibles)))
-            cols_rec = st.columns(spec, gap="small")
+            c_row_left, c_row_center, c_row_right = st.columns([0.18, 3.64, 0.18], gap="small")
+            with c_row_center:
+                spec = []
+                for _ in recs_visibles:
+                    spec.extend([1.22, 0.16])
+                spec.append(max(0.18, 5.5 - len(recs_visibles)))
+                cols_rec = st.columns(spec, gap="small")
         else:
             cols_rec = []
 
