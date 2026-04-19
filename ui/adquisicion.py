@@ -1160,34 +1160,6 @@ def _render_sidebar():
     target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
     target_reg = sets[target_idx].get("examen") or sets[target_idx].get("region_anat") or "sin región"
 
-    # Botones arriba, justo bajo el título, uno debajo del otro
-    if st.button(
-        "➕ Exploración",
-        key="btn_add_exp_global",
-        use_container_width=True,
-        type="secondary",
-        help=f"Se agregará a {target_lbl} · {target_reg}",
-    ):
-        st.session_state["exploraciones"].append(
-            _crear_exploracion_base(topo_set_idx=target_idx)
-        )
-        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-        st.rerun()
-
-    st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
-
-    if st.button(
-        "➕ Nuevo topograma",
-        key="btn_add_set_sidebar",
-        use_container_width=True,
-        type="secondary",
-    ):
-        _agregar_set_topograma()
-        st.session_state["exp_activa"] = "topograma"
-        st.rerun()
-
-    st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
-
     # Asegurar que toda exploración tenga `order` (defensivo / migración)
     for i_exp, exp in enumerate(exploraciones):
         if "order" not in exp:
@@ -1320,6 +1292,33 @@ def _render_sidebar():
                     ):
                         st.session_state["exp_activa"] = i_exp
                         st.rerun()
+
+    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
+
+    if st.button(
+        "➕ Exploración",
+        key="btn_add_exp_global",
+        use_container_width=True,
+        type="secondary",
+        help=f"Se agregará a {target_lbl} · {target_reg}",
+    ):
+        st.session_state["exploraciones"].append(
+            _crear_exploracion_base(topo_set_idx=target_idx)
+        )
+        st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+        st.rerun()
+
+    st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
+
+    if st.button(
+        "➕ Nuevo topograma",
+        key="btn_add_set_sidebar",
+        use_container_width=True,
+        type="secondary",
+    ):
+        _agregar_set_topograma()
+        st.session_state["exp_activa"] = "topograma"
+        st.rerun()
 
 
 def obtener_imagen_posicion_corte(nombre_posicion):
