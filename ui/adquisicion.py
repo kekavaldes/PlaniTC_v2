@@ -1040,30 +1040,19 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS del sidebar para alinear el botón eliminar con cada exploración.
-
-    En Safari el botón secundario de Streamlit tiende a dibujarse algunos px
-    más abajo. Aquí lo dejamos sin fondo gris, con icono simple y con un
-    pequeño ajuste vertical solo para la columna de borrado.
-    """
+    """CSS mínimo para alinear el botón de eliminar del sidebar sin mover
+    toda la columna. Se centra la fila y se sube levemente el botón de borrar
+    para que coincida visualmente con la tarjeta de exploración en Safari."""
     st.markdown(
         """
         <style>
-        /* Filas del sidebar centradas verticalmente */
+        /* Solo filas del sidebar de exploraciones */
         div[data-testid="stHorizontalBlock"] {
             align-items: center !important;
         }
 
-        /* Tarjeta principal de exploración/topograma */
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
-            width: 100%;
-            box-sizing: border-box;
-            white-space: normal;
-            line-height: 1.25;
-        }
-
-        /* El marcador ghost no debe verse ni ocupar altura apreciable */
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
+        /* El marcador fantasma no debe dejar espacio visible */
+        div[data-testid="stElementContainer"]:has(.sb-ghost) {
             height: 0 !important;
             min-height: 0 !important;
             margin: 0 !important;
@@ -1071,56 +1060,54 @@ def _inject_sidebar_css():
             overflow: hidden !important;
         }
 
-        /* Subir levemente SOLO el contenedor del botón eliminar */
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] {
-            margin-top: -8px !important;
+        /* Botón principal de la exploración: mantener altura pareja */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
+            min-height: 56px;
+            white-space: normal;
+            line-height: 1.2;
         }
 
-        /* Botón eliminar: sin fondo gris, sin borde, icono centrado */
+        /* Botón eliminar: sin fondo gris extra y centrado */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton {
             display: flex !important;
-            align-items: center !important;
             justify-content: center !important;
+            align-items: center !important;
+            margin-top: -8px !important;
         }
 
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            min-height: 56px !important;
-            height: 56px !important;
+            width: 36px !important;
+            min-width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
             padding: 0 !important;
-            margin: 0 !important;
-            color: #D4D7DD !important;
-            font-size: 1.6rem !important;
-            font-weight: 500 !important;
-            line-height: 1 !important;
+            margin: 0 auto !important;
+            border-radius: 10px !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
+            line-height: 1 !important;
+            font-size: 22px !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: #D9DCE3 !important;
         }
 
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button p {
             margin: 0 !important;
-            padding: 0 !important;
             line-height: 1 !important;
+            transform: translateY(-1px);
         }
 
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:hover,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:focus,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:active {
-            background: transparent !important;
+        ~ div[data-testid="stElementContainer"] .stButton > button:hover {
+            background: rgba(255,255,255,0.06) !important;
             color: #FFFFFF !important;
             border: none !important;
-            box-shadow: none !important;
-            outline: none !important;
         }
         </style>
         """,
@@ -1165,7 +1152,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1219,7 +1206,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
