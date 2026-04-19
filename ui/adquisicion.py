@@ -1042,14 +1042,21 @@ def _name_visible(exp, idx):
 def _inject_sidebar_css():
     """CSS del sidebar para mantener las tarjetas principales con altura pareja
     y dejar los botones de eliminar como íconos limpios, centrados y sin el
-    fondo gris detrás."""
+    fondo gris detrás.
+
+    Clave del alineamiento: el marker `.sb-ghost` queda con display:none, por
+    lo que no ocupa espacio vertical en la columna. El botón queda como único
+    flex item visible y se estira a la altura de la fila, quedando perfectamente
+    centrado con el botón principal sin importar cuántas líneas tenga.
+    """
     st.markdown(
         """
         <style>
-        /* Cada fila del sidebar se comporta como una sola hilera alineada */
+        /* 1. Cada fila del sidebar alinea a sus hijos con "stretch" */
         div[data-testid="stHorizontalBlock"] {
             align-items: stretch !important;
         }
+        /* 2. Cada columna es flex-column para apilar sus widgets */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
@@ -1059,7 +1066,7 @@ def _inject_sidebar_css():
             height: 100%;
         }
 
-        /* Botón principal de cada exploración / topograma */
+        /* 3. Botones principales: se estiran a la altura de la fila */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
             height: 100%;
             display: flex;
@@ -1074,61 +1081,44 @@ def _inject_sidebar_css():
             box-sizing: border-box;
         }
 
-        /* Columna del botón eliminar: centrar contenido vertical y horizontal */
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] {
-            height: 100%;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
+        /* 4. El marker ghost NO debe ocupar espacio — display:none permite
+              que el botón hermano quede como único flex item visible y se
+              centre naturalmente dentro de la columna.
+              Los selectores :has() + ~ siguen funcionando con display:none
+              porque operan sobre el DOM. */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
+            display: none !important;
         }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton {
-            height: auto !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
+
+        /* 5. Botón de eliminar: transparente, sin borde, ícono centrado */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
-            width: 42px !important;
-            min-width: 42px !important;
-            height: 42px !important;
-            min-height: 42px !important;
-            padding: 0 !important;
-            margin: 0 auto !important;
-            border: none !important;
-            border-radius: 999px !important;
             background: transparent !important;
+            border: none !important;
             box-shadow: none !important;
+            padding: 0 !important;
             color: #cfcfcf !important;
-            font-size: 1.15rem !important;
+            font-size: 1.25rem !important;
             line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255, 255, 255, 0.07) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
             color: #ffffff !important;
             border: none !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:focus,
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button:focus-visible,
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:active {
+            background: rgba(255, 255, 255, 0.10) !important;
+            color: #ffffff !important;
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
-            background: rgba(255, 255, 255, 0.10) !important;
-            color: #ffffff !important;
-        }
-
-        /* El marcador invisible no debe ocupar espacio visual */
-        .sb-ghost {
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
         }
         </style>
         """,
