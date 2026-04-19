@@ -105,7 +105,7 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
         <div style="
             border:1px solid {color};
             border-radius:12px;
-            height:0.9rem;
+            height:0.45rem;
             background:{color};
             margin-bottom:0.45rem;
         "></div>
@@ -237,7 +237,11 @@ def render_reconstruccion():
                 activa = st.session_state["exploracion_rec_activa"] == exp_id
                 n_rec = len(st.session_state["reconstrucciones_por_exp"].get(exp_id, []))
                 color = _color_exploracion(i)
-                nombre_visible = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
+                nombre_base = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
+                region = (st.session_state.get("topograma_store", {}).get("examen") 
+                          or st.session_state.get("topograma_store", {}).get("region_anat") 
+                          or "")
+                nombre_visible = f"{nombre_base} {region}".strip()
 
                 _mini_chip(
                     color,
