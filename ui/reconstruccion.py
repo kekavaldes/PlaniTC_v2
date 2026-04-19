@@ -149,9 +149,29 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
     )
 
 
-def _color_exploracion(idx: int) -> str:
-    palette = ["#00C2FF", "#8B5CF6", "#F59E0B", "#10B981", "#EF4444", "#EC4899", "#14B8A6", "#F97316"]
-    return palette[idx % len(palette)]
+EXPLORACION_COLORS = [
+    "#00D2FF",  # cian
+    "#FFB000",  # ámbar
+    "#7CFF6B",  # verde
+    "#FF5CA8",  # fucsia
+    "#A78BFA",  # violeta
+    "#FF7A59",  # naranja
+    "#5EEAD4",  # turquesa
+    "#FACC15",  # amarillo
+]
+
+
+def _color_exploracion(exp) -> str:
+    """Usa la misma paleta y el mismo orden que Adquisición."""
+    exploraciones = st.session_state.get("exploraciones", [])
+    try:
+        idx = next(i for i, e in enumerate(exploraciones) if e.get("id") == exp.get("id"))
+    except Exception:
+        try:
+            idx = int(exp.get("orden", 1)) - 1
+        except Exception:
+            idx = 0
+    return EXPLORACION_COLORS[idx % len(EXPLORACION_COLORS)]
 
 
 def _fase_por_nombre_exploracion(nombre: str):
@@ -273,7 +293,7 @@ def render_reconstruccion():
                 exp_id = exp.get("id")
                 activa = st.session_state["exploracion_rec_activa"] == exp_id
                 n_rec = len(st.session_state["reconstrucciones_por_exp"].get(exp_id, []))
-                color = _color_exploracion(i)
+                color = _color_exploracion(exp)
                 nombre_base = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
                 region = (st.session_state.get("topograma_store", {}).get("examen") 
                           or st.session_state.get("topograma_store", {}).get("region_anat") 
