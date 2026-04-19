@@ -7,19 +7,23 @@ def _inject_recon_css():
     st.markdown(
         """
         <style>
-        /* Botones de reconstrucción en una sola línea */
+        /* Botones de reconstrucción más bajos */
         div[data-testid="stButton"] > button[kind] {
             white-space: nowrap !important;
+            padding-top: 0.35rem !important;
+            padding-bottom: 0.35rem !important;
+            min-height: 2.2rem !important;
         }
 
-        /* Botones Agregar / Eliminar con 2 líneas y ancho según contenido */
+        /* Botones Agregar / Eliminar más bajos y compactos */
         div[data-testid="stButton"] > button[kind][id*="add_rec"],
         div[data-testid="stButton"] > button[kind][id*="del_rec"] {
             white-space: pre-line !important;
             width: auto !important;
             min-width: fit-content !important;
-            padding: 0.65rem 0.95rem !important;
-            line-height: 1.2 !important;
+            padding: 0.35rem 0.75rem !important;
+            line-height: 1.05 !important;
+            min-height: 2.2rem !important;
         }
         </style>
         """,
@@ -310,20 +314,26 @@ def render_reconstruccion():
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
-        imagen_recon = st.file_uploader(
-            "Subir imagen de reconstrucción",
-            type=["png", "jpg", "jpeg", "webp"],
-            key=f"img_recon_{exp_id}_{rec_actual['id']}",
-        )
-        if imagen_recon is not None:
-            st.image(imagen_recon, caption="Imagen cargada", width=360)
+        c_img_left, c_img_center, c_img_right = st.columns([0.22, 1.56, 0.22], gap="small")
+        with c_img_center:
+            imagen_recon = st.file_uploader(
+                "Subir imagen de reconstrucción",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"img_recon_{exp_id}_{rec_actual['id']}",
+            )
+            if imagen_recon is not None:
+                st.image(imagen_recon, caption="Imagen cargada", width=360)
 
         recs_visibles = recs_exp[:6]
-        cols_rec = st.columns(len(recs_visibles)) if recs_visibles else []
+        if recs_visibles:
+            spec = [1] * len(recs_visibles) + [max(0.2, 6 - len(recs_visibles))]
+            cols_rec = st.columns(spec, gap="small")
+        else:
+            cols_rec = []
 
         for idx_rec, rec_btn in enumerate(recs_visibles):
             nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
-            ancho_estimado = max(220, min(460, 110 + (len(nombre_btn) * 8)))
+            ancho_estimado = max(180, min(260, 100 + (len(nombre_btn) * 7)))
 
             st.markdown(
                 f"""
