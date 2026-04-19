@@ -301,16 +301,20 @@ def render_reconstruccion():
         st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
 
         for rec_btn in recs_exp[:6]:
-            if st.button(
-                f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}",
-                key=f"btn_rec_item_{rec_btn['id']}",
-                use_container_width=True,
-                type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
-            ):
-                st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                st.rerun()
+            c_rec_btn, c_rec_spacer = st.columns([0.25, 1.75], gap="small")
+            with c_rec_btn:
+                if st.button(
+                    f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}",
+                    key=f"btn_rec_item_{rec_btn['id']}",
+                    use_container_width=True,
+                    type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
+                ):
+                    st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                    st.rerun()
+            with c_rec_spacer:
+                st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
 
-        c_add, c_dup, c_del, c_spacer = st.columns([0.32, 1.0, 0.32, 1.36], gap="small")
+        c_add, c_del, c_spacer = st.columns([0.32, 0.32, 2.04], gap="small")
         with c_add:
             max_recons = len(recs_exp) >= 6
             if st.button("➕ Agregar reconstrucción", use_container_width=True, key=f"add_rec_{exp_id}", disabled=max_recons):
@@ -318,16 +322,6 @@ def render_reconstruccion():
                 st.session_state["reconstrucciones_por_exp"][exp_id].append(_crear_reconstruccion_base(exp_activa, nuevo_num, region_anat))
                 _reindexar_reconstrucciones(exp_id)
                 st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
-                st.rerun()
-
-        with c_dup:
-            max_recons = len(recs_exp) >= 6
-            if st.button("📄 Duplicar reconstrucción", use_container_width=True, key=f"dup_rec_{exp_id}", disabled=max_recons):
-                copia = copy.deepcopy(rec_actual)
-                st.session_state["reconstrucciones_por_exp"][exp_id].append(copia)
-                _reindexar_reconstrucciones(exp_id)
-                nuevo_id = st.session_state["reconstrucciones_por_exp"][exp_id][-1]["id"]
-                st.session_state["recon_activa_por_exp"][exp_id] = nuevo_id
                 st.rerun()
 
         with c_del:
