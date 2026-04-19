@@ -142,17 +142,17 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data):
 
     svg = (
         f'<div style="background:transparent;padding:0;margin:0;">'
-        f'<svg viewBox="0 0 640 440" width="100%" xmlns="http://www.w3.org/2000/svg">'
+        f'<svg viewBox="0 0 640 456" width="100%" xmlns="http://www.w3.org/2000/svg">'
         f'{syringe(22, "A", ratio_mc, vol_mc, max_mc, colors["MC"])}'
         f'{syringe(122, "B", ratio_sf, vol_sf, max_sf, colors["SF"])}'
 
-        f'<g transform="translate(22,344)">'
+        f'<g transform="translate(22,360)">'
         f'<text x="0" y="0" font-size="10" font-weight="700" fill="{colors["TEXT"]}">Canales de inyección</text>'
 
-        f'<text x="0" y="14" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{mc_txt} / {max_mc_txt} mL</text>'
-        f'<text x="88" y="14" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{sf_txt} / {max_sf_txt} mL</text>'
+        f'<text x="0" y="16" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{mc_txt} / {max_mc_txt} mL</text>'
+        f'<text x="88" y="16" font-size="8.5" font-weight="700" fill="{colors["TEXT"]}">{sf_txt} / {max_sf_txt} mL</text>'
 
-        f'<g transform="translate(0,24)">'
+        f'<g transform="translate(0,28)">'
         f'<rect x="0" y="0" width="76" height="20" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.1"/>'
         f'<rect x="5" y="3" width="20" height="14" rx="4" fill="{colors["MC"]}"/>'
         f'<text x="15" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="#11212B">A</text>'
@@ -161,7 +161,7 @@ def render_inyectora_svg(vol_mc, vol_sf, max_mc, max_sf, fases_data):
         f'<text x="70" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="{colors["TEXT"]}">MC</text>'
         f'</g>'
 
-        f'<g transform="translate(0,48)">'
+        f'<g transform="translate(0,52)">'
         f'<rect x="0" y="0" width="76" height="20" rx="7" fill="#15191E" stroke="#2E3943" stroke-width="1.1"/>'
         f'<rect x="5" y="3" width="20" height="14" rx="4" fill="{colors["SF"]}"/>'
         f'<text x="15" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="#11212B">B</text>'
