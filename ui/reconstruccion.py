@@ -6,7 +6,7 @@ import streamlit as st
 def _inject_recon_css():
     st.markdown(
         """
-        <style>a
+        <style>
         /* Botones de reconstrucción más bajos */
         div[data-testid="stButton"] > button[kind] {
             white-space: nowrap !important;
@@ -28,31 +28,67 @@ def _inject_recon_css():
             color: white !important;
         }
 
-        /* Selectores fijos de reconstrucción (6) */
-        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] {
-            min-height: 3.25rem !important;
-            height: 3.25rem !important;
-            width: 100% !important;
-            padding: 0.45rem 0.9rem !important;
+        /* Botones ✕ de eliminar (tertiary) */
+        button[kind="tertiary"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            min-height: 2.25rem !important;
+            height: 2.25rem !important;
+            width: 2.25rem !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
             display: inline-flex !important;
             align-items: center !important;
-            justify-content: flex-start !important;
-            border-radius: 16px !important;
-            text-align: left !important;
-            box-shadow: none !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            font-size: 1.05rem !important;
+            color: #d8d8d8 !important;
+        }
+        button[kind="tertiary"]:hover {
+            background: rgba(255,255,255,0.06) !important;
+            color: white !important;
+        }
+        button[kind="tertiary"] p {
+            margin: 0 !important;
+            line-height: 1 !important;
+            font-size: 1.05rem !important;
         }
 
-        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] p {
-            line-height: 1.05 !important;
+        /* Botón + Reconstrucción — gris más claro (identificado por st-key) */
+        .st-key-rec_btn_add_recon button[kind="secondary"],
+        div.stApp .st-key-rec_btn_add_recon button[kind="secondary"] {
+            background-color: #6b6f7a !important;
+            background: #6b6f7a !important;
+            border: 1px solid #80848f !important;
+            color: #ffffff !important;
+            box-sizing: border-box !important;
+            min-height: 2.75rem !important;
+            height: 2.75rem !important;
+            max-height: 2.75rem !important;
+            font-size: 0.9rem !important;
+            padding: 0 1rem !important;
+            line-height: 1 !important;
             display: flex !important;
             align-items: center !important;
-            justify-content: flex-start !important;
-            gap: 0.45rem !important;
-            height: 100% !important;
-            width: 100% !important;
-            font-size: 0.94rem !important;
-            font-weight: 700 !important;
-            white-space: nowrap !important;
+            justify-content: center !important;
+        }
+        .st-key-rec_btn_add_recon button[kind="secondary"]:hover,
+        div.stApp .st-key-rec_btn_add_recon button[kind="secondary"]:hover {
+            background-color: #7c808a !important;
+            background: #7c808a !important;
+            border-color: #90949e !important;
+            color: #ffffff !important;
+        }
+        .st-key-rec_btn_add_recon button[kind="secondary"] p,
+        .st-key-rec_btn_add_recon button[kind="secondary"] span,
+        .st-key-rec_btn_add_recon button[kind="secondary"] div {
+            font-size: 0.9rem !important;
+            line-height: 1 !important;
+            color: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
         /* Selects y number inputs un poco más angostos visualmente */
@@ -317,6 +353,40 @@ def _obtener_adquisiciones_validas():
     return adquisiciones
 
 
+def _eliminar_reconstruccion(exp_id, rec_id):
+    """Elimina una reconstrucción específica de su exploración y limpia
+    la imagen asociada si existe."""
+    lista = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    st.session_state["reconstrucciones_por_exp"][exp_id] = [
+        r for r in lista if r.get("id") != rec_id
+    ]
+    # Limpiar imagen asociada
+    st.session_state.get("imagenes_recon_por_id", {}).pop(rec_id, None)
+    # Si era la reconstrucción activa, limpiar la referencia
+    if st.session_state["recon_activa_por_exp"].get(exp_id) == rec_id:
+        recs_restantes = st.session_state["reconstrucciones_por_exp"][exp_id]
+        st.session_state["recon_activa_por_exp"][exp_id] = (
+            recs_restantes[0]["id"] if recs_restantes else None
+        )
+
+
+def _siguiente_numero_recon(exp_id):
+    """Devuelve el número más alto + 1 entre las reconstrucciones existentes
+    de una exploración, para usarlo en la nueva."""
+    lista = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    if not lista:
+        return 1
+    nums = []
+    for r in lista:
+        # El id tiene formato "{exp_id}_rec_{n}". Tomamos el n.
+        rid = r.get("id", "")
+        try:
+            nums.append(int(rid.rsplit("_", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    return (max(nums) + 1) if nums else (len(lista) + 1)
+
+
 def render_reconstruccion():
     _inject_recon_css()
     adquisiciones_validas = _obtener_adquisiciones_validas()
@@ -328,212 +398,299 @@ def render_reconstruccion():
 
     ids_adq_validos = [e.get("id") for e in adquisiciones_validas]
 
-    for exp in adquisiciones_validas:
-        exp_id = exp.get("id")
-        region_anat = _get_region_group_for_exp(exp)
-        existentes = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
-        if not existentes:
-            st.session_state["reconstrucciones_por_exp"][exp_id] = [
-                _crear_reconstruccion_base(exp, i, region_anat) for i in range(1, 7)
-            ]
-        elif len(existentes) < 6:
-            for i in range(len(existentes) + 1, 7):
-                existentes.append(_crear_reconstruccion_base(exp, i, region_anat))
-            st.session_state["reconstrucciones_por_exp"][exp_id] = existentes[:6]
-
-        _reindexar_reconstrucciones(exp_id)
-        ids_rec = [r.get("id") for r in st.session_state["reconstrucciones_por_exp"][exp_id]]
-        if st.session_state["recon_activa_por_exp"].get(exp_id) not in ids_rec:
-            st.session_state["recon_activa_por_exp"][exp_id] = ids_rec[0]
-
+    # Limpiar reconstrucciones de adquisiciones que ya no existen
     for exp_id_existente in list(st.session_state["reconstrucciones_por_exp"].keys()):
         if exp_id_existente not in ids_adq_validos:
+            # También limpiar imágenes asociadas
+            recs_a_borrar = st.session_state["reconstrucciones_por_exp"].get(exp_id_existente, [])
+            for r in recs_a_borrar:
+                st.session_state["imagenes_recon_por_id"].pop(r.get("id"), None)
             st.session_state["reconstrucciones_por_exp"].pop(exp_id_existente, None)
             st.session_state["recon_activa_por_exp"].pop(exp_id_existente, None)
 
+    # Inicializar contenedores para adquisiciones nuevas (sin crear recons automáticas)
+    for exp in adquisiciones_validas:
+        exp_id = exp.get("id")
+        st.session_state["reconstrucciones_por_exp"].setdefault(exp_id, [])
+
+    # Auto-seleccionar la primera adquisición si no hay ninguna activa
     if st.session_state["exploracion_rec_activa"] not in ids_adq_validos:
         st.session_state["exploracion_rec_activa"] = ids_adq_validos[0] if ids_adq_validos else None
 
-    col_nav, col_det = st.columns([0.63, 2.4], gap="large")
+    # ── Layout: Sidebar (col_nav) + Panel central (col_det) ──
+    col_nav, col_det = st.columns([0.8, 2.7], gap="large")
 
     with col_nav:
-        _panel_header("🧩", "Adquisiciones")
-
-        if not adquisiciones_validas:
-            st.info("Primero agrega al menos una adquisición en la pestaña Adquisición.")
-        else:
-            for i, exp in enumerate(adquisiciones_validas):
-                exp_id = exp.get("id")
-                activa = st.session_state["exploracion_rec_activa"] == exp_id
-                n_rec = len(st.session_state["reconstrucciones_por_exp"].get(exp_id, []))
-                color = _color_exploracion(exp)
-                nombre_base = exp.get("nombre") if exp.get("nombre") and exp.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
-                region = _get_region_label_for_exp(exp)
-                nombre_visible = f"{nombre_base} {region}".strip()
-
-                _mini_chip(
-                    color,
-                    nombre_visible,
-                    f"{exp.get('tipo_exploracion', 'HELICOIDAL')} · {n_rec} reconstrucción(es)",
-                )
-
-                if st.button(
-                    f"⚡ {nombre_visible}",
-                    key=f"btn_rec_sel_{exp_id}",
-                    use_container_width=True,
-                    type="primary" if activa else "secondary",
-                ):
-                    st.session_state["exploracion_rec_activa"] = exp_id
-                    st.rerun()
+        _render_sidebar_reconstruccion(adquisiciones_validas)
 
     with col_det:
-        if not adquisiciones_validas or st.session_state.get("exploracion_rec_activa") is None:
-            st.warning("No hay adquisiciones disponibles para reconstruir.")
-            return st.session_state.get("reconstrucciones_por_exp", {})
-
-        exp_activa = next((e for e in adquisiciones_validas if e.get("id") == st.session_state.get("exploracion_rec_activa")), None)
-
-        if exp_activa is None:
-            st.warning("No se pudo cargar la adquisición seleccionada.")
-            return st.session_state.get("reconstrucciones_por_exp", {})
-
-        exp_id = exp_activa.get("id")
-        region_anat = _get_region_group_for_exp(exp_activa)
-        recs_exp = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
-        rec_activa_id = st.session_state["recon_activa_por_exp"].get(exp_id, recs_exp[0]["id"])
-        rec_actual = next((r for r in recs_exp if r.get("id") == rec_activa_id), recs_exp[0])
-        st.session_state["recon_activa_por_exp"][exp_id] = rec_actual.get("id")
-
-        nombre_base_exp = exp_activa.get("nombre") if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar" else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
-        region_exp = _get_region_label_for_exp(exp_activa)
-        nombre_exp = f"{nombre_base_exp} {region_exp}".strip().upper()
-
-        _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
-        st.caption("Selecciona una de las 6 reconstrucciones disponibles para trabajar en ella.")
-
-        recs_visibles = recs_exp[:6]
-        if recs_visibles:
-            cols_rec = st.columns(6, gap="small")
-            for col, rec_btn in zip(cols_rec, recs_visibles):
-                seleccionada = rec_btn.get("id") == rec_actual.get("id")
-                completa = _reconstruccion_completada(rec_btn, exp_id)
-                if seleccionada and completa:
-                    icono = "🟢"
-                elif seleccionada:
-                    icono = "🔘"
-                elif completa:
-                    icono = "🟢"
-                else:
-                    icono = "⚪"
-                nombre_btn = f"{icono}  {rec_btn.get('nombre', 'Reconstrucción')}"
-                with col:
-                    if st.button(
-                        nombre_btn,
-                        key=f"btn_rec_item_{rec_btn['id']}",
-                        use_container_width=True,
-                        type="primary" if seleccionada else "secondary",
-                    ):
-                        st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                        st.rerun()
-        st.caption("🟢 = reconstrucción con imagen y parámetros guardados · 🔘 = reconstrucción activa")
-        st.markdown("---")
-
-        if rec_actual is not None:
-            col_img_param = st.columns([1.0, 1.15], gap="medium")
-
-            with col_img_param[0]:
-                c_img_left, c_img_center, c_img_right = st.columns([0.08, 1.0, 0.08], gap="small")
-                with c_img_center:
-                    imagen_recon = st.file_uploader(
-                        "Subir imagen de reconstrucción",
-                        type=["png", "jpg", "jpeg", "webp"],
-                        key=f"img_recon_upload_{rec_actual['id']}",
-                    )
-
-                    if imagen_recon is not None:
-                        st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
-                            "name": imagen_recon.name,
-                            "bytes": imagen_recon.getvalue(),
-                        }
-
-                    img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
-                    if img_guardada is not None:
-                        st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
-
-            with col_img_param[1]:
-                _panel_header("🔧", "Parámetros de Reconstrucción")
-
-                col_pr1, col_pr2 = st.columns([1, 1], gap="small")
-                with col_pr1:
-                    rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}", value=rec_actual.get("fase_recons"))
-                    if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-                        rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}", value=rec_actual.get("algoritmo_iter"))
-                    else:
-                        rec_actual["algoritmo_iter"] = "—"
-                    rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}", value=rec_actual.get("kernel_sel"))
-                    rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}", value=rec_actual.get("grosor_recons"))
-
-                with col_pr2:
-                    rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}", value=rec_actual.get("tipo_recons"))
-                    if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-                        niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
-                        rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}", value=rec_actual.get("nivel_iter"))
-                    else:
-                        rec_actual["nivel_iter"] = "—"
-                    rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}", value=rec_actual.get("incremento"))
-
-                _panel_header("🪟", "Ventana de Visualización")
-
-                ventanas_disp = list(VENTANAS.keys())
-
-                col_v1, col_v2 = st.columns([1, 1], gap="small")
-                with col_v1:
-                    rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}", value=rec_actual.get("ventana_preset"))
-
-                    if rec_actual["ventana_preset"] in VENTANAS:
-                        ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
-                        wl_default = VENTANAS[rec_actual["ventana_preset"]]["wl"]
-                    else:
-                        ww_default = 400
-                        wl_default = 40
-
-                    rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}")
-
-                with col_v2:
-                    rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}")
-                    rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}", value=rec_actual.get("dfov"))
-
-                _panel_header("📍", "Rango de Reconstrucción")
-
-                region_anat_activa = _get_region_group_for_exp(exp_activa)
-                refs_ini_r = REFS_INICIO.get(region_anat_activa, REFS_INICIO["CUERPO"])
-                refs_fin_r = REFS_FIN.get(region_anat_activa, REFS_FIN["CUERPO"])
-
-                col_ini, col_fin = st.columns([1, 1], gap="small")
-                with col_ini:
-                    rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
-                with col_fin:
-                    rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
-
-        st.markdown("---")
-        _panel_header("📝", "Resumen de reconstrucción activa")
-        st.markdown(
-            f"""
-            **Adquisición:** {nombre_exp}  
-            **Nombre:** {rec_actual.get('nombre', '—')}  
-            **Fase:** {rec_actual.get('fase_recons', '—')}  
-            **Tipo:** {rec_actual.get('tipo_recons', '—')}  
-            **Algoritmo iterativo:** {rec_actual.get('algoritmo_iter', '—')}  
-            **Nivel:** {rec_actual.get('nivel_iter', '—')}  
-            **Kernel:** {rec_actual.get('kernel_sel', '—')}  
-            **Grosor:** {rec_actual.get('grosor_recons', '—')}  
-            **Incremento:** {rec_actual.get('incremento', '—')}  
-            **Ventana:** {rec_actual.get('ventana_preset', '—')}  
-            **WW / WL:** {rec_actual.get('ww_val', '—')} / {rec_actual.get('wl_val', '—')}  
-            **DFOV:** {rec_actual.get('dfov', '—')}  
-            **Inicio:** {rec_actual.get('inicio_recons', '—')}  
-            **Fin:** {rec_actual.get('fin_recons', '—')}
-            """
-        )
+        _render_panel_central(adquisiciones_validas)
 
     return st.session_state.get("reconstrucciones_por_exp", {})
+
+
+def _render_sidebar_reconstruccion(adquisiciones_validas):
+    """Sidebar con lista de adquisiciones + sus reconstrucciones colapsables.
+    Solo se expande la adquisición "activa" (la que el usuario está viendo o
+    la que contiene la reconstrucción abierta)."""
+    _panel_header("🧩", "Reconstrucciones")
+
+    if not adquisiciones_validas:
+        st.info("Primero agrega al menos una adquisición en la pestaña **Adquisición**.")
+        return
+
+    recons_map = st.session_state["reconstrucciones_por_exp"]
+    exp_activa_id = st.session_state["exploracion_rec_activa"]
+    recon_activa_ids = st.session_state["recon_activa_por_exp"]
+
+    # Determinar qué adquisición está expandida:
+    #   - Siempre la que está marcada como "exploracion_rec_activa"
+    #     (que se actualiza tanto al clickear una adquisición como una rec)
+    exp_expandida_id = exp_activa_id
+
+    for i, exp in enumerate(adquisiciones_validas):
+        exp_id = exp.get("id")
+        recs_exp = recons_map.get(exp_id, [])
+        n_recs = len(recs_exp)
+        n_completas = sum(1 for r in recs_exp if _reconstruccion_completada(r, exp_id))
+        esta_expandida = (exp_id == exp_expandida_id)
+
+        color = _color_exploracion(exp)
+        nombre_base = (
+            exp.get("nombre")
+            if exp.get("nombre") and exp.get("nombre") != "Seleccionar"
+            else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
+        )
+        region = _get_region_label_for_exp(exp)
+        nombre_visible = f"{nombre_base} · {region}".strip(" ·")
+
+        # Chip de color (igual al original)
+        _mini_chip(color, nombre_visible, "")
+
+        # Contador si está colapsada
+        contador = ""
+        if not esta_expandida and n_recs > 0:
+            contador = f"  ({n_completas}/{n_recs})"
+
+        # Botón principal de la adquisición
+        es_activa_la_adq = (
+            esta_expandida
+            and recon_activa_ids.get(exp_id) is None
+        )
+        if st.button(
+            f"⚡ {nombre_visible}{contador}",
+            key=f"btn_rec_sel_{exp_id}",
+            use_container_width=True,
+            type="primary" if es_activa_la_adq else "secondary",
+        ):
+            st.session_state["exploracion_rec_activa"] = exp_id
+            # Al seleccionar una adquisición, deseleccionar su reconstrucción
+            # activa para que el panel central muestre el resumen de la adq.
+            st.session_state["recon_activa_por_exp"][exp_id] = None
+            st.rerun()
+
+        # Reconstrucciones: solo visibles si la adquisición está expandida
+        if esta_expandida and recs_exp:
+            for rec in recs_exp:
+                rec_id = rec.get("id")
+                rec_activa = (recon_activa_ids.get(exp_id) == rec_id)
+                completa = _reconstruccion_completada(rec, exp_id)
+
+                # Icono de estado: 🟢 completa, ⚪ en edición
+                icono = "🟢" if completa else "⚪"
+
+                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
+                with c_main:
+                    if st.button(
+                        f"{icono} {rec.get('nombre', 'Reconstrucción')}",
+                        key=f"btn_rec_item_{rec_id}",
+                        use_container_width=True,
+                        type="primary" if rec_activa else "secondary",
+                    ):
+                        st.session_state["exploracion_rec_activa"] = exp_id
+                        st.session_state["recon_activa_por_exp"][exp_id] = rec_id
+                        st.rerun()
+                with c_del:
+                    if st.button(
+                        "✕",
+                        key=f"btn_rec_del_{rec_id}",
+                        type="tertiary",
+                        use_container_width=True,
+                        help=f"Eliminar {rec.get('nombre', 'Reconstrucción')}",
+                    ):
+                        _eliminar_reconstruccion(exp_id, rec_id)
+                        st.rerun()
+
+        # Espacio vertical entre adquisiciones
+        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
+
+    # ── Botón "+ Reconstrucción" ──
+    # Se agrega a la adquisición activa. Si no hay, no se puede agregar.
+    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
+
+    if st.button(
+        "+ Reconstrucción",
+        key="rec_btn_add_recon",
+        type="secondary",
+        use_container_width=True,
+    ):
+        if exp_activa_id is None:
+            st.warning("Selecciona una adquisición primero.")
+        else:
+            exp_activa = next(
+                (e for e in adquisiciones_validas if e.get("id") == exp_activa_id),
+                None,
+            )
+            if exp_activa is not None:
+                region_anat = _get_region_group_for_exp(exp_activa)
+                nuevo_num = _siguiente_numero_recon(exp_activa_id)
+                nueva = _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
+                st.session_state["reconstrucciones_por_exp"][exp_activa_id].append(nueva)
+                # Dejar la nueva como activa
+                st.session_state["recon_activa_por_exp"][exp_activa_id] = nueva["id"]
+                st.rerun()
+
+
+def _render_panel_central(adquisiciones_validas):
+    """Panel central: si hay reconstrucción seleccionada muestra sus parámetros;
+    si no, muestra un resumen de la adquisición activa."""
+    if not adquisiciones_validas or st.session_state.get("exploracion_rec_activa") is None:
+        st.warning("No hay adquisiciones disponibles para reconstruir.")
+        return
+
+    exp_id = st.session_state["exploracion_rec_activa"]
+    exp_activa = next((e for e in adquisiciones_validas if e.get("id") == exp_id), None)
+
+    if exp_activa is None:
+        st.warning("No se pudo cargar la adquisición seleccionada.")
+        return
+
+    recs_exp = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    rec_activa_id = st.session_state["recon_activa_por_exp"].get(exp_id)
+    rec_actual = None
+    if rec_activa_id:
+        rec_actual = next((r for r in recs_exp if r.get("id") == rec_activa_id), None)
+
+    # Nombre legible de la adquisición
+    nombre_base_exp = (
+        exp_activa.get("nombre")
+        if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar"
+        else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
+    )
+    region_exp = _get_region_label_for_exp(exp_activa)
+    nombre_exp = f"{nombre_base_exp} · {region_exp}".strip(" ·").upper()
+
+    # ── CASO A: no hay reconstrucción seleccionada → resumen de la adquisición ──
+    if rec_actual is None:
+        _panel_header("⚡", f"Adquisición: {nombre_exp}")
+        st.caption(
+            "Usa el botón **+ Reconstrucción** de la barra lateral para crear "
+            "una nueva reconstrucción para esta adquisición."
+        )
+        st.markdown("---")
+
+        if not recs_exp:
+            st.info(
+                f"Esta adquisición aún no tiene reconstrucciones. "
+                f"Agrega la primera con **+ Reconstrucción**."
+            )
+        else:
+            st.markdown(f"**Reconstrucciones creadas ({len(recs_exp)}):**")
+            completas = sum(1 for r in recs_exp if _reconstruccion_completada(r, exp_id))
+            st.markdown(f"🟢 Completadas: **{completas}** · ⚪ En edición: **{len(recs_exp) - completas}**")
+            st.caption("Haz click en una reconstrucción de la barra lateral para editarla.")
+        return
+
+    # ── CASO B: hay reconstrucción seleccionada → parámetros editables ──
+    region_anat = _get_region_group_for_exp(exp_activa)
+    _panel_header("🔄", f"{rec_actual.get('nombre', 'Reconstrucción')} · {nombre_exp}")
+
+    col_img_param = st.columns([1.0, 1.15], gap="medium")
+
+    with col_img_param[0]:
+        c_img_left, c_img_center, c_img_right = st.columns([0.08, 1.0, 0.08], gap="small")
+        with c_img_center:
+            imagen_recon = st.file_uploader(
+                "Subir imagen de reconstrucción",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"img_recon_upload_{rec_actual['id']}",
+            )
+            if imagen_recon is not None:
+                st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
+                    "name": imagen_recon.name,
+                    "bytes": imagen_recon.getvalue(),
+                }
+            img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+            if img_guardada is not None:
+                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+
+    with col_img_param[1]:
+        _panel_header("🔧", "Parámetros de Reconstrucción")
+
+        col_pr1, col_pr2 = st.columns([1, 1], gap="small")
+        with col_pr1:
+            rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}", value=rec_actual.get("fase_recons"))
+            if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
+                rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}", value=rec_actual.get("algoritmo_iter"))
+            else:
+                rec_actual["algoritmo_iter"] = "—"
+            rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}", value=rec_actual.get("kernel_sel"))
+            rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}", value=rec_actual.get("grosor_recons"))
+
+        with col_pr2:
+            rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}", value=rec_actual.get("tipo_recons"))
+            if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
+                niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
+                rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}", value=rec_actual.get("nivel_iter"))
+            else:
+                rec_actual["nivel_iter"] = "—"
+            rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}", value=rec_actual.get("incremento"))
+
+        _panel_header("🪟", "Ventana de Visualización")
+        ventanas_disp = list(VENTANAS.keys())
+
+        col_v1, col_v2 = st.columns([1, 1], gap="small")
+        with col_v1:
+            rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}", value=rec_actual.get("ventana_preset"))
+            if rec_actual["ventana_preset"] in VENTANAS:
+                ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
+                wl_default = VENTANAS[rec_actual["ventana_preset"]]["wl"]
+            else:
+                ww_default = 400
+                wl_default = 40
+            rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}")
+
+        with col_v2:
+            rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}")
+            rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}", value=rec_actual.get("dfov"))
+
+        _panel_header("📍", "Rango de Reconstrucción")
+        refs_ini_r = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
+        refs_fin_r = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
+
+        col_ini, col_fin = st.columns([1, 1], gap="small")
+        with col_ini:
+            rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
+        with col_fin:
+            rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
+
+    st.markdown("---")
+    _panel_header("📝", "Resumen de reconstrucción activa")
+    st.markdown(
+        f"""
+        **Adquisición:** {nombre_exp}  
+        **Nombre:** {rec_actual.get('nombre', '—')}  
+        **Fase:** {rec_actual.get('fase_recons', '—')}  
+        **Tipo:** {rec_actual.get('tipo_recons', '—')}  
+        **Algoritmo iterativo:** {rec_actual.get('algoritmo_iter', '—')}  
+        **Nivel:** {rec_actual.get('nivel_iter', '—')}  
+        **Kernel:** {rec_actual.get('kernel_sel', '—')}  
+        **Grosor:** {rec_actual.get('grosor_recons', '—')}  
+        **Incremento:** {rec_actual.get('incremento', '—')}  
+        **Ventana:** {rec_actual.get('ventana_preset', '—')}  
+        **WW / WL:** {rec_actual.get('ww_val', '—')} / {rec_actual.get('wl_val', '—')}  
+        **DFOV:** {rec_actual.get('dfov', '—')}  
+        **Inicio:** {rec_actual.get('inicio_recons', '—')}  
+        **Fin:** {rec_actual.get('fin_recons', '—')}
+        """
+    )
