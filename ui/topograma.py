@@ -610,7 +610,7 @@ def _render_header_set_activo():
     c_title, c_rename = st.columns([2, 3], gap="medium")
     with c_title:
         lbl = cur.get("label") or f"Topograma {idx+1}"
-        region_lbl = cur.get("region_anat") or "sin región"
+        region_lbl = cur.get("examen") or cur.get("region_anat") or "sin región"
         st.markdown(
             f"<div style='padding-top:4px;'>"
             f"<div style='font-size:1.25rem;font-weight:700;'>📡 {lbl}</div>"
