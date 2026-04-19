@@ -1117,19 +1117,34 @@ def _inject_sidebar_css():
         div[data-testid="stButton"] > button[kind="secondary"] {
             min-height: 2.2rem !important;
             height: 2.2rem !important;
+            max-height: 2.2rem !important;
             padding-top: 0.2rem !important;
             padding-bottom: 0.2rem !important;
             white-space: nowrap !important;
             font-size: 0.88rem !important;
+            overflow: hidden !important;
+        }
+
+        div[data-testid="stButton"] > button[kind="secondary"] p,
+        div[data-testid="stButton"] > button[kind="secondary"] span,
+        div[data-testid="stButton"] > button[kind="primary"] p,
+        div[data-testid="stButton"] > button[kind="primary"] span {
+            white-space: nowrap !important;
+            line-height: 1 !important;
+            font-size: 0.88rem !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         div[data-testid="stButton"] > button[kind="primary"] {
             min-height: 2.2rem !important;
             height: 2.2rem !important;
+            max-height: 2.2rem !important;
             padding-top: 0.2rem !important;
             padding-bottom: 0.2rem !important;
             white-space: nowrap !important;
             font-size: 0.88rem !important;
+            overflow: hidden !important;
         }
         </style>
         """,
