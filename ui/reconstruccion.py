@@ -319,26 +319,17 @@ def _reconstruccion_completada(rec, exp_id) -> bool:
 
 
 def _reindexar_reconstrucciones(exp_id):
-    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])[:6]
     st.session_state["reconstrucciones_por_exp"][exp_id] = lista_local
     for idx_local, rec_local in enumerate(lista_local, start=1):
         rec_local["id"] = f"{exp_id}_rec_{idx_local}"
         rec_local["nombre"] = f"Reconstrucción {idx_local}"
 
 
-for exp in adquisiciones_validas:
-    exp_id = exp.get("id")
-
-    if exp_id not in st.session_state["reconstrucciones_por_exp"]:
-        st.session_state["reconstrucciones_por_exp"][exp_id] = []
-
-    # 👇 SOLO UNA reconstrucción inicial
-    if not st.session_state["reconstrucciones_por_exp"][exp_id]:
-        region_anat = _get_region_group_for_exp(exp)
-        nueva = _crear_reconstruccion_base(exp, 1, region_anat)
-
-        st.session_state["reconstrucciones_por_exp"][exp_id].append(nueva)
-        st.session_state["recon_activa_por_exp"][exp_id] = nueva["id"]
+def _obtener_adquisiciones_validas():
+    exploraciones = st.session_state.get("exploraciones", [])
+    if not exploraciones:
+        exploraciones = st.session_state.get("exploraciones_adq", [])
 
     adquisiciones = []
     ids_vistos = set()
