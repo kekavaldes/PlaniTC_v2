@@ -1156,7 +1156,12 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
+                c_dot, c_main, c_del = st.columns([0.45, 6.2, 0.55], gap="small", vertical_alignment="center")
+                with c_dot:
+                    st.markdown(
+                        '<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>',
+                        unsafe_allow_html=True,
+                    )
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1179,15 +1184,22 @@ def _render_sidebar():
                         _eliminar_set_topograma(i)
                         st.rerun()
             else:
-                if st.button(
-                    f"📡 {lbl}  \n{reg}",
-                    key=f"btn_topograma_sidebar_{i}",
-                    type=tipo,
-                    use_container_width=True,
-                ):
-                    st.session_state["topograma_set_activo"] = i
-                    st.session_state["exp_activa"] = "topograma"
-                    st.rerun()
+                c_dot, c_main = st.columns([0.45, 6.2], gap="small", vertical_alignment="center")
+                with c_dot:
+                    st.markdown(
+                        '<div style="width:0.78rem;height:0.78rem;border-radius:50%;margin:0 auto;opacity:0;"></div>',
+                        unsafe_allow_html=True,
+                    )
+                with c_main:
+                    if st.button(
+                        f"📡 {lbl}  \n{reg}",
+                        key=f"btn_topograma_sidebar_{i}",
+                        type=tipo,
+                        use_container_width=True,
+                    ):
+                        st.session_state["topograma_set_activo"] = i
+                        st.session_state["exp_activa"] = "topograma"
+                        st.rerun()
 
         else:
             i_exp = item_idx
