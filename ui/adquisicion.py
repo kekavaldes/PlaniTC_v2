@@ -307,7 +307,7 @@ def render_topogramas_independientes_interactivos(
     width=760,
     modo="rect",
     storage_key=None,
-    color="#00D2FF",
+    color=color_exp,
     show_labels=False,
     roi_label="ROI",
     canvas_css_width=None,
@@ -1020,6 +1020,27 @@ def _region_grupo(exp=None):
     return "CUERPO"
 
 
+EXPLORACION_COLORS = [
+    "#00D2FF",  # cian
+    "#FFB000",  # ámbar
+    "#7CFF6B",  # verde
+    "#FF5CA8",  # fucsia
+    "#A78BFA",  # violeta
+    "#FF7A59",  # naranja
+    "#5EEAD4",  # turquesa
+    "#FACC15",  # amarillo
+]
+
+def _color_exploracion(exp):
+    """Devuelve un color fijo para cada exploración, según su posición actual."""
+    exploraciones = st.session_state.get("exploraciones", [])
+    try:
+        idx = next(i for i, e in enumerate(exploraciones) if e.get("id") == exp.get("id"))
+    except Exception:
+        idx = 0
+    return EXPLORACION_COLORS[idx % len(EXPLORACION_COLORS)]
+
+
 def _ajustar_por_nombre(exp):
     """Reglas automáticas al cambiar el nombre de la exploración."""
     nombre = exp.get("nombre")
@@ -1327,6 +1348,7 @@ def _render_topogramas_adq(exp, es_bolus):
         t["y_fin"] = get_y_position_with_offset(fin_ref, fin_mm)
 
     modo = "line" if es_bolus else "rect"
+    color_exp = _color_exploracion(exp)
 
     if es_bolus:
         # En bolus se muestran los topogramas más compactos y, a la derecha,
@@ -1338,7 +1360,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 [topos[0]],
                 modo=modo,
                 storage_key=f"{exp['id']}_topo1",
-                color="#00D2FF",
+                color=color_exp,
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
@@ -1348,7 +1370,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 [topos[1]],
                 modo=modo,
                 storage_key=f"{exp['id']}_topo2",
-                color="#00D2FF",
+                color=color_exp,
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
@@ -1367,7 +1389,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     }],
                     modo="roi",
                     storage_key=f"{exp['id']}_roi_corte",
-                    color="#00D2FF",
+                    color=color_exp,
                     show_labels=False,
                     roi_label="ROI",
                     canvas_css_width=500,
@@ -1393,7 +1415,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     topos,
                     modo=modo,
                     storage_key=exp["id"],
-                    color="#00D2FF",
+                    color=color_exp,
                     show_labels=False,
                     canvas_css_width=186 if len(topos) > 1 else 240,
                     canvas_css_height=290 if len(topos) > 1 else 340,
@@ -1407,7 +1429,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 topos,
                 modo=modo,
                 storage_key=exp["id"],
-                color="#00D2FF",
+                color=color_exp,
                 show_labels=False,
                 canvas_css_width=186 if len(topos) > 1 else None,
                 canvas_css_height=290 if len(topos) > 1 else None,
@@ -1420,7 +1442,7 @@ def _render_topogramas_adq(exp, es_bolus):
         topos,
         modo=modo,
         storage_key=exp["id"],
-        color="#00D2FF",
+        color=color_exp,
         show_labels=False,
     )
     if html:
