@@ -1326,7 +1326,7 @@ def _render_sidebar():
     st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
 
     if st.button(
-        "➕ Nuevo topograma",
+        "➕ Topograma",
         key="btn_add_set_sidebar",
         use_container_width=True,
         type="secondary",
