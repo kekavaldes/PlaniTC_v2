@@ -1040,71 +1040,85 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """Ajustes mínimos del sidebar para que las filas de exploraciones no se
-    desplacen verticalmente.
+    """CSS del sidebar para mantener las tarjetas principales con altura pareja
+    y dejar los botones de eliminar como íconos limpios, centrados y sin el
+    fondo gris detrás.
 
-    El problema real de desalineación viene del emoji 🗑️ dentro del botón de
-    Streamlit, que en Safari suele renderizarse más abajo que el centro óptico.
-    La solución aquí es usar un glifo simple (✕) y centrarlo con CSS, evitando
-    hacks con elementos ocultos que terminan desplazando toda la columna.
+    Clave del alineamiento: el marker `.sb-ghost` queda con display:none, por
+    lo que no ocupa espacio vertical en la columna. El botón queda como único
+    flex item visible y se estira a la altura de la fila, quedando perfectamente
+    centrado con el botón principal sin importar cuántas líneas tenga.
     """
     st.markdown(
         """
         <style>
+        /* 1. Cada fila del sidebar alinea a sus hijos con "stretch" */
+        div[data-testid="stHorizontalBlock"] {
+            align-items: stretch !important;
+        }
+        /* 2. Cada columna es flex-column para apilar sus widgets */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
         }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
+            height: 100%;
+        }
 
-        /* tarjeta principal del sidebar */
+        /* 3. Botones principales: se estiran a la altura de la fila */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
+            height: 100%;
+            display: flex;
+            align-items: stretch;
+        }
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton > button {
+            flex: 1 1 auto !important;
             min-height: 56px;
             width: 100%;
             white-space: normal;
-            line-height: 1.2;
+            line-height: 1.25;
             box-sizing: border-box;
         }
 
-        /* marcador vacío para los botones de eliminar: no ocupa espacio */
-        .sb-ghost {
+        /* 4. El marker ghost NO debe ocupar espacio — display:none permite
+              que el botón hermano quede como único flex item visible y se
+              centre naturalmente dentro de la columna.
+              Los selectores :has() + ~ siguen funcionando con display:none
+              porque operan sobre el DOM. */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
             display: none !important;
         }
 
-        /* botón de eliminar: pequeño, centrado y sin fondo gris duro */
+        /* 5. Botón de eliminar: transparente, sin borde, ícono centrado */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        + div[data-testid="stElementContainer"] .stButton {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            height: 100% !important;
-            min-height: 56px !important;
-        }
-        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        + div[data-testid="stElementContainer"] .stButton > button {
-            width: 44px !important;
-            min-width: 44px !important;
-            max-width: 44px !important;
-            height: 44px !important;
-            min-height: 44px !important;
-            padding: 0 !important;
-            margin: 0 auto !important;
-            border-radius: 14px !important;
-            border: 1px solid rgba(255,255,255,0.14) !important;
-            background: rgba(255,255,255,0.03) !important;
+        ~ div[data-testid="stElementContainer"] .stButton > button {
+            background: transparent !important;
+            border: none !important;
             box-shadow: none !important;
-            color: #d7d7d7 !important;
-            font-size: 1.05rem !important;
+            padding: 0 !important;
+            color: #cfcfcf !important;
+            font-size: 1.25rem !important;
             line-height: 1 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        + div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255,255,255,0.08) !important;
-            border-color: rgba(255,255,255,0.20) !important;
+        ~ div[data-testid="stElementContainer"] .stButton > button:hover {
+            background: rgba(255, 255, 255, 0.06) !important;
             color: #ffffff !important;
+            border: none !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:focus,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:active {
+            background: rgba(255, 255, 255, 0.10) !important;
+            color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
         }
         </style>
         """,
@@ -1149,7 +1163,7 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.2, 0.95], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small")
                 with c_main:
                     if st.button(
                         f"📡 {lbl}  \n{reg}",
@@ -1163,7 +1177,7 @@ def _render_sidebar():
                 with c_del:
                     st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
-                        "✕",
+                        "🗑",
                         key=f"del_set_sidebar_{i}",
                         use_container_width=True,
                         help=f"Eliminar {lbl} · {reg}",
@@ -1203,7 +1217,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.2, 0.95], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.8], gap="small")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1216,7 +1230,7 @@ def _render_sidebar():
                 with c_del:
                     st.markdown('<div class="sb-ghost"></div>', unsafe_allow_html=True)
                     if st.button(
-                        "✕",
+                        "🗑",
                         key=f"del_exp_{exp['id']}",
                         use_container_width=True,
                         help=f"Eliminar {nombre_exp}",
