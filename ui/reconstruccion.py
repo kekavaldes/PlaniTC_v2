@@ -377,6 +377,16 @@ def render_reconstruccion():
             st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
 
         st.markdown("---")
+
+        _panel_header("🖼️", "Imagen de Reconstrucción")
+        imagen_recon = st.file_uploader(
+            "Subir imagen de reconstrucción",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"img_recon_{exp_id}_{rec_actual['id']}",
+        )
+        if imagen_recon is not None:
+            st.image(imagen_recon, caption="Imagen cargada", use_container_width=True)
+
         col_r1, col_r2 = st.columns([1, 1], gap="large")
 
         with col_r1:
