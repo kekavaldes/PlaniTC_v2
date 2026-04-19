@@ -343,7 +343,7 @@ def render_reconstruccion():
         with c_add:
             max_recons = len(recs_exp) >= 6
             if st.button(
-                "➕ Agregar\nreconstrucción",
+                "➕\nreconstrucción",
                 key=f"add_rec_{exp_id}",
                 use_container_width=False,
                 disabled=max_recons,
@@ -359,7 +359,7 @@ def render_reconstruccion():
         with c_del:
             deshabilitar = len(recs_exp) <= 1
             if st.button(
-                "🗑 Eliminar\nreconstrucción",
+                "🗑\nreconstrucción",
                 key=f"del_rec_{exp_id}",
                 use_container_width=False,
                 disabled=deshabilitar,
