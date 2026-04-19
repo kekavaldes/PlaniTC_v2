@@ -1040,44 +1040,34 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS mínimo solo para el botón eliminar del sidebar.
-    Evita empujar la columna completa y deja la X centrada."""
+    """CSS mínimo para los botones de eliminar del sidebar."""
     st.markdown(
         """
         <style>
-        /* No tocar la alineación global de todas las columnas del sidebar */
-
-        /* Botón eliminar: sin fondo ni borde, centrado y compacto */
-        div[data-testid="stButton"] > button[kind="tertiary"] {
-            min-height: 0 !important;
-            height: 34px !important;
-            width: 34px !important;
-            padding: 0 !important;
-            margin: 0 auto !important;
-            border: none !important;
+        button[kind="tertiary"] {
             background: transparent !important;
+            border: none !important;
             box-shadow: none !important;
-            display: flex !important;
+            min-height: 2.25rem !important;
+            height: 2.25rem !important;
+            width: 2.25rem !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
             line-height: 1 !important;
-            font-size: 1.25rem !important;
-            color: #d7d7d7 !important;
+            font-size: 1.05rem !important;
+            color: #d8d8d8 !important;
         }
-        div[data-testid="stButton"] > button[kind="tertiary"] p {
+        button[kind="tertiary"]:hover {
+            background: rgba(255,255,255,0.06) !important;
+            color: white !important;
+        }
+        button[kind="tertiary"] p {
             margin: 0 !important;
             line-height: 1 !important;
-        }
-        div[data-testid="stButton"] > button[kind="tertiary"]:hover {
-            background: rgba(255,255,255,0.06) !important;
-            color: #ffffff !important;
-        }
-        div[data-testid="stButton"] > button[kind="tertiary"]:focus,
-        div[data-testid="stButton"] > button[kind="tertiary"]:active {
-            background: rgba(255,255,255,0.10) !important;
-            color: #ffffff !important;
-            box-shadow: none !important;
-            outline: none !important;
         }
         </style>
         """,
@@ -1086,6 +1076,7 @@ def _inject_sidebar_css():
 
 
 def _render_sidebar():
+
     _inject_sidebar_css()
     st.markdown("### 📋 Exploraciones")
 
@@ -1095,10 +1086,12 @@ def _render_sidebar():
     viendo_topo = st.session_state.get("exp_activa") == "topograma"
     exploraciones = st.session_state["exploraciones"]
 
+    # Asegurar que toda exploración tenga `order` (defensivo / migración)
     for i_exp, exp in enumerate(exploraciones):
         if "order" not in exp:
             exp["order"] = _next_order()
 
+    # Construir lista unificada ordenada cronológicamente
     items = []
     for i, s in enumerate(sets):
         items.append(("set", i, s.get("order", 0)))
@@ -1109,6 +1102,7 @@ def _render_sidebar():
     hay_varios_sets = len(sets) > 1
     hay_varias_exp = len(exploraciones) > 1
 
+    # Renderizar ítems en orden de creación
     for item_type, item_idx, _ord in items:
         if item_type == "set":
             i = item_idx
@@ -1119,11 +1113,10 @@ def _render_sidebar():
             tipo = "primary" if es_activo_topo else "secondary"
 
             if hay_varios_sets:
-                c_main, c_del = st.columns([6.6, 0.7], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
-                        f"📡 {lbl}  
-{reg}",
+                        f"📡 {lbl}  \n{reg}",
                         key=f"btn_topograma_sidebar_{i}",
                         type=tipo,
                         use_container_width=True,
@@ -1132,6 +1125,7 @@ def _render_sidebar():
                         st.session_state["exp_activa"] = "topograma"
                         st.rerun()
                 with c_del:
+                    st.markdown('<div style="height: 0.05rem;"></div>', unsafe_allow_html=True)
                     if st.button(
                         "✕",
                         key=f"del_set_sidebar_{i}",
@@ -1143,8 +1137,7 @@ def _render_sidebar():
                         st.rerun()
             else:
                 if st.button(
-                    f"📡 {lbl}  
-{reg}",
+                    f"📡 {lbl}  \n{reg}",
                     key=f"btn_topograma_sidebar_{i}",
                     type=tipo,
                     use_container_width=True,
@@ -1175,7 +1168,7 @@ def _render_sidebar():
             nombre_exp = _name_visible(exp, i_exp)
 
             if hay_varias_exp:
-                c_main, c_del = st.columns([6.6, 0.7], gap="small", vertical_alignment="center")
+                c_main, c_del = st.columns([6.2, 0.55], gap="small", vertical_alignment="center")
                 with c_main:
                     if st.button(
                         f"⚡ {nombre_exp}{sufijo}",
@@ -1186,6 +1179,7 @@ def _render_sidebar():
                         st.session_state["exp_activa"] = i_exp
                         st.rerun()
                 with c_del:
+                    st.markdown('<div style="height: 0.05rem;"></div>', unsafe_allow_html=True)
                     if st.button(
                         "✕",
                         key=f"del_exp_{exp['id']}",
@@ -1207,6 +1201,7 @@ def _render_sidebar():
                     st.session_state["exp_activa"] = i_exp
                     st.rerun()
 
+    # ── Determinar a qué topograma se asociará la próxima exploración ──
     activa = st.session_state.get("exp_activa")
     if isinstance(activa, int) and 0 <= activa < len(exploraciones):
         target_idx = exploraciones[activa].get("topo_set_idx", set_activo)
@@ -1217,6 +1212,7 @@ def _render_sidebar():
     target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
     target_reg = sets[target_idx].get("examen") or sets[target_idx].get("region_anat") or "sin región"
 
+    # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
     c_exp, c_topo = st.columns(2, gap="small")
     with c_exp:
