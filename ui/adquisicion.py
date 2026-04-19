@@ -1069,7 +1069,7 @@ def _render_sidebar():
             i = item_idx
             s = sets[i]
             lbl = s.get("label") or f"Topograma {i+1}"
-            reg = s.get("region_anat") or "sin región"
+            reg = s.get("examen") or s.get("region_anat") or "sin región"
             es_activo_topo = (viendo_topo and set_activo == i)
             tipo = "primary" if es_activo_topo else "secondary"
 
@@ -1101,7 +1101,17 @@ def _render_sidebar():
             tipo_exp = "primary" if es_exp_activa else "secondary"
 
             topo_idx = exp.get("topo_set_idx", 0)
-            sufijo = f"  ·  T{topo_idx + 1}" if hay_varios_sets else ""
+            s_exp = sets[topo_idx] if 0 <= topo_idx < len(sets) else None
+            nombre_topo = None
+            if s_exp is not None:
+                nombre_topo = s_exp.get("examen") or s_exp.get("region_anat")
+
+            if nombre_topo:
+                sufijo = f"  ·  {nombre_topo}"
+            elif hay_varios_sets:
+                sufijo = f"  ·  T{topo_idx + 1}"
+            else:
+                sufijo = ""
 
             if st.button(
                 f"⚡ {_name_visible(exp, i_exp)}{sufijo}",
@@ -1123,7 +1133,7 @@ def _render_sidebar():
     if not (0 <= target_idx < len(sets)):
         target_idx = 0
     target_lbl = sets[target_idx].get("label") or f"Topograma {target_idx+1}"
-    target_reg = sets[target_idx].get("region_anat") or "sin región"
+    target_reg = sets[target_idx].get("examen") or sets[target_idx].get("region_anat") or "sin región"
 
     # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
@@ -1771,7 +1781,7 @@ def render_adquisicion():
             def _fmt_set(i):
                 s = sets[i]
                 lbl = s.get("label") or f"Topograma {i+1}"
-                reg = s.get("region_anat") or "sin región"
+                reg = s.get("examen") or s.get("region_anat") or "sin región"
                 return f"{lbl} — {reg}"
 
             cur = exp.get("topo_set_idx", 0)
