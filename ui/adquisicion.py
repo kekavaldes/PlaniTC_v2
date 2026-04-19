@@ -1275,28 +1275,28 @@ def _render_sidebar():
 
     # Fila con las dos acciones globales: nueva exploración / nuevo topograma
     st.markdown("---")
-    c_exp, c_topo = st.columns(2, gap="small")
-    with c_exp:
-        if st.button(
-            "➕ Exploración",
-            key="btn_add_exp_global",
-            use_container_width=True,
-            help=f"Se agregará a {target_lbl} · {target_reg}",
-        ):
-            st.session_state["exploraciones"].append(
-                _crear_exploracion_base(topo_set_idx=target_idx)
-            )
-            st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
-            st.rerun()
-    with c_topo:
-        if st.button(
-            "➕ Nuevo topograma",
-            key="btn_add_set_sidebar",
-            use_container_width=True,
-        ):
-            _agregar_set_topograma()
-            st.session_state["exp_activa"] = "topograma"
-            st.rerun()
+    st.markdown("---")
+
+if st.button(
+    "➕ Exploración",
+    key="btn_add_exp_global",
+    use_container_width=True,
+    help=f"Se agregará a {target_lbl} · {target_reg}",
+):
+    st.session_state["exploraciones"].append(
+        _crear_exploracion_base(topo_set_idx=target_idx)
+    )
+    st.session_state["exp_activa"] = len(st.session_state["exploraciones"]) - 1
+    st.rerun()
+
+if st.button(
+    "➕ Topograma",
+    key="btn_add_set_sidebar",
+    use_container_width=True,
+):
+    _agregar_set_topograma()
+    st.session_state["exp_activa"] = "topograma"
+    st.rerun()
 
 
 def obtener_imagen_posicion_corte(nombre_posicion):
