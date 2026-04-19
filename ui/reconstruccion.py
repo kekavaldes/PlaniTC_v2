@@ -103,11 +103,10 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
     st.markdown(
         f"""
         <div style="
-            border:1px solid #2E2E2E;
-            border-left:8px solid {color};
+            border:1px solid {color};
             border-radius:12px;
             height:0.9rem;
-            background:#111111;
+            background:{color};
             margin-bottom:0.45rem;
         "></div>
         """,
