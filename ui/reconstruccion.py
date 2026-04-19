@@ -28,85 +28,31 @@ def _inject_recon_css():
             color: white !important;
         }
 
-        /* Botón Agregar reconstrucción */
-        div[data-testid="stButton"] > button[kind][id*="add_rec"] {
-            background-color: #4a4f5d !important;
-            border: 1px solid #6b7280 !important;
-            border-radius: 16px !important;
-            white-space: nowrap !important;
+        /* Selectores fijos de reconstrucción (6) */
+        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] {
+            min-height: 3.25rem !important;
+            height: 3.25rem !important;
             width: 100% !important;
-            min-width: 0 !important;
-            padding: 0.55rem 0.95rem !important;
-            line-height: 1.05 !important;
-            min-height: 3.35rem !important;
-            color: white !important;
+            padding: 0.45rem 0.9rem !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
+            border-radius: 16px !important;
+            text-align: left !important;
             box-shadow: none !important;
         }
 
-        div[data-testid="stButton"] > button[kind][id*="add_rec"]:hover {
-            background-color: #565c6b !important;
-            border-color: #7c8596 !important;
-            color: white !important;
-        }
-
-        div[data-testid="stButton"] > button[kind][id*="add_rec"] p {
-            color: white !important;
-            font-weight: 700 !important;
-            font-size: 0.95rem !important;
-            white-space: nowrap !important;
-        }
-
-
-        /* Botones de cada reconstrucción */
-        div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] {
-            min-height: 3.05rem !important;
-            height: 3.05rem !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            border-radius: 16px !important;
-        }
-
         div[data-testid="stButton"] > button[kind][id*="btn_rec_item_"] p {
-            line-height: 1 !important;
+            line-height: 1.05 !important;
             display: flex !important;
             align-items: center !important;
-            justify-content: center !important;
+            justify-content: flex-start !important;
+            gap: 0.45rem !important;
             height: 100% !important;
-        }
-
-        /* Botones X para eliminar reconstrucción individual */
-        div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"] {
-            background-color: transparent !important;
-            border: 1px solid #666 !important;
-            border-radius: 999px !important;
-            min-height: 3.05rem !important;
-            height: 3.05rem !important;
-            width: 2.35rem !important;
-            min-width: 2.35rem !important;
-            padding: 0 !important;
-            margin-left: -0.55rem !important;
-            color: white !important;
-            font-size: 1.05rem !important;
-            line-height: 1 !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-
-        div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"]:hover {
-            background-color: #2f3440 !important;
-            border-color: #8a8f9c !important;
-        }
-
-        div[data-testid="stButton"] > button[kind][id*="del_rec_ind_"] p {
-            color: white !important;
+            width: 100% !important;
+            font-size: 0.94rem !important;
             font-weight: 700 !important;
-            font-size: 1.05rem !important;
-            line-height: 1 !important;
-            margin: 0 !important;
+            white-space: nowrap !important;
         }
 
         /* Selects y number inputs un poco más angostos visualmente */
@@ -322,7 +268,8 @@ def _get_region_group_for_exp(exp) -> str:
 
 
 def _reindexar_reconstrucciones(exp_id):
-    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])[:6]
+    st.session_state["reconstrucciones_por_exp"][exp_id] = lista_local
     for idx_local, rec_local in enumerate(lista_local, start=1):
         rec_local["id"] = f"{exp_id}_rec_{idx_local}"
         rec_local["nombre"] = f"Reconstrucción {idx_local}"
@@ -440,98 +387,27 @@ def render_reconstruccion():
         nombre_exp = f"{nombre_base_exp} {region_exp}".strip().upper()
 
         _panel_header("🔄", f"Reconstrucciones de {nombre_exp}")
-        st.caption("Puedes programar una o más reconstrucciones para esta adquisición.")
-
-
-        c_add, c_spacer = st.columns([0.78, 2.72], gap="small")
-        with c_add:
-            max_recons = len(recs_exp) >= 6
-            if st.button(
-                "➕ reconstrucción",
-                key=f"add_rec_{exp_id}",
-                use_container_width=True,
-                disabled=max_recons,
-            ):
-                nuevo_num = len(recs_exp) + 1
-                st.session_state["reconstrucciones_por_exp"][exp_id].append(
-                    _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
-                )
-                _reindexar_reconstrucciones(exp_id)
-                st.session_state["recon_activa_por_exp"][exp_id] = f"{exp_id}_rec_{nuevo_num}"
-                st.rerun()
-
-        with c_spacer:
-            st.markdown("<div style='height:1px;'></div>", unsafe_allow_html=True)
-
-        st.markdown("<div style='height:0.18rem;'></div>", unsafe_allow_html=True)
+        st.caption("Selecciona una de las 6 reconstrucciones disponibles para trabajar en ella.")
 
         recs_visibles = recs_exp[:6]
         if recs_visibles:
-            c_row_left, c_row_center, c_row_right = st.columns([0.18, 3.64, 0.18], gap="small")
-            with c_row_center:
-                spec = []
-                for _ in recs_visibles:
-                    spec.extend([1.22, 0.16])
-                spec.append(max(0.18, 5.5 - len(recs_visibles)))
-                cols_rec = st.columns(spec, gap="small")
-        else:
-            cols_rec = []
-
-        for idx_rec, rec_btn in enumerate(recs_visibles):
-            nombre_btn = f"🧱 {rec_btn.get('nombre', 'Reconstrucción')}"
-            ancho_estimado = max(180, min(260, 104 + (len(nombre_btn) * 7)))
-
-            st.markdown(
-                f"""
-                <style>
-                div[data-testid="stButton"] button[kind][data-testid="stBaseButton-secondary"][id*="{rec_btn['id']}"],
-                div[data-testid="stButton"] button[kind][data-testid="stBaseButton-primary"][id*="{rec_btn['id']}"] {{
-                    width: {ancho_estimado}px !important;
-                    min-width: {ancho_estimado}px !important;
-                    max-width: {ancho_estimado}px !important;
-                    white-space: nowrap !important;
-                }}
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            btn_col = cols_rec[idx_rec * 2]
-            del_col = cols_rec[idx_rec * 2 + 1]
-
-            with btn_col:
-                if st.button(
-                    nombre_btn,
-                    key=f"btn_rec_item_{rec_btn['id']}",
-                    use_container_width=False,
-                    type="primary" if rec_btn.get("id") == rec_actual.get("id") else "secondary",
-                ):
-                    st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                    st.rerun()
-
-            with del_col:
-                puede_eliminar = len(recs_exp) > 1
-                if st.button(
-                    "✕",
-                    key=f"del_rec_ind_{rec_btn['id']}",
-                    use_container_width=True,
-                    disabled=not puede_eliminar,
-                    help="Eliminar esta reconstrucción",
-                ):
-                    st.session_state["reconstrucciones_por_exp"][exp_id] = [
-                        r for r in st.session_state["reconstrucciones_por_exp"][exp_id]
-                        if r.get("id") != rec_btn.get("id")
-                    ]
-                    _reindexar_reconstrucciones(exp_id)
-                    recs_actualizadas = st.session_state["reconstrucciones_por_exp"][exp_id]
-                    if recs_actualizadas:
-                        nuevo_activo = next(
-                            (r.get("id") for r in recs_actualizadas if r.get("id") != rec_btn.get("id")),
-                            recs_actualizadas[0]["id"],
-                        )
-                        st.session_state["recon_activa_por_exp"][exp_id] = nuevo_activo
-                    st.rerun()
-
+            filas = [recs_visibles[:3], recs_visibles[3:6]]
+            for fila in filas:
+                cols_rec = st.columns(3, gap="medium")
+                for col, rec_btn in zip(cols_rec, fila):
+                    seleccionada = rec_btn.get("id") == rec_actual.get("id")
+                    icono = "🔘" if seleccionada else "⚪"
+                    nombre_btn = f"{icono}  {rec_btn.get('nombre', 'Reconstrucción')}"
+                    with col:
+                        if st.button(
+                            nombre_btn,
+                            key=f"btn_rec_item_{rec_btn['id']}",
+                            use_container_width=True,
+                            type="primary" if seleccionada else "secondary",
+                        ):
+                            st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                            st.rerun()
+                st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
         st.markdown("---")
 
         if rec_actual is not None:
