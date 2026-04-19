@@ -99,20 +99,17 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
-def _mini_chip(color: str, titulo: str, subtitulo: str = ""):
+def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
     st.markdown(
         f"""
         <div style="
             border:1px solid #2E2E2E;
             border-left:8px solid {color};
             border-radius:12px;
-            padding:0.7rem 0.9rem;
+            height:0.9rem;
             background:#111111;
-            margin-bottom:0.5rem;
-        ">
-            <div style="font-weight:700; color:#FFFFFF;">{titulo}</div>
-            <div style="font-size:0.82rem; color:#C9D1D9;">{subtitulo}</div>
-        </div>
+            margin-bottom:0.45rem;
+        "></div>
         """,
         unsafe_allow_html=True,
     )
@@ -228,11 +225,10 @@ def render_reconstruccion():
     if st.session_state["exploracion_rec_activa"] not in ids_adq_validos:
         st.session_state["exploracion_rec_activa"] = ids_adq_validos[0] if ids_adq_validos else None
 
-    col_nav, col_det = st.columns([0.95, 2.4], gap="large")
+    col_nav, col_det = st.columns([0.63, 2.4], gap="large")
 
     with col_nav:
         _panel_header("🧩", "Adquisiciones")
-        st.caption("Selecciona una adquisición para programar sus reconstrucciones.")
 
         if not adquisiciones_validas:
             st.info("Primero agrega al menos una adquisición en la pestaña Adquisición.")
