@@ -272,21 +272,41 @@ def _crear_reformacion_base(rec_id: str) -> dict:
 # LECTURA DE RECONSTRUCCIONES DESDE session_state
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _reconstruccion_completada(rec) -> bool:
+    """Réplica exacta del check de `reconstruccion.py`: una reconstrucción
+    se considera 'lista' cuando tiene imagen cargada + los parámetros
+    esenciales elegidos (no en 'Seleccionar' ni vacíos)."""
+    img_ok = bool(
+        st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id"))
+    )
+    campos = [
+        rec.get("fase_recons"),
+        rec.get("tipo_recons"),
+        rec.get("kernel_sel"),
+        rec.get("grosor_recons"),
+        rec.get("incremento"),
+        rec.get("ventana_preset"),
+        rec.get("dfov"),
+    ]
+    params_ok = all(v not in (None, "", "Seleccionar") for v in campos)
+    return img_ok and params_ok
+
+
 def _obtener_reconstrucciones_planas():
-    """Devuelve una lista plana de todas las reconstrucciones creadas en
-    la pestaña Reconstrucción, en el orden en que están guardadas.
+    """Devuelve la lista plana de reconstrucciones **completadas** (con
+    imagen subida + parámetros guardados). Las que aún están en edición
+    no aparecen en Reformaciones.
 
     Cada item: {
-        "id": rec_id,                   # único
-        "nombre": "Reconstrucción 1",   # de la reconstrucción
-        "exp_id": exp_id,               # exploración dueña
-        "exp_nombre": "SIN CONTRASTE",  # nombre legible de la exploración
-        "rec": <dict original>,         # referencia por si se necesita
+        "id": rec_id,
+        "nombre": "Reconstrucción 1",
+        "exp_id": exp_id,
+        "exp_nombre": "SIN CONTRASTE",
+        "rec": <dict original>,
     }
     """
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     exploraciones = st.session_state.get("exploraciones", []) or []
-    # indice rápido exp_id -> nombre
     nombre_por_exp_id = {}
     for idx, exp in enumerate(exploraciones, start=1):
         if not isinstance(exp, dict):
@@ -304,6 +324,11 @@ def _obtener_reconstrucciones_planas():
             rid = rec.get("id")
             if not rid:
                 continue
+
+            # FILTRO: solo reconstrucciones completadas
+            if not _reconstruccion_completada(rec):
+                continue
+
             resultado.append({
                 "id": rid,
                 "nombre": rec.get("nombre") or "Reconstrucción",
@@ -320,6 +345,17 @@ def _obtener_reconstrucciones_planas():
     return resultado
 
 
+def _contar_reconstrucciones_totales() -> int:
+    """Total de reconstrucciones existentes (completadas o no). Útil para
+    mostrar un mensaje informativo cuando hay recs pero ninguna está lista."""
+    recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
+    total = 0
+    for lista_recons in recons_map.values():
+        if isinstance(lista_recons, list):
+            total += sum(1 for r in lista_recons if isinstance(r, dict))
+    return total
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════
@@ -329,10 +365,18 @@ def _render_sidebar(recons_planas):
     st.markdown("### 📐 Reformaciones")
 
     if not recons_planas:
-        st.info(
-            "No hay reconstrucciones aún. Ve a la pestaña "
-            "**Reconstrucción** para crear al menos una."
-        )
+        total_existentes = _contar_reconstrucciones_totales()
+        if total_existentes == 0:
+            st.info(
+                "No hay reconstrucciones aún. Ve a la pestaña "
+                "**Reconstrucción** para crear al menos una."
+            )
+        else:
+            st.info(
+                f"{total_existentes} reconstrucción(es) en edición. "
+                "Cárgales imagen y completa sus parámetros para poder "
+                "reformarlas aquí."
+            )
         return
 
     # Construir lista unificada: reconstrucciones + sus reformaciones
@@ -650,11 +694,23 @@ def render_reformaciones():
     with col_main:
         if not recons_planas:
             st.subheader("Reformaciones")
-            st.info(
-                "Para crear reformaciones, primero debes tener al menos "
-                "una reconstrucción programada en la pestaña "
-                "**🧩 Reconstrucción**."
-            )
+            total_existentes = _contar_reconstrucciones_totales()
+            if total_existentes == 0:
+                st.info(
+                    "Para crear reformaciones, primero debes programar "
+                    "al menos una reconstrucción en la pestaña "
+                    "**🧩 Reconstrucción**."
+                )
+            else:
+                st.warning(
+                    f"Tienes {total_existentes} reconstrucción(es) en la "
+                    "pestaña **🧩 Reconstrucción**, pero ninguna está lista "
+                    "para reformar. Para que una reconstrucción aparezca "
+                    "aquí, debe tener:\n\n"
+                    "- Una **imagen de referencia** cargada.\n"
+                    "- Todos sus **parámetros principales** definidos "
+                    "(fase, tipo, kernel, grosor, incremento, ventana y DFOV)."
+                )
             return
 
         activa = st.session_state["ref_activa"]
