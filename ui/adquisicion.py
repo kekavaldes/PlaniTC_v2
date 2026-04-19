@@ -1090,32 +1090,63 @@ def _inject_sidebar_css():
             display: none !important;
         }
 
-        /* 5. Botón de eliminar: transparente, sin borde, ícono centrado */
+        /* 5. Botón de eliminar: transparente, sin borde y con el ícono
+              dibujado por CSS para evitar el desalineado vertical del emoji. */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
-        ~ div[data-testid="stElementContainer"] .stButton > button {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            color: #cfcfcf !important;
-            font-size: 1.25rem !important;
-            line-height: 1 !important;
+        ~ div[data-testid="stElementContainer"] .stButton {
+            height: 100% !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button {
+            position: relative !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: 56px !important;
+            width: 100% !important;
+            color: transparent !important;
+            font-size: 0 !important;
+            line-height: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button::before {
+            content: "🗑️";
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #cfcfcf;
+            font-size: 1.18rem;
+            line-height: 1;
+            transform: translateY(-2px);
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover {
             background: rgba(255, 255, 255, 0.06) !important;
-            color: #ffffff !important;
             border: none !important;
+        }
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:hover::before,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:focus::before,
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button:active::before {
+            color: #ffffff;
         }
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:focus,
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:active {
             background: rgba(255, 255, 255, 0.10) !important;
-            color: #ffffff !important;
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
