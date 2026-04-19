@@ -1083,10 +1083,22 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS del sidebar."""
+    """CSS del sidebar: botones con texto completo (envuelto a varias líneas si
+    hace falta), un único tamaño de fuente consistente para topogramas,
+    exploraciones y botones de agregar. Sin truncado con elipsis."""
     st.markdown(
         """
         <style>
+        /* Header "Exploraciones" que cabe bien aunque el sidebar sea angosto */
+        section[data-testid="stVerticalBlock"] h3:first-of-type {
+            font-size: 1.15rem !important;
+            margin-bottom: 0.6rem !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            line-height: 1.2 !important;
+        }
+
+        /* ── Botones de eliminar (tertiary: ✕) ── */
         button[kind="tertiary"] {
             background: transparent !important;
             border: none !important;
@@ -1113,38 +1125,37 @@ def _inject_sidebar_css():
             line-height: 1 !important;
         }
 
-        /* Botones superiores del sidebar */
-        div[data-testid="stButton"] > button[kind="secondary"] {
-            min-height: 2.2rem !important;
-            height: 2.2rem !important;
-            max-height: 2.2rem !important;
-            padding-top: 0.2rem !important;
-            padding-bottom: 0.2rem !important;
-            white-space: nowrap !important;
-            font-size: 0.88rem !important;
-            overflow: hidden !important;
+        /* ── Botones principales del sidebar (secondary y primary) ──
+           Todos usan el mismo tamaño de fuente. Permitimos que el texto se
+           envuelva a varias líneas para no truncarlo con "...". */
+        div[data-testid="stButton"] > button[kind="secondary"],
+        div[data-testid="stButton"] > button[kind="primary"] {
+            min-height: 2.4rem !important;
+            height: auto !important;
+            padding-top: 0.45rem !important;
+            padding-bottom: 0.45rem !important;
+            padding-left: 0.7rem !important;
+            padding-right: 0.7rem !important;
+            font-size: 0.85rem !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            text-align: center !important;
         }
 
         div[data-testid="stButton"] > button[kind="secondary"] p,
         div[data-testid="stButton"] > button[kind="secondary"] span,
+        div[data-testid="stButton"] > button[kind="secondary"] div,
         div[data-testid="stButton"] > button[kind="primary"] p,
-        div[data-testid="stButton"] > button[kind="primary"] span {
-            white-space: nowrap !important;
-            line-height: 1 !important;
-            font-size: 0.88rem !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-        }
-
-        div[data-testid="stButton"] > button[kind="primary"] {
-            min-height: 2.2rem !important;
-            height: 2.2rem !important;
-            max-height: 2.2rem !important;
-            padding-top: 0.2rem !important;
-            padding-bottom: 0.2rem !important;
-            white-space: nowrap !important;
-            font-size: 0.88rem !important;
-            overflow: hidden !important;
+        div[data-testid="stButton"] > button[kind="primary"] span,
+        div[data-testid="stButton"] > button[kind="primary"] div {
+            font-size: 0.85rem !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            margin: 0 !important;
         }
         </style>
         """,
