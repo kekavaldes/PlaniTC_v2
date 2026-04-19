@@ -6,7 +6,7 @@ import streamlit as st
 def _inject_recon_css():
     st.markdown(
         """
-        <style>
+        <style>a
         /* Botones de reconstrucción más bajos */
         div[data-testid="stButton"] > button[kind] {
             white-space: nowrap !important;
@@ -413,31 +413,28 @@ def render_reconstruccion():
 
         recs_visibles = recs_exp[:6]
         if recs_visibles:
-            filas = [recs_visibles[:3], recs_visibles[3:6]]
-            for fila in filas:
-                cols_rec = st.columns(3, gap="medium")
-                for col, rec_btn in zip(cols_rec, fila):
-                    seleccionada = rec_btn.get("id") == rec_actual.get("id")
-                    completa = _reconstruccion_completada(rec_btn, exp_id)
-                    if seleccionada and completa:
-                        icono = "🟢"
-                    elif seleccionada:
-                        icono = "🔘"
-                    elif completa:
-                        icono = "🟢"
-                    else:
-                        icono = "⚪"
-                    nombre_btn = f"{icono}  {rec_btn.get('nombre', 'Reconstrucción')}"
-                    with col:
-                        if st.button(
-                            nombre_btn,
-                            key=f"btn_rec_item_{rec_btn['id']}",
-                            use_container_width=True,
-                            type="primary" if seleccionada else "secondary",
-                        ):
-                            st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
-                            st.rerun()
-                st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
+            cols_rec = st.columns(6, gap="small")
+            for col, rec_btn in zip(cols_rec, recs_visibles):
+                seleccionada = rec_btn.get("id") == rec_actual.get("id")
+                completa = _reconstruccion_completada(rec_btn, exp_id)
+                if seleccionada and completa:
+                    icono = "🟢"
+                elif seleccionada:
+                    icono = "🔘"
+                elif completa:
+                    icono = "🟢"
+                else:
+                    icono = "⚪"
+                nombre_btn = f"{icono}  {rec_btn.get('nombre', 'Reconstrucción')}"
+                with col:
+                    if st.button(
+                        nombre_btn,
+                        key=f"btn_rec_item_{rec_btn['id']}",
+                        use_container_width=True,
+                        type="primary" if seleccionada else "secondary",
+                    ):
+                        st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
+                        st.rerun()
         st.caption("🟢 = reconstrucción con imagen y parámetros guardados · 🔘 = reconstrucción activa")
         st.markdown("---")
 
