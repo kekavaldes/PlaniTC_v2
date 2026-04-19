@@ -319,7 +319,7 @@ def _reconstruccion_completada(rec, exp_id) -> bool:
 
 
 def _reindexar_reconstrucciones(exp_id):
-    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])[:6]
+    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
     st.session_state["reconstrucciones_por_exp"][exp_id] = lista_local
     for idx_local, rec_local in enumerate(lista_local, start=1):
         rec_local["id"] = f"{exp_id}_rec_{idx_local}"
