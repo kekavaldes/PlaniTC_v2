@@ -236,31 +236,52 @@ def _reindexar_reconstrucciones(exp_id):
 
 
 def _obtener_adquisiciones_validas():
+    """
+    Toma todas las exploraciones creadas en la pestaña Adquisición
+    desde st.session_state["exploraciones"] y las prepara para que
+    aparezcan en la pestaña Reconstrucción.
+
+    Mantiene:
+    - id
+    - orden
+    - nombre
+    - tipo_exp / tipo_exploracion
+    - colores (porque _color_exploracion sigue usando el mismo orden
+      de st.session_state["exploraciones"])
+    """
     exploraciones = st.session_state.get("exploraciones", [])
     if not exploraciones:
         exploraciones = st.session_state.get("exploraciones_adq", [])
 
     adquisiciones = []
     ids_vistos = set()
+
     for idx, exp in enumerate(exploraciones, start=1):
         if not isinstance(exp, dict):
             continue
-        tipo = exp.get("tipo") or exp.get("tipo_item") or "adquisicion"
-        if tipo != "adquisicion":
-            continue
 
         nuevo = copy.deepcopy(exp)
+
         exp_id = nuevo.get("id") or f"exp_{idx}"
         if exp_id in ids_vistos:
             exp_id = f"{exp_id}_{idx}"
         ids_vistos.add(exp_id)
+
         nuevo["id"] = exp_id
-        nuevo["orden"] = nuevo.get("orden", idx)
-        nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
+        nuevo["orden"] = nuevo.get("orden") or idx
+        nuevo["tipo_exploracion"] = (
+            nuevo.get("tipo_exploracion")
+            or nuevo.get("tipo_exp")
+            or "HELICOIDAL"
+        )
+
+        if not nuevo.get("nombre"):
+            nuevo["nombre"] = f"EXPLORACIÓN {nuevo['orden']}"
+
         adquisiciones.append(nuevo)
 
+    adquisiciones.sort(key=lambda x: x.get("orden", 9999))
     return adquisiciones
-
 
 def render_reconstruccion():
     _inject_recon_css()
