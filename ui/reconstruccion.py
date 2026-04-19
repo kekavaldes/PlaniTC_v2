@@ -267,6 +267,21 @@ def _get_region_group_for_exp(exp) -> str:
     return "CUERPO"
 
 
+def _reconstruccion_completada(rec, exp_id) -> bool:
+    img_ok = bool(st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id")))
+    campos = [
+        rec.get("fase_recons"),
+        rec.get("tipo_recons"),
+        rec.get("kernel_sel"),
+        rec.get("grosor_recons"),
+        rec.get("incremento"),
+        rec.get("ventana_preset"),
+        rec.get("dfov"),
+    ]
+    params_ok = all(v not in (None, "", "Seleccionar") for v in campos)
+    return img_ok and params_ok
+
+
 def _reindexar_reconstrucciones(exp_id):
     lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])[:6]
     st.session_state["reconstrucciones_por_exp"][exp_id] = lista_local
@@ -316,8 +331,15 @@ def render_reconstruccion():
     for exp in adquisiciones_validas:
         exp_id = exp.get("id")
         region_anat = _get_region_group_for_exp(exp)
-        if exp_id not in st.session_state["reconstrucciones_por_exp"] or not st.session_state["reconstrucciones_por_exp"][exp_id]:
-            st.session_state["reconstrucciones_por_exp"][exp_id] = [_crear_reconstruccion_base(exp, 1, region_anat)]
+        existentes = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+        if not existentes:
+            st.session_state["reconstrucciones_por_exp"][exp_id] = [
+                _crear_reconstruccion_base(exp, i, region_anat) for i in range(1, 7)
+            ]
+        elif len(existentes) < 6:
+            for i in range(len(existentes) + 1, 7):
+                existentes.append(_crear_reconstruccion_base(exp, i, region_anat))
+            st.session_state["reconstrucciones_por_exp"][exp_id] = existentes[:6]
 
         _reindexar_reconstrucciones(exp_id)
         ids_rec = [r.get("id") for r in st.session_state["reconstrucciones_por_exp"][exp_id]]
@@ -396,7 +418,15 @@ def render_reconstruccion():
                 cols_rec = st.columns(3, gap="medium")
                 for col, rec_btn in zip(cols_rec, fila):
                     seleccionada = rec_btn.get("id") == rec_actual.get("id")
-                    icono = "🔘" if seleccionada else "⚪"
+                    completa = _reconstruccion_completada(rec_btn, exp_id)
+                    if seleccionada and completa:
+                        icono = "🟢"
+                    elif seleccionada:
+                        icono = "🔘"
+                    elif completa:
+                        icono = "🟢"
+                    else:
+                        icono = "⚪"
                     nombre_btn = f"{icono}  {rec_btn.get('nombre', 'Reconstrucción')}"
                     with col:
                         if st.button(
@@ -408,6 +438,7 @@ def render_reconstruccion():
                             st.session_state["recon_activa_por_exp"][exp_id] = rec_btn.get("id")
                             st.rerun()
                 st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
+        st.caption("🟢 = reconstrucción con imagen y parámetros guardados · 🔘 = reconstrucción activa")
         st.markdown("---")
 
         if rec_actual is not None:
