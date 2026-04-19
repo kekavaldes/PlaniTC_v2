@@ -1,4 +1,3 @@
-
 """
 ui/ingreso.py
 Módulo de Ingreso del paciente para PlaniTC_v2.
@@ -107,62 +106,17 @@ def _build_store(**kwargs):
 
 
 def _init_session_state():
-    store = st.session_state.get("ingreso_store", {})
-
     defaults = {
-        # persistencia de negocio
-        "contraste_ev": bool(store.get("contraste_ev", False)),
-        "vvp": store.get("vvp"),
-        "metodo_inyeccion": store.get("metodo_inyeccion"),
-        "cantidad_contraste": store.get("cantidad_contraste"),
-        "sexo_clearance": store.get("sexo_clearance"),
-        "requiere_creatinina": bool(store.get("requiere_creatinina", False)),
-        "embarazo": store.get("embarazo"),
-        # widgets visibles
-        "nombre_paciente_widget": store.get("nombre", ""),
-        "fecha_nacimiento_widget": date.fromisoformat(store["fecha_nacimiento"]) if store.get("fecha_nacimiento") else date.today(),
-        "diagnostico_widget": store.get("diagnostico", ""),
-        "peso_widget": _safe_int(store.get("peso", 70), 70),
-        "embarazo_widget": store.get("embarazo"),
-        "sexo_clearance_widget": store.get("sexo_clearance"),
-        "creatinina_serica_widget": _safe_float(store.get("creatinina_serica", 1.0), 1.0),
-        "vvp_widget": store.get("vvp"),
-        "metodo_inyeccion_widget": store.get("metodo_inyeccion"),
-        "cantidad_contraste_widget": store.get("cantidad_contraste"),
+        "contraste_ev": False,
+        "vvp": None,
+        "metodo_inyeccion": None,
+        "cantidad_contraste": None,
+        "sexo_clearance": None,
+        "requiere_creatinina": False,
+        "embarazo": None,
     }
-
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
-
-
-def _sync_store_to_widgets():
-    """
-    Rehidrata los widgets desde ingreso_store cuando vuelves a entrar a la pestaña.
-    Esto evita que Streamlit deje los controles vacíos después de cambiar de pestaña.
-    """
-    store = st.session_state.get("ingreso_store", {})
-
-    if "nombre" in store:
-        st.session_state["nombre_paciente_widget"] = store.get("nombre", "")
-    if "fecha_nacimiento" in store and store.get("fecha_nacimiento"):
-        try:
-            st.session_state["fecha_nacimiento_widget"] = date.fromisoformat(store["fecha_nacimiento"])
-        except Exception:
-            st.session_state["fecha_nacimiento_widget"] = date.today()
-    if "diagnostico" in store:
-        st.session_state["diagnostico_widget"] = store.get("diagnostico", "")
-    if "peso" in store:
-        st.session_state["peso_widget"] = _safe_int(store.get("peso", 70), 70)
-
-    st.session_state["embarazo_widget"] = store.get("embarazo")
-    st.session_state["requiere_creatinina"] = bool(store.get("requiere_creatinina", False))
-    st.session_state["sexo_clearance_widget"] = store.get("sexo_clearance")
-    st.session_state["creatinina_serica_widget"] = _safe_float(store.get("creatinina_serica", 1.0), 1.0)
-
-    st.session_state["contraste_ev"] = bool(store.get("contraste_ev", False))
-    st.session_state["vvp_widget"] = store.get("vvp")
-    st.session_state["metodo_inyeccion_widget"] = store.get("metodo_inyeccion")
-    st.session_state["cantidad_contraste_widget"] = store.get("cantidad_contraste")
 
 
 def _ir_a_inyectora():
@@ -172,7 +126,7 @@ def _ir_a_inyectora():
 
 def render_ingreso():
     _init_session_state()
-    _sync_store_to_widgets()
+    store = st.session_state.get("ingreso_store", {})
 
     col_izq, col_der = st.columns([1, 1], gap="large")
 
@@ -181,6 +135,7 @@ def render_ingreso():
 
         nombre = st.text_input(
             "Nombre del paciente",
+            value=store.get("nombre", ""),
             placeholder="Ej: Juan Pérez",
             key="nombre_paciente_widget",
         )
@@ -188,12 +143,21 @@ def render_ingreso():
         col_fn, col_edad = st.columns([1, 1])
 
         with col_fn:
+            fecha_guardada = store.get("fecha_nacimiento")
+            fecha_default = date.today()
+            try:
+                if fecha_guardada:
+                    fecha_default = date.fromisoformat(fecha_guardada)
+            except Exception:
+                fecha_default = date.today()
+
             fecha_nacimiento = st.date_input(
                 "Fecha de nacimiento",
+                value=fecha_default,
                 min_value=date(1900, 1, 1),
                 max_value=date.today(),
                 format="DD/MM/YYYY",
-                key="fecha_nacimiento_widget",
+                key="fecha_nacimiento",
             )
 
         edad = calcular_edad(fecha_nacimiento, date.today())
@@ -226,6 +190,7 @@ def render_ingreso():
 
         diagnostico = st.text_area(
             "Diagnóstico",
+            value=store.get("diagnostico", ""),
             placeholder="Indicación clínica del examen",
             height=100,
             key="diagnostico_widget",
@@ -243,6 +208,7 @@ def render_ingreso():
                 "Peso (kg)",
                 min_value=0,
                 max_value=250,
+                value=_safe_int(store.get("peso", 70), 70),
                 key="peso_widget",
             )
 
@@ -250,12 +216,13 @@ def render_ingreso():
                 "¿Embarazo?",
                 ["SI", "NO", "PROBABLE"],
                 "embarazo_widget",
-                value=st.session_state.get("embarazo_widget"),
+                value=store.get("embarazo"),
             )
             st.session_state["embarazo"] = embarazo
 
             requiere_creatinina = st.checkbox(
                 "¿Requiere creatinina?",
+                value=bool(store.get("requiere_creatinina", False)),
                 key="requiere_creatinina",
             )
 
@@ -268,7 +235,7 @@ def render_ingreso():
                     "Sexo",
                     ["Femenino", "Masculino"],
                     "sexo_clearance_widget",
-                    value=st.session_state.get("sexo_clearance_widget"),
+                    value=store.get("sexo_clearance"),
                 )
                 st.session_state["sexo_clearance"] = sexo_clearance
 
@@ -276,6 +243,7 @@ def render_ingreso():
                     "Creatinina sérica (mg/dL)",
                     min_value=0.1,
                     max_value=20.0,
+                    value=_safe_float(store.get("creatinina_serica", 1.0), 1.0),
                     step=0.1,
                     key="creatinina_serica_widget",
                 )
@@ -320,6 +288,7 @@ def render_ingreso():
         with col_prep_der:
             contraste_ev = st.checkbox(
                 "¿Se requiere medio de contraste EV?",
+                value=bool(store.get("contraste_ev", False)),
                 key="contraste_ev",
             )
 
@@ -332,7 +301,7 @@ def render_ingreso():
                     "VVP",
                     ["24G", "22G", "20G", "18G", "CVC"],
                     "vvp_widget",
-                    value=st.session_state.get("vvp_widget"),
+                    value=store.get("vvp"),
                 )
                 st.session_state["vvp"] = vvp
 
@@ -340,7 +309,7 @@ def render_ingreso():
                     "Método de inyección",
                     ["INYECTORA AUTOMÁTICA", "INYECCIÓN MANUAL"],
                     "metodo_inyeccion_widget",
-                    value=st.session_state.get("metodo_inyeccion_widget"),
+                    value=store.get("metodo_inyeccion"),
                 )
                 st.session_state["metodo_inyeccion"] = metodo_inyeccion
 
@@ -348,7 +317,7 @@ def render_ingreso():
                     "Cantidad de medio de contraste",
                     [f"{i} cc" for i in range(10, 151, 10)],
                     "cantidad_contraste_widget",
-                    value=st.session_state.get("cantidad_contraste_widget"),
+                    value=store.get("cantidad_contraste"),
                 )
                 st.session_state["cantidad_contraste"] = cantidad_contraste
 
@@ -367,9 +336,6 @@ def render_ingreso():
                 st.session_state["vvp"] = None
                 st.session_state["metodo_inyeccion"] = None
                 st.session_state["cantidad_contraste"] = None
-                st.session_state["vvp_widget"] = None
-                st.session_state["metodo_inyeccion_widget"] = None
-                st.session_state["cantidad_contraste_widget"] = None
 
     _build_store(
         nombre=nombre,
