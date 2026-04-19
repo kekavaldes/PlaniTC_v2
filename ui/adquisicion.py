@@ -1040,33 +1040,41 @@ def _name_visible(exp, idx):
 
 
 def _inject_sidebar_css():
-    """CSS del sidebar para mantener las tarjetas principales con altura pareja
-    y dejar los botones de eliminar como íconos limpios, centrados y sin el
-    fondo gris detrás.
-
-    Clave del alineamiento: el marker `.sb-ghost` queda con display:none, por
-    lo que no ocupa espacio vertical en la columna. El botón queda como único
-    flex item visible y se estira a la altura de la fila, quedando perfectamente
-    centrado con el botón principal sin importar cuántas líneas tenga.
-    """
+    """CSS del sidebar: mantener las tarjetas principales con altura pareja,
+    ocultar el marker .sb-ghost del flujo y dejar el botón de eliminar como
+    ícono limpio, perfectamente centrado vertical con el botón principal."""
     st.markdown(
         """
         <style>
-        /* 1. Cada fila del sidebar alinea a sus hijos con "stretch" */
+        /* 1. La fila del sidebar alinea sus hijos a stretch */
         div[data-testid="stHorizontalBlock"] {
             align-items: stretch !important;
         }
-        /* 2. Cada columna es flex-column para apilar sus widgets */
+
+        /* 2. Cada columna es flex-column que centra verticalmente su contenido.
+              gap: 0 evita que Streamlit deje espacio extra arriba/abajo entre
+              el marker oculto y el botón. */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
             display: flex !important;
             flex-direction: column !important;
             justify-content: center !important;
-        }
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
-            height: 100%;
+            align-items: stretch !important;
+            gap: 0 !important;
         }
 
-        /* 3. Botones principales: se estiran a la altura de la fila */
+        /* 3. El wrapper interno (stVerticalBlock o div hijo) también sin gap */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            height: 100%;
+            gap: 0 !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] > div > div {
+            gap: 0 !important;
+        }
+
+        /* 4. Botón principal: se estira a toda la altura de la fila */
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] .stButton {
             height: 100%;
             display: flex;
@@ -1081,32 +1089,80 @@ def _inject_sidebar_css():
             box-sizing: border-box;
         }
 
-        /* 4. El marker ghost NO debe ocupar espacio — display:none permite
-              que el botón hermano quede como único flex item visible y se
-              centre naturalmente dentro de la columna.
-              Los selectores :has() + ~ siguen funcionando con display:none
-              porque operan sobre el DOM. */
+        /* 5. Marker invisible + su wrapper: fuera del flujo visual.
+              :has() y ~ siguen funcionando con display:none porque operan
+              sobre el DOM, no sobre el layout visual. */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost) {
             display: none !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
-        /* 5. Botón de eliminar: transparente, sin borde, ícono centrado */
+        /* 6. El stElementContainer del botón eliminar: no se estira, se mantiene
+              compacto y se centra gracias al justify-content de la columna. */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] {
+            flex: 0 0 auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* 7. El wrapper .stButton del botón eliminar */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton {
+            height: auto !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100%;
+            margin: 0 !important;
+        }
+
+        /* 8. El <button> real del botón eliminar: tamaño fijo, sin fondo, ícono
+              centrado. !important + flex 0 0 auto evita que otras reglas lo
+              estiren a height:100%. */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
+            flex: 0 0 auto !important;
+            width: 42px !important;
+            min-width: 42px !important;
+            max-width: 42px !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            max-height: 42px !important;
             padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
             color: #cfcfcf !important;
-            font-size: 1.25rem !important;
+            font-size: 1.1rem !important;
             line-height: 1 !important;
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
         }
+
+        /* 9. Reset interno: streamlit envuelve el texto del botón en <div> con
+              márgenes propios que desplazan el emoji. */
+        div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
+        ~ div[data-testid="stElementContainer"] .stButton > button > * {
+            margin: 0 !important;
+            padding: 0 !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        /* 10. Hover / focus */
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:hover {
-            background: rgba(255, 255, 255, 0.06) !important;
+            background: rgba(255, 255, 255, 0.08) !important;
             color: #ffffff !important;
             border: none !important;
         }
@@ -1114,7 +1170,7 @@ def _inject_sidebar_css():
         ~ div[data-testid="stElementContainer"] .stButton > button:focus,
         div[data-testid="column"] div[data-testid="stElementContainer"]:has(.sb-ghost)
         ~ div[data-testid="stElementContainer"] .stButton > button:active {
-            background: rgba(255, 255, 255, 0.10) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
             color: #ffffff !important;
             border: none !important;
             box-shadow: none !important;
