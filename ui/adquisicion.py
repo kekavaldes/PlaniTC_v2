@@ -1159,22 +1159,45 @@ def _inject_sidebar_css():
         }
 
         /* ── Botones de acción global (➕ Exploración / ➕ Topograma) ──
-           Fondo gris un poco más claro para diferenciarlos visualmente
-           como "acciones disponibles" (no selección).
-           Se detectan porque están precedidos por el marker .sb-add-marker */
-        div[data-testid="stElementContainer"]:has(> div > .sb-add-marker)
-        ~ div[data-testid="stElementContainer"] .stButton > button[kind="secondary"] {
-            background: #2a2d35 !important;
-            border-color: #3d4049 !important;
+           Estructura DOM en Streamlit:
+             <stElementContainer> <div><div class="sb-add-buttons-zone"></div></div> </stElementContainer>
+             <stElementContainer> <div style="height:..."></div> </stElementContainer>   <- spacer
+             <stElementContainer> ...botón ➕ Exploración... </stElementContainer>
+             <stElementContainer> ...spacer... </stElementContainer>
+             <stElementContainer> ...botón ➕ Topograma... </stElementContainer>
+
+           El selector :has() + ~ alcanza todos los hermanos siguientes
+           del contenedor que tiene el marker. */
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"] {
+            background: #3a3d47 !important;
+            border: 1px solid #4d5059 !important;
+            color: #ffffff !important;
+            min-height: 2.75rem !important;
+            height: 2.75rem !important;
+            max-height: 2.75rem !important;
+            font-size: 0.9rem !important;
+            padding: 0.5rem 1rem !important;
+            line-height: 1.2 !important;
         }
-        div[data-testid="stElementContainer"]:has(> div > .sb-add-marker)
-        ~ div[data-testid="stElementContainer"] .stButton > button[kind="secondary"]:hover {
-            background: #34373f !important;
-            border-color: #4a4d57 !important;
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"]:hover {
+            background: #484c57 !important;
+            border-color: #5d616c !important;
+            color: #ffffff !important;
+        }
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"] p,
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"] span,
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
+        ~ div[data-testid="stElementContainer"] button[kind="secondary"] div {
+            font-size: 0.9rem !important;
+            line-height: 1.2 !important;
         }
 
-        /* Ocultar el marker del flujo visual */
-        .sb-add-marker {
+        /* Marker invisible (no ocupa espacio ni se ve) */
+        div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone) {
             display: none !important;
         }
         </style>
@@ -1341,9 +1364,8 @@ def _render_sidebar():
 
     st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
 
-    # Marker para que el CSS identifique los botones de agregar y les dé
-    # el fondo gris más claro
-    st.markdown('<div class="sb-add-marker"></div>', unsafe_allow_html=True)
+    # Marker para que el CSS identifique los botones de agregar
+    st.markdown('<div class="sb-add-buttons-zone"></div>', unsafe_allow_html=True)
 
     if st.button(
         "➕ Exploración",
