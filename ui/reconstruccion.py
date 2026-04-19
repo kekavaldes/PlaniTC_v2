@@ -13,6 +13,18 @@ def _inject_recon_css():
             padding-top: 0.30rem !important;
             padding-bottom: 0.30rem !important;
             min-height: 2.0rem !important;
+            font-size: 0.82rem !important;
+            line-height: 1.05 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        div[data-testid="stButton"] > button[kind] p {
+            font-size: 0.82rem !important;
+            line-height: 1.05 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
         }
 
         /* Botones Agregar / Eliminar más bajos y compactos */
