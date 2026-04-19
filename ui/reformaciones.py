@@ -379,70 +379,60 @@ def _render_sidebar(recons_planas):
             )
         return
 
-    # Construir lista unificada: reconstrucciones + sus reformaciones
-    # ordenadas cronológicamente.
-    reformaciones_map = st.session_state["reformaciones_por_rec"]
-    rec_order = st.session_state["_ref_rec_order"]
-
-    items = []
-    for r in recons_planas:
-        items.append(("rec", r["id"], rec_order.get(r["id"], 0), r))
-    for rec_id, lista in reformaciones_map.items():
-        for ref in lista:
-            items.append(("ref", ref["id"], ref.get("order", 0), ref))
-    items.sort(key=lambda x: x[2])
-
     # Normalizar estructura del mapa (defensivo)
+    reformaciones_map = st.session_state["reformaciones_por_rec"]
     for r in recons_planas:
         reformaciones_map.setdefault(r["id"], [])
 
+    rec_order = st.session_state["_ref_rec_order"]
     activa = st.session_state["ref_activa"]
 
-    for item_type, item_id, _ord, payload in items:
-        if item_type == "rec":
-            rec_id = item_id
-            r = payload
-            lbl = r["nombre"]
-            reg = r["exp_nombre"]
+    # Orden de las reconstrucciones: por su `order` de aparición
+    recons_ordenadas = sorted(
+        recons_planas,
+        key=lambda r: rec_order.get(r["id"], 0),
+    )
 
-            # ¿Es la "vista activa"? Lo marcamos si el usuario entró a ver
-            # esta reconstrucción directamente.
-            es_activo = (
-                isinstance(activa, dict)
-                and activa.get("kind") == "rec"
-                and activa.get("rec_id") == rec_id
-            )
-            tipo_btn = "primary" if es_activo else "secondary"
+    # Renderizar AGRUPADO: cada reconstrucción y debajo sus reformaciones
+    for r in recons_ordenadas:
+        rec_id = r["id"]
+        lbl = r["nombre"]
+        reg = r["exp_nombre"]
 
-            if st.button(
-                f"🧩 {lbl} · {reg}",
-                key=f"ref_btn_rec_{rec_id}",
-                type=tipo_btn,
-                use_container_width=True,
-            ):
-                st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
-                st.rerun()
+        # Botón de la reconstrucción
+        es_activo_rec = (
+            isinstance(activa, dict)
+            and activa.get("kind") == "rec"
+            and activa.get("rec_id") == rec_id
+        )
+        tipo_btn = "primary" if es_activo_rec else "secondary"
 
-        else:
-            ref = payload
-            es_activo = (isinstance(activa, str) and activa == ref["id"])
-            tipo_btn = "primary" if es_activo else "secondary"
+        if st.button(
+            f"🧩 {lbl} · {reg}",
+            key=f"ref_btn_rec_{rec_id}",
+            type=tipo_btn,
+            use_container_width=True,
+        ):
+            st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
+            st.rerun()
 
+        # Reformaciones de esta reconstrucción (ordenadas por su propio order)
+        refs_de_esta_rec = sorted(
+            reformaciones_map.get(rec_id, []),
+            key=lambda x: x.get("order", 0),
+        )
+
+        for ref in refs_de_esta_rec:
+            es_activo_ref = (isinstance(activa, str) and activa == ref["id"])
+            tipo_btn_ref = "primary" if es_activo_ref else "secondary"
             nombre_legible = _nombre_reformacion(ref)
-
-            # Sufijo: a qué reconstrucción pertenece (si podemos resolverla)
-            rec_de_ref = next(
-                (r for r in recons_planas if r["id"] == ref.get("rec_id")),
-                None,
-            )
-            sufijo = f" · {rec_de_ref['nombre']}" if rec_de_ref else ""
 
             c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
             with c_main:
                 if st.button(
-                    f"📐 {nombre_legible}{sufijo}",
+                    f"📐 {nombre_legible}",
                     key=f"ref_btn_ref_{ref['id']}",
-                    type=tipo_btn,
+                    type=tipo_btn_ref,
                     use_container_width=True,
                 ):
                     st.session_state["ref_activa"] = ref["id"]
@@ -457,6 +447,9 @@ def _render_sidebar(recons_planas):
                 ):
                     _eliminar_reformacion(ref["id"], ref.get("rec_id"))
                     st.rerun()
+
+        # Pequeño espacio vertical entre grupos de rec + sus reformaciones
+        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
 
     # ── Botón "+ Reformación" ──
     # Determinar a qué reconstrucción se agregará: la de la reformación
