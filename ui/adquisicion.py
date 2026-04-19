@@ -1157,6 +1157,26 @@ def _inject_sidebar_css():
             overflow-wrap: break-word !important;
             margin: 0 !important;
         }
+
+        /* ── Botones de acción global (➕ Exploración / ➕ Topograma) ──
+           Fondo gris un poco más claro para diferenciarlos visualmente
+           como "acciones disponibles" (no selección).
+           Se detectan porque están precedidos por el marker .sb-add-marker */
+        div[data-testid="stElementContainer"]:has(> div > .sb-add-marker)
+        ~ div[data-testid="stElementContainer"] .stButton > button[kind="secondary"] {
+            background: #2a2d35 !important;
+            border-color: #3d4049 !important;
+        }
+        div[data-testid="stElementContainer"]:has(> div > .sb-add-marker)
+        ~ div[data-testid="stElementContainer"] .stButton > button[kind="secondary"]:hover {
+            background: #34373f !important;
+            border-color: #4a4d57 !important;
+        }
+
+        /* Ocultar el marker del flujo visual */
+        .sb-add-marker {
+            display: none !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1320,6 +1340,10 @@ def _render_sidebar():
                         st.rerun()
 
     st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
+
+    # Marker para que el CSS identifique los botones de agregar y les dé
+    # el fondo gris más claro
+    st.markdown('<div class="sb-add-marker"></div>', unsafe_allow_html=True)
 
     if st.button(
         "➕ Exploración",
