@@ -3,6 +3,7 @@ import streamlit as st
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
 from ui.reconstruccion import render_reconstruccion
+from ui.reformaciones import render_reformaciones
 from ui.inyectora import render_inyectora
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
@@ -12,6 +13,7 @@ TAB_OPTIONS = [
     "📋  Ingreso",
     "⚡  Adquisición",
     "🧩  Reconstrucción",
+    "📐  Reformaciones",
     "💉  Inyectora",
 ]
 
@@ -160,12 +162,13 @@ def go_to_tab(tab_name: str):
 def render_top_navigation():
     current = st.session_state.get("current_tab", "🏠  Inicio")
 
-    cols = st.columns(5)
+    cols = st.columns(6)
     labels = [
         "🏠 Inicio",
         "📋 Ingreso",
         "⚡ Adquisición",
         "🧩 Reconstrucción",
+        "📐 Reformaciones",
         "💉 Inyectora",
     ]
 
@@ -196,6 +199,9 @@ def main():
 
     elif current_tab == "🧩  Reconstrucción":
         render_reconstruccion()
+
+    elif current_tab == "📐  Reformaciones":
+        render_reformaciones()
 
     elif current_tab == "💉  Inyectora":
         render_inyectora()
