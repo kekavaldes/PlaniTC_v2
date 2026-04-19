@@ -1165,8 +1165,8 @@ def _inject_sidebar_css():
            especificidad supere a las reglas generales definidas arriba. */
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"] {
-            background: #4a4e58 !important;
-            border: 1px solid #5d616c !important;
+            background: #6b6f7a !important;
+            border: 1px solid #80848f !important;
             color: #ffffff !important;
             box-sizing: border-box !important;
             min-height: 2.75rem !important;
@@ -1181,8 +1181,8 @@ def _inject_sidebar_css():
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
         ~ div[data-testid="stElementContainer"] div[data-testid="stButton"] > button[kind="secondary"]:hover {
-            background: #5a5e69 !important;
-            border-color: #6e7280 !important;
+            background: #7c808a !important;
+            border-color: #90949e !important;
             color: #ffffff !important;
         }
         div[data-testid="stElementContainer"]:has(.sb-add-buttons-zone)
