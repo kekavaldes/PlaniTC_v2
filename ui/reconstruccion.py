@@ -233,6 +233,7 @@ def render_reconstruccion():
     st.session_state.setdefault("reconstrucciones_por_exp", {})
     st.session_state.setdefault("recon_activa_por_exp", {})
     st.session_state.setdefault("exploracion_rec_activa", None)
+    st.session_state.setdefault("imagenes_recon_por_id", {})
 
     ids_adq_validos = [e.get("id") for e in adquisiciones_validas]
 
@@ -319,10 +320,18 @@ def render_reconstruccion():
             imagen_recon = st.file_uploader(
                 "Subir imagen de reconstrucción",
                 type=["png", "jpg", "jpeg", "webp"],
-                key=f"img_recon_{exp_id}_{rec_actual['id']}",
+                key=f"img_recon_upload_{rec_actual['id']}",
             )
+
             if imagen_recon is not None:
-                st.image(imagen_recon, caption="Imagen cargada", width=360)
+                st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
+                    "name": imagen_recon.name,
+                    "bytes": imagen_recon.getvalue(),
+                }
+
+            img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+            if img_guardada is not None:
+                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
 
         recs_visibles = recs_exp[:6]
         if recs_visibles:
