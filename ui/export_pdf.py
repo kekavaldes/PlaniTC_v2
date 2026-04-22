@@ -43,13 +43,21 @@ from reportlab.platypus import (
     KeepTogether,
 )
 
-# cairosvg es opcional. En plataformas sin libcairo2 fallará el import;
-# en ese caso el PDF se genera igual pero sin la visualización de la inyectora.
+# Motor SVG→PDF. Preferimos svglib (Python puro, funciona en Streamlit Cloud
+# sin libs del sistema). cairosvg queda como fallback opcional.
+try:
+    from svglib.svglib import svg2rlg  # type: ignore
+    HAS_SVGLIB = True
+except Exception:
+    HAS_SVGLIB = False
+
 try:
     import cairosvg  # type: ignore
     HAS_CAIROSVG = True
 except Exception:
     HAS_CAIROSVG = False
+
+HAS_SVG_ENGINE = HAS_SVGLIB or HAS_CAIROSVG
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -193,16 +201,49 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
     return RLImage(buf, width=draw_w, height=draw_h)
 
 
-def _svg_a_png_bytes(svg_str, scale=2.0):
-    """Convierte un string SVG a PNG. None si cairosvg no está disponible."""
-    if not HAS_CAIROSVG or not svg_str:
+def _extraer_svg(svg_str):
+    """Extrae solo el tag <svg>...</svg> si viene envuelto en HTML."""
+    if not svg_str:
+        return None
+    m = re.search(r"<svg[\s\S]*?</svg>", svg_str)
+    return m.group(0) if m else svg_str
+
+
+def _svg_a_drawing(svg_str):
+    """SVG → reportlab Drawing (vectorial). Usa svglib. None si falla."""
+    if not HAS_SVGLIB:
+        return None
+    clean = _extraer_svg(svg_str)
+    if not clean:
         return None
     try:
-        m = re.search(r"<svg[\s\S]*?</svg>", svg_str)
-        clean = m.group(0) if m else svg_str
+        return svg2rlg(io.StringIO(clean))
+    except Exception:
+        return None
+
+
+def _svg_a_png_bytes(svg_str, scale=2.0):
+    """SVG → PNG bytes. Fallback con cairosvg. None si no disponible."""
+    if not HAS_CAIROSVG:
+        return None
+    clean = _extraer_svg(svg_str)
+    if not clean:
+        return None
+    try:
         return cairosvg.svg2png(bytestring=clean.encode("utf-8"), scale=scale)
     except Exception:
         return None
+
+
+def _scale_drawing(drawing, max_w_pt, max_h_pt):
+    """Escala un Drawing de reportlab para caber en (max_w_pt, max_h_pt)."""
+    if drawing is None or drawing.width <= 0 or drawing.height <= 0:
+        return drawing
+    ratio = min(max_w_pt / drawing.width, max_h_pt / drawing.height)
+    drawing.width *= ratio
+    drawing.height *= ratio
+    drawing.scale(ratio, ratio)
+    return drawing
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -554,30 +595,37 @@ def _seccion_inyectora(story, plan, sty):
         ))
         story.append(Spacer(1, 10))
 
-    # Visualización SVG → PNG (si cairosvg está disponible)
+    # Visualización: preferir Drawing vectorial (svglib); si no, PNG (cairosvg)
     svg_str = iny.get("svg_snapshot")
     if svg_str:
-        png = _svg_a_png_bytes(svg_str, scale=2.0)
-        if png:
-            try:
-                im = PILImage.open(io.BytesIO(png))
-                w_px, h_px = im.size
-                max_w = 160 * mm
-                max_h = 110 * mm
-                ratio = min(max_w / w_px, max_h / h_px)
-                story.append(Paragraph("Visualización de la inyectora", sty["h2"]))
-                story.append(RLImage(
-                    io.BytesIO(png),
-                    width=w_px * ratio,
-                    height=h_px * ratio,
+        story.append(Paragraph("Visualización de la inyectora", sty["h2"]))
+
+        drawing = _svg_a_drawing(svg_str)
+        if drawing is not None:
+            _scale_drawing(drawing, 160 * mm, 110 * mm)
+            story.append(drawing)
+        else:
+            png = _svg_a_png_bytes(svg_str, scale=2.0)
+            if png:
+                try:
+                    im = PILImage.open(io.BytesIO(png))
+                    w_px, h_px = im.size
+                    max_w = 160 * mm
+                    max_h = 110 * mm
+                    ratio = min(max_w / w_px, max_h / h_px)
+                    story.append(RLImage(
+                        io.BytesIO(png),
+                        width=w_px * ratio,
+                        height=h_px * ratio,
+                    ))
+                except Exception:
+                    pass
+            elif not HAS_SVG_ENGINE:
+                story.append(Paragraph(
+                    "<i>(Instala <b>svglib</b> para incluir la visualización "
+                    "gráfica de la inyectora)</i>",
+                    sty["small"],
                 ))
-            except Exception:
-                pass
-        elif not HAS_CAIROSVG:
-            story.append(Paragraph(
-                "<i>(Instala <b>cairosvg</b> para incluir la visualización de la inyectora)</i>",
-                sty["small"],
-            ))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -684,10 +732,10 @@ def render_export_pdf():
     """Entrypoint de la pestaña de exportación a PDF."""
     _panel_header("📄", "Exportar planificación a PDF")
 
-    if not HAS_CAIROSVG:
+    if not HAS_SVG_ENGINE:
         st.info(
             "Para incluir la visualización gráfica de la inyectora en el PDF, "
-            "instala **cairosvg**: `pip install cairosvg`. "
+            "instala **svglib**: `pip install svglib`. "
             "El PDF se genera igual sin esa imagen."
         )
 
