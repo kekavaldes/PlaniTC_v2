@@ -2,6 +2,7 @@ import uuid
 import io
 import json
 import base64
+import hashlib
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -363,7 +364,7 @@ def _default_overlay_settings(ref_id: str, img_idx: int):
         "show_ranges": False,
         "range_count": 3,
         "angle_deg": 0,
-        "show_refs": True,
+        "show_refs": False,
         "refs": [
             {"enabled": False, "text": "", "ax": 0.28, "ay": 0.22, "tx": 0.18, "ty": 0.12},
             {"enabled": False, "text": "", "ax": 0.72, "ay": 0.26, "tx": 0.70, "ty": 0.12},
@@ -382,7 +383,7 @@ def _ensure_image_state(ref_id: str):
         overlay.setdefault("show_ranges", False)
         overlay.setdefault("range_count", 3)
         overlay.setdefault("angle_deg", 0)
-        overlay.setdefault("show_refs", True)
+        overlay.setdefault("show_refs", False)
         refs = overlay.setdefault("refs", [])
         defaults = _default_overlay_settings(ref_id, idx)["refs"]
         # Normalizar a exactamente 3 referencias
@@ -403,12 +404,17 @@ def _ensure_image_state(ref_id: str):
 def _render_image_uploader(ref_id: str, img_idx: int, titulo: str):
     img_state = _ensure_image_state(ref_id)
     key_img = f"img{img_idx}"
+    key_overlay = f"overlay{img_idx}"
     file_obj = st.file_uploader(titulo, type=["png", "jpg", "jpeg", "webp"], key=f"up_{ref_id}_{img_idx}")
     if file_obj is not None:
-        img_state[key_img] = {"name": file_obj.name, "bytes": file_obj.getvalue()}
+        data = file_obj.getvalue()
+        file_sig = hashlib.md5(data).hexdigest()[:10]
+        img_state[key_img] = {"name": file_obj.name, "bytes": data, "sig": file_sig}
+        img_state[key_overlay] = _default_overlay_settings(ref_id, img_idx)
     if img_state.get(key_img) is not None:
         if st.button(f"🗑️ Borrar {titulo}", key=f"del_{ref_id}_{img_idx}", use_container_width=True):
             img_state[key_img] = None
+            img_state[key_overlay] = _default_overlay_settings(ref_id, img_idx)
             st.rerun()
     return img_state.get(key_img)
 
@@ -1014,9 +1020,10 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
     try:
         pil = Image.open(io.BytesIO(image_data["bytes"]))
         img_b64 = _pil_to_b64_jpeg(pil)
+        img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
         html = _overlay_canvas_html(
             img_b64=img_b64,
-            storage_key=f"{ref['id']}_img{img_idx}",
+            storage_key=f"{ref['id']}_img{img_idx}_{img_sig}",
             acq_color=_color_exploracion_por_exp_id(rec.get("exp_id")),
             rec_color=_color_reconstruccion(rec),
             settings=overlay,
