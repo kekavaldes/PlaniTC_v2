@@ -1,6 +1,10 @@
 import copy
+import io
+import json
+import base64
 
 import streamlit as st
+from PIL import Image
 
 
 def _inject_recon_css():
@@ -211,6 +215,246 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
         """,
         unsafe_allow_html=True,
     )
+
+
+
+def _pil_to_b64_jpeg(img, max_width=900):
+    if img is None:
+        return None
+    try:
+        im = img.copy()
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        elif im.mode == "L":
+            im = im.convert("RGB")
+        if max_width and im.width > max_width:
+            ratio = max_width / float(im.width)
+            im = im.resize((int(im.width * ratio), int(im.height * ratio)))
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=92)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+    except Exception:
+        return None
+
+
+def render_canvas_recon_cuadrado(
+    img_b64,
+    storage_key,
+    color="#00D2FF",
+    titulo="Imagen cargada",
+    canvas_css_width=360,
+    canvas_css_height=360,
+    canvas_width=760,
+    canvas_height=760,
+):
+    if not img_b64:
+        return None
+
+    html = f"""
+<div style="text-align:center; margin:0;">
+  <div style="display:inline-block; font-size:11px; color:#aaa; margin-bottom:4px;">
+    Arrastra el cuadrado para moverlo. Usa una esquina para cambiar su tamaño. Siempre mantiene forma cuadrada.
+  </div>
+  <div style="font-size:15px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
+  <canvas id="reconSquareCanvas" width="{canvas_width}" height="{canvas_height}"
+    style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+</div>
+<script>
+(function() {{
+  var imgB64 = {json.dumps(img_b64)};
+  var storageKey = {json.dumps('planitc_' + storage_key)};
+  var strokeColor = {json.dumps(color)};
+  var canvas = document.getElementById('reconSquareCanvas');
+  if (!canvas) return;
+
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var img = new Image();
+  img.src = 'data:image/jpeg;base64,' + imgB64;
+
+  var square = {{ x: 0.23, y: 0.23, s: 0.34 }};
+  var dragMode = null;
+  var dragOffsetX = 0;
+  var dragOffsetY = 0;
+  var cornerSize = 16;
+  var minS = 0.10;
+  var maxS = 0.78;
+
+  function rgbaFromHex(hex, alpha) {{
+    if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
+    var h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(function(c) {{ return c + c; }}).join('');
+    if (h.length !== 6) return 'rgba(0,210,255,' + alpha + ')';
+    var r = parseInt(h.substring(0,2), 16);
+    var g = parseInt(h.substring(2,4), 16);
+    var b = parseInt(h.substring(4,6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }}
+
+  try {{
+    var saved = localStorage.getItem(storageKey);
+    if (saved) {{
+      var parsed = JSON.parse(saved);
+      if (parsed && parsed.square) square = parsed.square;
+    }}
+  }} catch (e) {{}}
+
+  function saveState() {{
+    try {{
+      localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
+    }} catch (e) {{}}
+  }}
+
+  function clampSquare() {{
+    square.s = Math.max(minS, Math.min(maxS, square.s));
+    square.x = Math.max(0.02, Math.min(0.98 - square.s, square.x));
+    square.y = Math.max(0.02, Math.min(0.98 - square.s, square.y));
+  }}
+
+  function getSquarePx() {{
+    return {{ x: square.x * W, y: square.y * H, s: square.s * Math.min(W, H) }};
+  }}
+
+  function isInsideSquare(mx, my, sp) {{
+    return mx >= sp.x && mx <= sp.x + sp.s && my >= sp.y && my <= sp.y + sp.s;
+  }}
+
+  function onResizeHandle(mx, my, sp) {{
+    return Math.abs(mx - (sp.x + sp.s)) <= cornerSize && Math.abs(my - (sp.y + sp.s)) <= cornerSize;
+  }}
+
+  function drawBaseImage() {{
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (img.width && img.height) {{
+      var scale = Math.min(W / img.width, H / img.height);
+      var drawW = img.width * scale;
+      var drawH = img.height * scale;
+      var dx = (W - drawW) / 2;
+      var dy = (H - drawH) / 2;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+    }}
+  }}
+
+  function drawSquare() {{
+    clampSquare();
+    var sp = getSquarePx();
+    ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
+    ctx.fillRect(sp.x, sp.y, sp.s, sp.s);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+    ctx.strokeRect(sp.x, sp.y, sp.s, sp.s);
+    ctx.setLineDash([]);
+    ctx.fillStyle = strokeColor;
+    ctx.fillRect(sp.x + sp.s - 6, sp.y + sp.s - 6, 12, 12);
+  }}
+
+  function draw() {{
+    drawBaseImage();
+    drawSquare();
+    saveState();
+  }}
+
+  function getMousePos(e) {{
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = W / rect.width;
+    var scaleY = H / rect.height;
+    return {{ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }};
+  }}
+
+  function updateCursor(mx, my) {{
+    var sp = getSquarePx();
+    if (onResizeHandle(mx, my, sp)) canvas.style.cursor = 'nwse-resize';
+    else if (isInsideSquare(mx, my, sp)) canvas.style.cursor = 'grab';
+    else canvas.style.cursor = 'default';
+  }}
+
+  canvas.addEventListener('mousedown', function(e) {{
+    var pos = getMousePos(e);
+    var sp = getSquarePx();
+    if (onResizeHandle(pos.x, pos.y, sp)) {{
+      dragMode = 'resize-square';
+      return;
+    }}
+    if (isInsideSquare(pos.x, pos.y, sp)) {{
+      dragMode = 'move-square';
+      dragOffsetX = pos.x - sp.x;
+      dragOffsetY = pos.y - sp.y;
+      canvas.style.cursor = 'grabbing';
+    }}
+  }});
+
+  canvas.addEventListener('mousemove', function(e) {{
+    var pos = getMousePos(e);
+    updateCursor(pos.x, pos.y);
+    if (!dragMode) return;
+
+    if (dragMode === 'move-square') {{
+      square.x = (pos.x - dragOffsetX) / W;
+      square.y = (pos.y - dragOffsetY) / H;
+      clampSquare();
+    }} else if (dragMode === 'resize-square') {{
+      var anchor = getSquarePx();
+      var newSizeX = (pos.x - anchor.x) / Math.min(W, H);
+      var newSizeY = (pos.y - anchor.y) / Math.min(W, H);
+      square.s = Math.max(minS, Math.max(newSizeX, newSizeY));
+      clampSquare();
+    }}
+    draw();
+  }});
+
+  function endDrag() {{
+    dragMode = null;
+    canvas.style.cursor = 'grab';
+    saveState();
+  }}
+
+  canvas.addEventListener('mouseup', endDrag);
+  canvas.addEventListener('mouseleave', endDrag);
+  canvas.addEventListener('touchstart', function(e) {{
+    e.preventDefault();
+    var t = e.touches[0];
+    var pos = getMousePos(t);
+    var sp = getSquarePx();
+    if (onResizeHandle(pos.x, pos.y, sp)) {{
+      dragMode = 'resize-square';
+      return;
+    }}
+    if (isInsideSquare(pos.x, pos.y, sp)) {{
+      dragMode = 'move-square';
+      dragOffsetX = pos.x - sp.x;
+      dragOffsetY = pos.y - sp.y;
+    }}
+  }}, {{passive:false}});
+
+  canvas.addEventListener('touchmove', function(e) {{
+    e.preventDefault();
+    if (!dragMode) return;
+    var t = e.touches[0];
+    var pos = getMousePos(t);
+    if (dragMode === 'move-square') {{
+      square.x = (pos.x - dragOffsetX) / W;
+      square.y = (pos.y - dragOffsetY) / H;
+      clampSquare();
+    }} else if (dragMode === 'resize-square') {{
+      var anchor = getSquarePx();
+      var newSizeX = (pos.x - anchor.x) / Math.min(W, H);
+      var newSizeY = (pos.y - anchor.y) / Math.min(W, H);
+      square.s = Math.max(minS, Math.max(newSizeX, newSizeY));
+      clampSquare();
+    }}
+    draw();
+  }}, {{passive:false}});
+
+  canvas.addEventListener('touchend', endDrag);
+  img.onload = function() {{ draw(); }};
+  if (img.complete) draw();
+}})();
+</script>
+"""
+    return html
 
 
 EXPLORACION_COLORS = [
@@ -622,7 +866,26 @@ def _render_panel_central(adquisiciones_validas):
                 }
             img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
             if img_guardada is not None:
-                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+                try:
+                    img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
+                    img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
+                    color_rec = _color_exploracion(exp_activa)
+                    html_canvas = render_canvas_recon_cuadrado(
+                        img_b64=img_b64,
+                        storage_key=f"recon_square_{rec_actual['id']}",
+                        color=color_rec,
+                        titulo="Imagen de reconstrucción",
+                        canvas_css_width=360,
+                        canvas_css_height=360,
+                        canvas_width=760,
+                        canvas_height=760,
+                    )
+                    if html_canvas:
+                        st.components.v1.html(html_canvas, height=430)
+                    else:
+                        st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+                except Exception:
+                    st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
 
     with col_img_param[1]:
         _panel_header("🔧", "Parámetros de Reconstrucción")
