@@ -906,9 +906,8 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
     except Exception as e:
         st.error(f"No se pudo mostrar la imagen: {e}")
 
-    col_btn1, col_btn2 = st.columns([1, 1], gap="small")
-    with col_btn1:
-    with col_btn2:
+    _, col_btn = st.columns([1, 1], gap="small")
+    with col_btn:
         if st.button("🗑️ Borrar imagen", key=f"del_{ref['id']}_{img_idx}", use_container_width=True):
             img_state[f"img{img_idx}"] = None
             st.rerun()
