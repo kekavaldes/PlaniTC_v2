@@ -461,6 +461,8 @@ def _overlay_canvas_html(
     css_height=260,
     internal_w=900,
     internal_h=700,
+    overlay_mode="parallel",
+    ranges_label="Rangos paralelos",
 ):
     refs_cfg = settings.get("refs", [])[:3]
     while len(refs_cfg) < 3:
@@ -473,7 +475,7 @@ def _overlay_canvas_html(
     <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R2</button>
     <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R3</button>
     <div style="width:14px;"></div>
-    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">Rangos paralelos</button>
+    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">{ranges_label}</button>
   </div>
   <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
     <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
@@ -509,6 +511,7 @@ def _overlay_canvas_html(
   var acqColor = {json.dumps(acq_color)};
   var recColor = {json.dumps(rec_color)};
   var showRanges = {json.dumps(bool(settings.get('show_ranges', False)))};
+  var overlayMode = {json.dumps(overlay_mode)};
   var defaultRangeCount = {json.dumps(int(settings.get('range_count', 3)))};
   var defaultAngleDeg = {json.dumps(float(settings.get('angle_deg', 0)))};
   var refsCfg = {json.dumps(refs_cfg)};
@@ -524,7 +527,6 @@ def _overlay_canvas_html(
   var MIN_LINE_LEN = Math.max(W, H) * 0.08;
   var MAX_LINE_LEN = Math.max(W, H) * 0.55;
   var minDim = Math.min(W, H);
-
   var displayScaleX = parseFloat(canvas.style.width) / W;
   var displayScaleY = parseFloat(canvas.style.height) / H;
 
@@ -595,9 +597,7 @@ def _overlay_canvas_html(
     }} catch(e) {{}}
   }}
 
-  function imageBounds() {{
-    return state.imageRect;
-  }}
+  function imageBounds() {{ return state.imageRect; }}
 
   function normToPx(nx, ny) {{
     var r = imageBounds();
@@ -631,20 +631,17 @@ def _overlay_canvas_html(
       if (p[i] === 0) {{
         if (q[i] < 0) return null;
       }} else {{
-        var r = q[i] / p[i];
+        var rr = q[i] / p[i];
         if (p[i] < 0) {{
-          if (r > t1) return null;
-          if (r > t0) t0 = r;
+          if (rr > t1) return null;
+          if (rr > t0) t0 = rr;
         }} else {{
-          if (r < t0) return null;
-          if (r < t1) t1 = r;
+          if (rr < t0) return null;
+          if (rr < t1) t1 = rr;
         }}
       }}
     }}
-    return {{
-      x1: x1 + t0 * dx, y1: y1 + t0 * dy,
-      x2: x1 + t1 * dx, y2: y1 + t1 * dy
-    }};
+    return {{ x1: x1 + t0 * dx, y1: y1 + t0 * dy, x2: x1 + t1 * dx, y2: y1 + t1 * dy }};
   }}
 
   function drawArrow(fromX, fromY, toX, toY, color) {{
@@ -672,71 +669,85 @@ def _overlay_canvas_html(
     ctx.fill(); ctx.stroke();
   }}
 
-  function drawHandles(g) {{
-    if (!showRanges) return;
+  function drawParallelHandles(g) {{
     var r = imageBounds();
     var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
     if (state.rangeCount === 1) halfSpan = SPACING;
-
-    var rotA = {{
-      x: clamp(g.cx - g.dx * state.lineLen - g.nx * HANDLE_OFFSET, r.x, r.x + r.w),
-      y: clamp(g.cy - g.dy * state.lineLen - g.ny * HANDLE_OFFSET, r.y, r.y + r.h)
-    }};
-    var rotB = {{
-      x: clamp(g.cx + g.dx * state.lineLen + g.nx * HANDLE_OFFSET, r.x, r.x + r.w),
-      y: clamp(g.cy + g.dy * state.lineLen + g.ny * HANDLE_OFFSET, r.y, r.y + r.h)
-    }};
-    var extA = {{
-      x: clamp(g.cx - g.nx * halfSpan, r.x, r.x + r.w),
-      y: clamp(g.cy - g.ny * halfSpan, r.y, r.y + r.h)
-    }};
-    var extB = {{
-      x: clamp(g.cx + g.nx * halfSpan, r.x, r.x + r.w),
-      y: clamp(g.cy + g.ny * halfSpan, r.y, r.y + r.h)
-    }};
+    var rotA = {{x: clamp(g.cx - g.dx * state.lineLen - g.nx * HANDLE_OFFSET, r.x, r.x + r.w), y: clamp(g.cy - g.dy * state.lineLen - g.ny * HANDLE_OFFSET, r.y, r.y + r.h)}};
+    var rotB = {{x: clamp(g.cx + g.dx * state.lineLen + g.nx * HANDLE_OFFSET, r.x, r.x + r.w), y: clamp(g.cy + g.dy * state.lineLen + g.ny * HANDLE_OFFSET, r.y, r.y + r.h)}};
+    var extA = {{x: clamp(g.cx - g.nx * halfSpan, r.x, r.x + r.w), y: clamp(g.cy - g.ny * halfSpan, r.y, r.y + r.h)}};
+    var extB = {{x: clamp(g.cx + g.nx * halfSpan, r.x, r.x + r.w), y: clamp(g.cy + g.ny * halfSpan, r.y, r.y + r.h)}};
     var lenA1 = {{x: clamp(g.cx - g.nx * halfSpan - g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy - g.ny * halfSpan - g.dy * state.lineLen, r.y, r.y + r.h)}};
     var lenA2 = {{x: clamp(g.cx + g.nx * halfSpan - g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + g.ny * halfSpan - g.dy * state.lineLen, r.y, r.y + r.h)}};
     var lenB1 = {{x: clamp(g.cx - g.nx * halfSpan + g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy - g.ny * halfSpan + g.dy * state.lineLen, r.y, r.y + r.h)}};
     var lenB2 = {{x: clamp(g.cx + g.nx * halfSpan + g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + g.ny * halfSpan + g.dy * state.lineLen, r.y, r.y + r.h)}};
-
-    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan}};
+    state._handles = {{mode:'parallel', rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan, center:{{x:g.cx,y:g.cy}}}};
 
     ctx.fillStyle = '#FFD700';
     ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 2;
-    [rotA, rotB].forEach(function(p) {{
-      ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    }});
-
+    [rotA, rotB].forEach(function(p) {{ ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }});
     ctx.fillStyle = '#FFFFFF';
     drawTriangle(extA.x, extA.y, -g.nx, -g.ny, 9);
     drawTriangle(extB.x, extB.y, g.nx, g.ny, 9);
-
     ctx.fillStyle = '#7FDBFF';
-    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{
-      ctx.beginPath(); ctx.rect(p.x - 5, p.y - 5, 10, 10); ctx.fill(); ctx.stroke();
-    }});
+    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{ ctx.beginPath(); ctx.rect(p.x - 5, p.y - 5, 10, 10); ctx.fill(); ctx.stroke(); }});
+  }}
+
+  function drawRadialHandles(g) {{
+    var r = imageBounds();
+    var rotP = {{x: clamp(g.cx + Math.cos(g.ang) * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + Math.sin(g.ang) * state.lineLen, r.y, r.y + r.h)}};
+    var lenP = {{x: clamp(g.cx + Math.cos(g.ang + Math.PI/2) * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + Math.sin(g.ang + Math.PI/2) * state.lineLen, r.y, r.y + r.h)}};
+    var extP = {{x: clamp(g.cx, r.x, r.x + r.w), y: clamp(g.cy - 28, r.y, r.y + r.h)}};
+    state._handles = {{mode:'radial', rotA:rotP, extA:extP, lenA1:lenP, center:{{x:g.cx,y:g.cy}}}};
+
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(rotP.x, rotP.y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    drawTriangle(extP.x, extP.y, 0, -1, 9);
+    ctx.fillStyle = '#7FDBFF';
+    ctx.beginPath(); ctx.rect(lenP.x - 5, lenP.y - 5, 10, 10); ctx.fill(); ctx.stroke();
   }}
 
   function drawRanges() {{
-    if (!showRanges) return;
+    if (!showRanges) {{ state._handles = null; return; }}
     var g = getGeometry();
     var rect = imageBounds();
-    for (var i = 0; i < state.rangeCount; i++) {{
-      var off = (i - (state.rangeCount - 1) / 2) * SPACING;
-      var ox = g.nx * off, oy = g.ny * off;
-      var x1 = g.cx + ox - g.dx * state.lineLen, y1 = g.cy + oy - g.dy * state.lineLen;
-      var x2 = g.cx + ox + g.dx * state.lineLen, y2 = g.cy + oy + g.dy * state.lineLen;
-      var clipped = clipSegmentToRect(x1, y1, x2, y2, rect);
-      if (!clipped) continue;
-      ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(clipped.x1, clipped.y1);
-      ctx.lineTo(clipped.x2, clipped.y2);
-      ctx.stroke();
+
+    if (overlayMode === 'radial') {{
+      for (var i = 0; i < state.rangeCount; i++) {{
+        var ang = g.ang + (Math.PI * 2 * i / Math.max(1, state.rangeCount));
+        var x2 = g.cx + Math.cos(ang) * state.lineLen;
+        var y2 = g.cy + Math.sin(ang) * state.lineLen;
+        var clipped = clipSegmentToRect(g.cx, g.cy, x2, y2, rect);
+        if (!clipped) continue;
+        ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(clipped.x1, clipped.y1);
+        ctx.lineTo(clipped.x2, clipped.y2);
+        ctx.stroke();
+      }}
+      drawRadialHandles(g);
+    }} else {{
+      for (var i = 0; i < state.rangeCount; i++) {{
+        var off = (i - (state.rangeCount - 1) / 2) * SPACING;
+        var ox = g.nx * off, oy = g.ny * off;
+        var x1 = g.cx + ox - g.dx * state.lineLen, y1 = g.cy + oy - g.dy * state.lineLen;
+        var x2 = g.cx + ox + g.dx * state.lineLen, y2 = g.cy + oy + g.dy * state.lineLen;
+        var clipped = clipSegmentToRect(x1, y1, x2, y2, rect);
+        if (!clipped) continue;
+        ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(clipped.x1, clipped.y1);
+        ctx.lineTo(clipped.x2, clipped.y2);
+        ctx.stroke();
+      }}
+      drawParallelHandles(g);
     }}
-    drawHandles(g);
   }}
 
   function updateRefButtons() {{
@@ -755,18 +766,13 @@ def _overlay_canvas_html(
 
   function syncLabelOverlays() {{
     var rectCanvas = canvas.getBoundingClientRect();
-    var wrapRect = wrapper.getBoundingClientRect();
     displayScaleX = rectCanvas.width / W;
     displayScaleY = rectCanvas.height / H;
-
     for (var i = 0; i < 3; i++) {{
       var wrap = labelWraps[i], input = labelInputs[i], drag = labelDrags[i];
       if (!wrap || !input || !drag) continue;
       var ref = state.refs[i];
-      if (!ref.enabled) {{
-        wrap.style.display = 'none';
-        continue;
-      }}
+      if (!ref.enabled) {{ wrap.style.display = 'none'; continue; }}
       input.value = ref.text || '';
       wrap.style.display = 'flex';
       var p = normToPx(ref.tx, ref.ty);
@@ -797,7 +803,6 @@ def _overlay_canvas_html(
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-
     if (img.width && img.height) {{
       var scale = Math.min(W / img.width, H / img.height);
       var dw = img.width * scale, dh = img.height * scale;
@@ -807,7 +812,6 @@ def _overlay_canvas_html(
     }} else {{
       state.imageRect = {{x: 0, y: 0, w: W, h: H}};
     }}
-
     drawRanges();
     drawRefs();
     syncLabelOverlays();
@@ -834,18 +838,23 @@ def _overlay_canvas_html(
     if (!showRanges || !state._handles) return null;
     var h = state._handles;
     function near(a,b,r) {{ return Math.hypot(pos.x-a, pos.y-b) < r; }}
+    if (near(h.center.x, h.center.y, 16)) return {{type:'move'}};
     if (near(h.rotA.x, h.rotA.y, ROT_HIT)) return {{type:'rot', side:'a'}};
-    if (near(h.rotB.x, h.rotB.y, ROT_HIT)) return {{type:'rot', side:'b'}};
-    if (near(h.extA.x, h.extA.y, EXT_HIT)) return {{type:'ext', side:'a'}};
-    if (near(h.extB.x, h.extB.y, EXT_HIT)) return {{type:'ext', side:'b'}};
-    if (near(h.lenA1.x, h.lenA1.y, LEN_HIT) || near(h.lenA2.x, h.lenA2.y, LEN_HIT)) return {{type:'len', side:'a'}};
-    if (near(h.lenB1.x, h.lenB1.y, LEN_HIT) || near(h.lenB2.x, h.lenB2.y, LEN_HIT)) return {{type:'len', side:'b'}};
+    if (h.extA && near(h.extA.x, h.extA.y, EXT_HIT)) return {{type:'ext', side:'a'}};
+    if (h.extB && near(h.extB.x, h.extB.y, EXT_HIT)) return {{type:'ext', side:'b'}};
+    if (h.lenA1 && near(h.lenA1.x, h.lenA1.y, LEN_HIT)) return {{type:'len', side:'a'}};
+    if (h.lenA2 && near(h.lenA2.x, h.lenA2.y, LEN_HIT)) return {{type:'len', side:'a'}};
+    if (h.lenB1 && near(h.lenB1.x, h.lenB1.y, LEN_HIT)) return {{type:'len', side:'b'}};
+    if (h.lenB2 && near(h.lenB2.x, h.lenB2.y, LEN_HIT)) return {{type:'len', side:'b'}};
     return null;
   }}
 
   function hitInsideBeam(pos) {{
     if (!showRanges) return false;
     var g = getGeometry();
+    if (overlayMode === 'radial') {{
+      return Math.hypot(pos.x - g.cx, pos.y - g.cy) < state.lineLen + 10;
+    }}
     var dxp = pos.x - g.cx, dyp = pos.y - g.cy;
     var along = dxp * g.dx + dyp * g.dy;
     var perp = dxp * g.nx + dyp * g.ny;
@@ -856,10 +865,7 @@ def _overlay_canvas_html(
   function setCursorFor(pos) {{
     if (hitRefPoint(pos) >= 0) {{ canvas.style.cursor = 'grab'; return; }}
     var bh = hitBeamHandle(pos);
-    if (bh) {{
-      canvas.style.cursor = (bh.type === 'len') ? 'ew-resize' : 'grab';
-      return;
-    }}
+    if (bh) {{ canvas.style.cursor = (bh.type === 'len') ? 'ew-resize' : 'grab'; return; }}
     if (hitInsideBeam(pos)) {{ canvas.style.cursor = 'move'; return; }}
     canvas.style.cursor = 'crosshair';
   }}
@@ -867,21 +873,10 @@ def _overlay_canvas_html(
   canvas.addEventListener('mousedown', function(e) {{
     var pos = getPos(e);
     var refIdx = hitRefPoint(pos);
-    if (refIdx >= 0) {{
-      state.drag = {{type:'refPoint', i: refIdx}};
-      canvas.style.cursor = 'grabbing';
-      return;
-    }}
+    if (refIdx >= 0) {{ state.drag = {{type:'refPoint', i: refIdx}}; canvas.style.cursor = 'grabbing'; return; }}
     var bh = hitBeamHandle(pos);
-    if (bh) {{
-      state.drag = {{type:'beam', sub: bh.type, side: bh.side}};
-      canvas.style.cursor = 'grabbing';
-      return;
-    }}
-    if (hitInsideBeam(pos)) {{
-      state.drag = {{type:'beam', sub:'move'}};
-      canvas.style.cursor = 'grabbing';
-    }}
+    if (bh) {{ state.drag = {{type:'beam', sub: bh.type, side: bh.side}}; canvas.style.cursor = 'grabbing'; return; }}
+    if (hitInsideBeam(pos)) {{ state.drag = {{type:'beam', sub:'move'}}; canvas.style.cursor = 'grabbing'; }}
   }});
 
   function applyDrag(pos) {{
@@ -898,18 +893,23 @@ def _overlay_canvas_html(
     if (state.drag.sub === 'rot') {{
       var dxp = pos.x - g.cx, dyp = pos.y - g.cy;
       var ang = Math.atan2(dyp, dxp) * 180 / Math.PI;
-      if (state.drag.side === 'a') ang += 180;
       while (ang > 180) ang -= 360;
       while (ang < -180) ang += 360;
       state.angleDeg = ang;
     }} else if (state.drag.sub === 'ext') {{
       var dxp2 = pos.x - g.cx, dyp2 = pos.y - g.cy;
-      var perp = Math.abs(dxp2 * g.nx + dyp2 * g.ny);
-      var nRanges = Math.round((2 * perp) / SPACING) + 1;
-      state.rangeCount = clamp(nRanges, MIN_RANGES, MAX_RANGES);
+      if (overlayMode === 'radial') {{
+        var dist = Math.hypot(dxp2, dyp2);
+        var nRanges = Math.round(dist / 12);
+        state.rangeCount = clamp(nRanges, MIN_RANGES, MAX_RANGES);
+      }} else {{
+        var perp = Math.abs(dxp2 * g.nx + dyp2 * g.ny);
+        var nPar = Math.round((2 * perp) / SPACING) + 1;
+        state.rangeCount = clamp(nPar, MIN_RANGES, MAX_RANGES);
+      }}
     }} else if (state.drag.sub === 'len') {{
       var dxpLen = pos.x - g.cx, dypLen = pos.y - g.cy;
-      var alongLen = Math.abs(dxpLen * g.dx + dypLen * g.dy);
+      var alongLen = Math.hypot(dxpLen, dypLen);
       state.lineLen = clamp(alongLen, MIN_LINE_LEN, MAX_LINE_LEN);
     }} else if (state.drag.sub === 'move') {{
       var dxp3 = pos.x - (r.x + r.w / 2), dyp3 = pos.y - (r.y + r.h / 2);
@@ -924,10 +924,7 @@ def _overlay_canvas_html(
     if (!state.drag) {{ setCursorFor(pos); return; }}
     applyDrag(pos);
   }});
-  window.addEventListener('mousemove', function(e) {{
-    if (!state.drag) return;
-    applyDrag(getPos(e));
-  }});
+  window.addEventListener('mousemove', function(e) {{ if (state.drag) applyDrag(getPos(e)); }});
   window.addEventListener('mouseup', function() {{
     if (state.drag) saveState();
     state.drag = null;
@@ -1009,9 +1006,7 @@ def _overlay_canvas_html(
     drawImage();
   }}
 
-  window.addEventListener('mousemove', function(e) {{
-    if (state.drag && state.drag.type === 'label') moveLabelFromEvent(e);
-  }});
+  window.addEventListener('mousemove', function(e) {{ if (state.drag && state.drag.type === 'label') moveLabelFromEvent(e); }});
   window.addEventListener('touchmove', function(e) {{
     if (state.drag && state.drag.type === 'label') {{
       e.preventDefault();
@@ -1035,7 +1030,7 @@ def _overlay_canvas_html(
     return html
 
 
-def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_height=250):
+def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_height=250, overlay_mode="parallel", ranges_label="Rangos paralelos"):
     img_state = _ensure_image_state(ref["id"])
     image_data = img_state.get(f"img{img_idx}")
     overlay = img_state.get(f"overlay{img_idx}")
@@ -1061,6 +1056,8 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
             title="",
             css_width=css_width,
             css_height=css_height,
+            overlay_mode=overlay_mode,
+            ranges_label=ranges_label,
         )
         components.html(html, height=css_height + 90, scrolling=False)
     except Exception as e:
@@ -1160,16 +1157,27 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
     else:
         ref["subtipo"] = None
 
-    # Layout solicitado
+    is_vr = ref["tipo"] == "VR"
+    overlay_mode = "radial" if is_vr else "parallel"
+    ranges_label = "Rangos radiales" if is_vr else "Rangos paralelos"
+
     top_left, top_right = st.columns(2, gap="large")
     with top_left:
-        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=520, css_height=380)
+        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=520, css_height=380, overlay_mode=overlay_mode, ranges_label=ranges_label)
     with top_right:
-        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=520, css_height=380)
+        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=520, css_height=380, overlay_mode=overlay_mode, ranges_label=ranges_label)
 
     bottom_left, bottom_right = st.columns([1.15, 1.0], gap="large")
     with bottom_left:
-        _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=520, css_height=380)
+        if not is_vr:
+            _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=520, css_height=380, overlay_mode=overlay_mode, ranges_label=ranges_label)
+        else:
+            img_state = _ensure_image_state(ref["id"])
+            if img_state.get("img3") is not None:
+                img_state["img3"] = None
+                img_state["overlay3"] = _default_overlay_settings(ref["id"], 3)
+            st.markdown("<div style='height:0.4rem;'></div>", unsafe_allow_html=True)
+            st.info("Para reformación **VR** solo se permiten **2 imágenes**.")
     with bottom_right:
         st.markdown("<div style='height:0.2rem;'></div>", unsafe_allow_html=True)
         _panel_header("🎛️", "Parámetros de la reformación")
@@ -1191,7 +1199,10 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         st.markdown("---")
         _panel_header("📝", "Resumen")
         _render_resumen(ref)
-        st.caption("Los rangos paralelos pueden moverse verticalmente sobre cada imagen. Las referencias anatómicas se activan por imagen y permiten escribir el nombre que se mostrará junto a una flecha.")
+        if is_vr:
+            st.caption("En **VR** se permiten solo 2 imágenes y los rangos se muestran como **radiales**.")
+        else:
+            st.caption("Los rangos paralelos pueden moverse sobre cada imagen. Las referencias anatómicas se activan por imagen y permiten escribir el nombre que se mostrará junto a una flecha.")
 
 
 def render_reformaciones():
