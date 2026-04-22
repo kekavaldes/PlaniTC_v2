@@ -363,13 +363,10 @@ def _default_overlay_settings(ref_id: str, img_idx: int):
         "show_ranges": True,
         "range_count": 3,
         "angle_deg": 0,
-        "show_refs": False,
         "refs": [
-            {"enabled": False, "text": ""},
-            {"enabled": False, "text": ""},
-            {"enabled": False, "text": ""},
-            {"enabled": False, "text": ""},
-            {"enabled": False, "text": ""},
+            {"text": ""},
+            {"text": ""},
+            {"text": ""},
         ],
     }
 
@@ -409,12 +406,17 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     refs_cfg = settings.get("refs", [])
     html = f"""
 <div style="text-align:center; margin:0;">
-  <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}" style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;margin:0 auto;touch-action:none;"></canvas>
+  <div id="wrap_{storage_key}" style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
+    <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}" style="position:absolute; inset:0; width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;touch-action:none;"></canvas>
+    <div id="labels_{storage_key}" style="position:absolute; inset:0; pointer-events:none;"></div>
+  </div>
 </div>
 <script>
 (function() {{
+  var wrap = document.getElementById({json.dumps('wrap_' + storage_key)});
+  var labelsLayer = document.getElementById({json.dumps('labels_' + storage_key)});
   var canvas = document.getElementById({json.dumps('canvas_' + storage_key)});
-  if (!canvas) return;
+  if (!canvas || !wrap || !labelsLayer) return;
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var img = new Image();
@@ -425,35 +427,31 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
   var showRanges = {json.dumps(bool(settings.get('show_ranges', True)))};
   var defaultRangeCount = {json.dumps(int(settings.get('range_count', 3)))};
   var defaultAngleDeg = {json.dumps(float(settings.get('angle_deg', 0)))};
-  var showRefs = {json.dumps(bool(settings.get('show_refs', False)))};
-  var refsCfg = {json.dumps(refs_cfg)};
 
-  // Constantes del haz
-  var SPACING = 38;          // distancia entre líneas en px internos
+  var SPACING = 38;
   var LINE_LEN = Math.max(W, H) * 0.42;
   var MIN_RANGES = 1;
   var MAX_RANGES = 50;
-  var ROT_HIT = 22;          // radio de hit en manijas rotación
-  var EXT_HIT = 18;          // radio de hit en manijas extensión (cantidad de líneas)
-  var LEN_HIT = 18;          // radio de hit en manijas de largo
-  var HANDLE_OFFSET = 26;    // separa manijas de rotación del haz para que no se oculten
-  var MIN_LINE_LEN = Math.max(W, H) * 0.14;
+  var ROT_HIT = 22;
+  var EXT_HIT = 18;
+  var LEN_HIT = 18;
+  var HANDLE_OFFSET = 26;
+  var MIN_LINE_LEN = Math.max(W, H) * 0.08;
   var MAX_LINE_LEN = Math.max(W, H) * 0.62;
   var minDim = Math.min(W, H);
+  var imgRect = {{x:0,y:0,w:W,h:H,x1:W,y1:H,cx:W/2,cy:H/2}};
 
   var state = {{
-    linesOffset: 0,                              // offset perpendicular (normalizado)
-    rangeCount: defaultRangeCount,               // override local, integer
-    angleDeg: defaultAngleDeg,                   // override local, float
-    lineLen: LINE_LEN,                           // largo editable del corte
-    savedDefaultRange: defaultRangeCount,        // para detectar cambios del slider
+    linesOffset: 0,
+    rangeCount: defaultRangeCount,
+    angleDeg: defaultAngleDeg,
+    lineLen: LINE_LEN,
+    savedDefaultRange: defaultRangeCount,
     savedDefaultAngle: defaultAngleDeg,
     refs: [
-      {{ax:0.22, ay:0.18, tx:0.06, ty:0.08}},
-      {{ax:0.78, ay:0.20, tx:0.84, ty:0.08}},
-      {{ax:0.20, ay:0.50, tx:0.04, ty:0.50}},
-      {{ax:0.80, ay:0.52, tx:0.84, ty:0.50}},
-      {{ax:0.48, ay:0.82, tx:0.54, ty:0.94}},
+      {{ax:0.22, ay:0.18, tx:0.08, ty:0.09, text:{json.dumps((refs_cfg[0].get('text','') if len(refs_cfg)>0 and isinstance(refs_cfg[0], dict) else ''))}}},
+      {{ax:0.78, ay:0.20, tx:0.60, ty:0.09, text:{json.dumps((refs_cfg[1].get('text','') if len(refs_cfg)>1 and isinstance(refs_cfg[1], dict) else ''))}}},
+      {{ax:0.48, ay:0.78, tx:0.28, ty:0.84, text:{json.dumps((refs_cfg[2].get('text','') if len(refs_cfg)>2 and isinstance(refs_cfg[2], dict) else ''))}}},
     ],
     drag: null,
     _handles: null
@@ -465,7 +463,6 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
       var parsed = JSON.parse(saved);
       if (parsed && parsed.refs) state.refs = parsed.refs;
       if (parsed && typeof parsed.linesOffset === 'number') state.linesOffset = parsed.linesOffset;
-      // Solo aplicar overrides de rangeCount/angleDeg si el slider no cambió desde que se guardaron
       if (parsed && parsed.savedDefaultRange === defaultRangeCount && typeof parsed.rangeCount === 'number') {{
         state.rangeCount = Math.max(MIN_RANGES, Math.min(MAX_RANGES, Math.round(parsed.rangeCount)));
       }}
@@ -492,17 +489,91 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     }} catch(e) {{}}
   }}
 
+  function clamp(v,a,b) {{ return Math.max(a, Math.min(b, v)); }}
+
+  function computeImageRect() {{
+    if (!(img.width && img.height)) return imgRect;
+    var scale = Math.min(W / img.width, H / img.height);
+    var dw = img.width * scale, dh = img.height * scale;
+    var dx = (W - dw) / 2, dy = (H - dh) / 2;
+    imgRect = {{x:dx, y:dy, w:dw, h:dh, x1:dx+dw, y1:dy+dh, cx:dx+dw/2, cy:dy+dh/2}};
+    return imgRect;
+  }}
+
+  function normToCanvasX(nx) {{ return nx * W; }}
+  function normToCanvasY(ny) {{ return ny * H; }}
+  function canvasToNormX(x) {{ return x / W; }}
+  function canvasToNormY(y) {{ return y / H; }}
+
+  function clampPointToImage(px, py, pad) {{
+    var r = imgRect;
+    return {{ x: clamp(px, r.x + pad, r.x1 - pad), y: clamp(py, r.y + pad, r.y1 - pad) }};
+  }}
+
+  function exitDistance(px, py, vx, vy, rect) {{
+    var ts = [];
+    if (vx > 1e-9) ts.push((rect.x1 - px) / vx);
+    else if (vx < -1e-9) ts.push((rect.x - px) / vx);
+    if (vy > 1e-9) ts.push((rect.y1 - py) / vy);
+    else if (vy < -1e-9) ts.push((rect.y - py) / vy);
+    ts = ts.filter(function(t) {{ return t >= 0; }});
+    if (!ts.length) return 0;
+    return Math.min.apply(null, ts);
+  }}
+
   function getGeometry() {{
     var ang = state.angleDeg * Math.PI / 180;
     var dx = Math.cos(ang), dy = Math.sin(ang);
     var nx = -dy, ny = dx;
-    var cx = W/2 + nx * state.linesOffset * minDim;
-    var cy = H/2 + ny * state.linesOffset * minDim;
+    var cx = imgRect.cx + nx * state.linesOffset * minDim;
+    var cy = imgRect.cy + ny * state.linesOffset * minDim;
     return {{ang:ang, dx:dx, dy:dy, nx:nx, ny:ny, cx:cx, cy:cy}};
   }}
 
+  function clampBeamState() {{
+    computeImageRect();
+    var g = getGeometry();
+    var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
+
+    var allowPos = Math.max(0, exitDistance(imgRect.cx, imgRect.cy, g.nx, g.ny, imgRect) - halfSpan);
+    var allowNeg = Math.max(0, exitDistance(imgRect.cx, imgRect.cy, -g.nx, -g.ny, imgRect) - halfSpan);
+    var offPx = state.linesOffset * minDim;
+    offPx = clamp(offPx, -allowNeg, allowPos);
+    state.linesOffset = offPx / minDim;
+
+    g = getGeometry();
+    var maxSpanCenter = Math.min(
+      exitDistance(g.cx, g.cy, g.nx, g.ny, imgRect),
+      exitDistance(g.cx, g.cy, -g.nx, -g.ny, imgRect)
+    );
+    var maxCount = Math.max(1, Math.min(MAX_RANGES, Math.floor((2 * maxSpanCenter) / SPACING) + 1));
+    state.rangeCount = clamp(Math.round(state.rangeCount), MIN_RANGES, maxCount);
+
+    var globalMaxLen = MAX_LINE_LEN;
+    for (var i = 0; i < state.rangeCount; i++) {{
+      var off = (i - (state.rangeCount - 1) / 2) * SPACING;
+      var px = g.cx + g.nx * off;
+      var py = g.cy + g.ny * off;
+      var maxLenHere = Math.min(
+        exitDistance(px, py, g.dx, g.dy, imgRect),
+        exitDistance(px, py, -g.dx, -g.dy, imgRect)
+      );
+      globalMaxLen = Math.min(globalMaxLen, maxLenHere);
+    }}
+    state.lineLen = clamp(state.lineLen, Math.min(MIN_LINE_LEN, globalMaxLen), globalMaxLen);
+
+    for (var r = 0; r < state.refs.length; r++) {{
+      var ap = clampPointToImage(normToCanvasX(state.refs[r].ax), normToCanvasY(state.refs[r].ay), 8);
+      var tp = clampPointToImage(normToCanvasX(state.refs[r].tx), normToCanvasY(state.refs[r].ty), 20);
+      state.refs[r].ax = canvasToNormX(ap.x);
+      state.refs[r].ay = canvasToNormY(ap.y);
+      state.refs[r].tx = canvasToNormX(tp.x);
+      state.refs[r].ty = canvasToNormY(tp.y);
+    }}
+  }}
+
   function drawArrow(fromX, fromY, toX, toY, color) {{
-    var head = 16;
+    var head = 14;
     var dx = toX-fromX, dy = toY-fromY;
     var ang = Math.atan2(dy, dx);
     ctx.strokeStyle = color;
@@ -516,52 +587,6 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     ctx.closePath(); ctx.fill();
   }}
 
-  function drawHandles(g) {{
-    var liveLineLen = state.lineLen;
-    // Manijas de rotación separadas del haz, para que sigan visibles aunque quede perpendicular
-    var rotA = {{x: g.cx - g.dx * liveLineLen - g.nx * HANDLE_OFFSET, y: g.cy - g.dy * liveLineLen - g.ny * HANDLE_OFFSET}};
-    var rotB = {{x: g.cx + g.dx * liveLineLen + g.nx * HANDLE_OFFSET, y: g.cy + g.dy * liveLineLen + g.ny * HANDLE_OFFSET}};
-
-    // Manijas de extensión en el centro de la primera y última línea (cambia cantidad de líneas)
-    var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
-    if (state.rangeCount === 1) halfSpan = SPACING;
-    var extA = {{x: g.cx - g.nx * halfSpan, y: g.cy - g.ny * halfSpan}};
-    var extB = {{x: g.cx + g.nx * halfSpan, y: g.cy + g.ny * halfSpan}};
-
-    // Manijas de largo en los 4 extremos del bloque externo
-    var lenA1 = {{x: g.cx - g.nx * halfSpan - g.dx * liveLineLen, y: g.cy - g.ny * halfSpan - g.dy * liveLineLen}};
-    var lenA2 = {{x: g.cx + g.nx * halfSpan - g.dx * liveLineLen, y: g.cy + g.ny * halfSpan - g.dy * liveLineLen}};
-    var lenB1 = {{x: g.cx - g.nx * halfSpan + g.dx * liveLineLen, y: g.cy - g.ny * halfSpan + g.dy * liveLineLen}};
-    var lenB2 = {{x: g.cx + g.nx * halfSpan + g.dx * liveLineLen, y: g.cy + g.ny * halfSpan + g.dy * liveLineLen}};
-
-    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan}};
-
-    // Rotación: círculo amarillo
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 2;
-    [rotA, rotB].forEach(function(p) {{
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
-    }});
-
-    // Extensión: triángulo blanco apuntando hacia afuera
-    ctx.fillStyle = '#FFFFFF';
-    ctx.strokeStyle = '#1a1a1a';
-    drawTriangle(extA.x, extA.y, -g.nx, -g.ny, 11);
-    drawTriangle(extB.x, extB.y, g.nx, g.ny, 11);
-
-    // Largo: cuadrados celestes en los bordes del bloque
-    ctx.fillStyle = '#7FDBFF';
-    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{
-      ctx.beginPath();
-      ctx.rect(p.x - 7, p.y - 7, 14, 14);
-      ctx.fill();
-      ctx.stroke();
-    }});
-  }}
-
   function drawTriangle(cx, cy, dirX, dirY, size) {{
     var px = -dirY, py = dirX;
     ctx.beginPath();
@@ -572,25 +597,48 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     ctx.fill(); ctx.stroke();
   }}
 
-  function drawLabel() {{
-    var txt = state.rangeCount + (state.rangeCount === 1 ? ' línea · ' : ' líneas · ') + Math.round(state.angleDeg) + '°';
-    ctx.font = 'bold 15px Arial';
-    var pad = 8;
-    var tw = ctx.measureText(txt).width;
-    var x = 10, y = 10;
-    var boxW = tw + pad*2, boxH = 26;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(x, y, boxW, boxH);
-    ctx.strokeStyle = acqColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, boxW, boxH);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(txt, x + pad, y + 18);
+  function drawHandles(g) {{
+    var liveLineLen = state.lineLen;
+    var rotA = clampPointToImage(g.cx - g.dx * liveLineLen - g.nx * HANDLE_OFFSET, g.cy - g.dy * liveLineLen - g.ny * HANDLE_OFFSET, 12);
+    var rotB = clampPointToImage(g.cx + g.dx * liveLineLen + g.nx * HANDLE_OFFSET, g.cy + g.dy * liveLineLen + g.ny * HANDLE_OFFSET, 12);
+
+    var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
+    if (state.rangeCount === 1) halfSpan = SPACING;
+    var extA = clampPointToImage(g.cx - g.nx * halfSpan, g.cy - g.ny * halfSpan, 10);
+    var extB = clampPointToImage(g.cx + g.nx * halfSpan, g.cy + g.ny * halfSpan, 10);
+
+    var lenA1 = clampPointToImage(g.cx - g.nx * halfSpan - g.dx * liveLineLen, g.cy - g.ny * halfSpan - g.dy * liveLineLen, 8);
+    var lenA2 = clampPointToImage(g.cx + g.nx * halfSpan - g.dx * liveLineLen, g.cy + g.ny * halfSpan - g.dy * liveLineLen, 8);
+    var lenB1 = clampPointToImage(g.cx - g.nx * halfSpan + g.dx * liveLineLen, g.cy - g.ny * halfSpan + g.dy * liveLineLen, 8);
+    var lenB2 = clampPointToImage(g.cx + g.nx * halfSpan + g.dx * liveLineLen, g.cy + g.ny * halfSpan + g.dy * liveLineLen, 8);
+
+    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan}};
+
+    ctx.fillStyle = '#FFD700';
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2;
+    [rotA, rotB].forEach(function(p) {{
+      ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }});
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#1a1a1a';
+    drawTriangle(extA.x, extA.y, -g.nx, -g.ny, 11);
+    drawTriangle(extB.x, extB.y, g.nx, g.ny, 11);
+
+    ctx.fillStyle = '#7FDBFF';
+    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{
+      ctx.beginPath(); ctx.rect(p.x - 7, p.y - 7, 14, 14); ctx.fill(); ctx.stroke();
+    }});
   }}
 
   function drawRanges() {{
     if (!showRanges) return;
     var g = getGeometry();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(imgRect.x, imgRect.y, imgRect.w, imgRect.h);
+    ctx.clip();
     for (var i=0; i<state.rangeCount; i++) {{
       var off = (i - (state.rangeCount-1)/2) * SPACING;
       var ox = g.nx*off, oy = g.ny*off;
@@ -600,41 +648,71 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     }}
+    ctx.restore();
     drawHandles(g);
   }}
 
-  function drawRefs() {{
-    if (!showRefs) return;
-    ctx.font = 'bold 20px Arial';
-    for (var i=0; i<Math.min(5, refsCfg.length); i++) {{
-      var cfg = refsCfg[i];
-      if (!cfg || !cfg.enabled) continue;
-      var r = state.refs[i];
-      var ax = r.ax*W, ay = r.ay*H, tx = r.tx*W, ty = r.ty*H;
-      drawArrow(tx, ty, ax, ay, recColor);
-      var txt = cfg.text || ('Referencia ' + (i+1));
-      var pad = 8;
-      var tw = ctx.measureText(txt).width + pad*2;
-      ctx.fillStyle = 'rgba(0,0,0,0.72)';
-      ctx.fillRect(tx-4, ty-24, tw, 30);
-      ctx.strokeStyle = recColor;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(tx-4, ty-24, tw, 30);
-      ctx.fillStyle = '#fff';
-      ctx.fillText(txt, tx+pad-4, ty-4);
-      ctx.beginPath(); ctx.fillStyle = acqColor; ctx.arc(ax, ay, 7, 0, Math.PI*2); ctx.fill();
+  function renderInputs() {{
+    labelsLayer.innerHTML = '';
+    for (var i = 0; i < state.refs.length; i++) {{
+      (function(idx) {{
+        var r = state.refs[idx];
+        var left = clamp(normToCanvasX(r.tx), imgRect.x + 12, imgRect.x1 - 128);
+        var top = clamp(normToCanvasY(r.ty) - 14, imgRect.y + 6, imgRect.y1 - 30);
+        var box = document.createElement('div');
+        box.style.cssText = 'position:absolute; left:' + left + 'px; top:' + top + 'px; width:116px; height:24px; display:flex; align-items:center; gap:4px; pointer-events:auto;';
+
+        var handle = document.createElement('div');
+        handle.textContent = String(idx + 1);
+        handle.style.cssText = 'width:18px; height:18px; border-radius:50%; background:' + recColor + '; color:#fff; font:700 11px Arial; display:flex; align-items:center; justify-content:center; cursor:grab; flex:0 0 auto;';
+        handle.addEventListener('mousedown', function(e) {{
+          e.preventDefault();
+          state.drag = {{type:'ref_label', i:idx}};
+        }});
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.value = r.text || '';
+        input.placeholder = 'Anatomía';
+        input.style.cssText = 'width:94px; height:24px; border:1px solid ' + recColor + '; border-radius:6px; background:rgba(0,0,0,0.72); color:#fff; padding:0 6px; font:12px Arial; outline:none;';
+        input.addEventListener('input', function() {{
+          state.refs[idx].text = input.value;
+          saveState();
+          drawImage();
+        }});
+
+        box.appendChild(handle);
+        box.appendChild(input);
+        labelsLayer.appendChild(box);
+      }})(i);
     }}
   }}
 
+  function drawRefs() {{
+    ctx.font = 'bold 18px Arial';
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(imgRect.x, imgRect.y, imgRect.w, imgRect.h);
+    ctx.clip();
+    for (var i=0; i<state.refs.length; i++) {{
+      var r = state.refs[i];
+      var ax = normToCanvasX(r.ax), ay = normToCanvasY(r.ay);
+      var tx = normToCanvasX(r.tx), ty = normToCanvasY(r.ty);
+      drawArrow(tx, ty, ax, ay, recColor);
+      ctx.beginPath(); ctx.fillStyle = acqColor; ctx.arc(ax, ay, 7, 0, Math.PI*2); ctx.fill();
+    }}
+    ctx.restore();
+    renderInputs();
+  }}
+
   function drawImage() {{
+    computeImageRect();
+    clampBeamState();
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,W,H);
     if (img.width && img.height) {{
-      var scale = Math.min(W/img.width, H/img.height);
-      var dw = img.width*scale, dh = img.height*scale;
-      var dx = (W-dw)/2, dy = (H-dh)/2;
-      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.drawImage(img, imgRect.x, imgRect.y, imgRect.w, imgRect.h);
     }}
     drawRanges();
     drawRefs();
@@ -649,11 +727,9 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
 
   function hitRef(pos) {{
     for (var i=0; i<state.refs.length; i++) {{
-      if (!refsCfg[i] || !refsCfg[i].enabled) continue;  // solo activas
       var r = state.refs[i];
-      var ax = r.ax*W, ay = r.ay*H, tx = r.tx*W, ty = r.ty*H;
+      var ax = normToCanvasX(r.ax), ay = normToCanvasY(r.ay);
       if (Math.hypot(pos.x-ax, pos.y-ay) < 18) return {{i:i, p:'a'}};
-      if (Math.hypot(pos.x-tx, pos.y-ty) < 18) return {{i:i, p:'t'}};
     }}
     return null;
   }}
@@ -677,20 +753,16 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     var along = dxp*g.dx + dyp*g.dy;
     var perp = dxp*g.nx + dyp*g.ny;
     var halfSpan = Math.max(SPACING*0.5, ((state.rangeCount-1)/2) * SPACING);
-    return Math.abs(perp) < halfSpan + 8 && Math.abs(along) < state.lineLen;
+    return pos.x >= imgRect.x && pos.x <= imgRect.x1 && pos.y >= imgRect.y && pos.y <= imgRect.y1 && Math.abs(perp) < halfSpan + 8 && Math.abs(along) < state.lineLen;
   }}
 
   function setCursorFor(pos) {{
     if (hitRef(pos)) {{ canvas.style.cursor = 'grab'; return; }}
     var bh = hitBeamHandle(pos);
     if (bh) {{
-      if (bh.type === 'rot') {{
-        canvas.style.cursor = 'grab';
-      }} else if (bh.type === 'ext') {{
-        canvas.style.cursor = (bh.side === 'a' ? 'nw-resize' : 'se-resize');
-      }} else {{
-        canvas.style.cursor = 'ew-resize';
-      }}
+      if (bh.type === 'rot') canvas.style.cursor = 'grab';
+      else if (bh.type === 'ext') canvas.style.cursor = (bh.side === 'a' ? 'nw-resize' : 'se-resize');
+      else canvas.style.cursor = 'ew-resize';
       return;
     }}
     if (hitInsideBeam(pos)) {{ canvas.style.cursor = 'move'; return; }}
@@ -702,33 +774,26 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     var hr = hitRef(pos);
     if (hr) {{ state.drag = hr; canvas.style.cursor = 'grabbing'; return; }}
     var bh = hitBeamHandle(pos);
-    if (bh) {{
-      state.drag = {{type:'beam', sub:bh.type, side:bh.side}};
-      canvas.style.cursor = 'grabbing';
-      return;
-    }}
-    if (hitInsideBeam(pos)) {{
-      state.drag = {{type:'beam', sub:'move'}};
-      canvas.style.cursor = 'grabbing';
-    }}
+    if (bh) {{ state.drag = {{type:'beam', sub:bh.type, side:bh.side}}; canvas.style.cursor = 'grabbing'; return; }}
+    if (hitInsideBeam(pos)) state.drag = {{type:'beam', sub:'move'}};
   }});
 
   function applyDrag(pos) {{
     if (!state.drag) return;
-    // Arrastre de referencias anatómicas (a = punto anatómico, t = etiqueta)
     if (state.drag.p === 'a') {{
-      state.refs[state.drag.i].ax = Math.max(0.02, Math.min(0.98, pos.x/W));
-      state.refs[state.drag.i].ay = Math.max(0.02, Math.min(0.98, pos.y/H));
-    }} else if (state.drag.p === 't') {{
-      state.refs[state.drag.i].tx = Math.max(0.02, Math.min(0.98, pos.x/W));
-      state.refs[state.drag.i].ty = Math.max(0.02, Math.min(0.98, pos.y/H));
+      var ap = clampPointToImage(pos.x, pos.y, 8);
+      state.refs[state.drag.i].ax = canvasToNormX(ap.x);
+      state.refs[state.drag.i].ay = canvasToNormY(ap.y);
+    }} else if (state.drag.type === 'ref_label') {{
+      var tp = clampPointToImage(pos.x, pos.y, 22);
+      state.refs[state.drag.i].tx = canvasToNormX(tp.x);
+      state.refs[state.drag.i].ty = canvasToNormY(tp.y);
     }} else if (state.drag.type === 'beam') {{
       var g = getGeometry();
       if (state.drag.sub === 'rot') {{
         var dxp = pos.x - g.cx, dyp = pos.y - g.cy;
         var ang = Math.atan2(dyp, dxp) * 180 / Math.PI;
-        if (state.drag.side === 'a') ang += 180;  // el lado A apunta al contrario
-        // Normalizar a [-180, 180]
+        if (state.drag.side === 'a') ang += 180;
         while (ang > 180) ang -= 360;
         while (ang < -180) ang += 360;
         state.angleDeg = ang;
@@ -742,31 +807,18 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
         var alongLen = Math.abs(dxpLen*g.dx + dypLen*g.dy);
         state.lineLen = Math.max(MIN_LINE_LEN, Math.min(MAX_LINE_LEN, alongLen));
       }} else if (state.drag.sub === 'move') {{
-        var dxp3 = pos.x - W/2, dyp3 = pos.y - H/2;
+        var dxp3 = pos.x - imgRect.cx, dyp3 = pos.y - imgRect.cy;
         var newOff = (dxp3*g.nx + dyp3*g.ny) / minDim;
-        state.linesOffset = Math.max(-0.5, Math.min(0.5, newOff));
+        state.linesOffset = clamp(newOff, -0.5, 0.5);
       }}
     }}
     drawImage();
   }}
 
-  canvas.addEventListener('mousemove', function(e) {{
-    var pos = getPos(e);
-    if (!state.drag) {{ setCursorFor(pos); return; }}
-    applyDrag(pos);
-  }});
+  canvas.addEventListener('mousemove', function(e) {{ var pos = getPos(e); if (!state.drag) {{ setCursorFor(pos); return; }} applyDrag(pos); }});
+  window.addEventListener('mousemove', function(e) {{ if (!state.drag) return; applyDrag(getPos(e)); }});
+  window.addEventListener('mouseup', function() {{ if (state.drag) saveState(); state.drag = null; }});
 
-  // Seguir arrastre aunque el cursor salga del canvas
-  window.addEventListener('mousemove', function(e) {{
-    if (!state.drag) return;
-    applyDrag(getPos(e));
-  }});
-  window.addEventListener('mouseup', function() {{
-    if (state.drag) saveState();
-    state.drag = null;
-  }});
-
-  // Soporte táctil
   canvas.addEventListener('touchstart', function(e) {{
     if (!e.touches || !e.touches.length) return;
     e.preventDefault();
@@ -777,15 +829,8 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     if (bh) {{ state.drag = {{type:'beam', sub:bh.type, side:bh.side}}; return; }}
     if (hitInsideBeam(pos)) state.drag = {{type:'beam', sub:'move'}};
   }}, {{passive:false}});
-  canvas.addEventListener('touchmove', function(e) {{
-    if (!state.drag || !e.touches || !e.touches.length) return;
-    e.preventDefault();
-    applyDrag(getPos(e));
-  }}, {{passive:false}});
-  canvas.addEventListener('touchend', function() {{
-    if (state.drag) saveState();
-    state.drag = null;
-  }});
+  canvas.addEventListener('touchmove', function(e) {{ if (!state.drag || !e.touches || !e.touches.length) return; e.preventDefault(); applyDrag(getPos(e)); }}, {{passive:false}});
+  canvas.addEventListener('touchend', function() {{ if (state.drag) saveState(); state.drag = null; }});
 
   img.onload = drawImage;
   if (img.complete) drawImage();
@@ -817,41 +862,17 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
             css_width=css_width,
             css_height=css_height,
         )
-        components.html(html, height=css_height + 24, scrolling=False)
+        components.html(html, height=css_height + 8, scrolling=False)
     except Exception as e:
         st.error(f"No se pudo mostrar la imagen: {e}")
 
-    # Los cortes se manipulan solo sobre la imagen; no se muestran barras ni sliders.
-    # Se mantienen las referencias anatómicas mediante controles simples debajo,
-    # sin texto auxiliar ni configuraciones de rangos.
-    st.markdown("<div style='height:0.15rem;'></div>", unsafe_allow_html=True)
-    col_a, col_b = st.columns([1, 1], gap="small")
-    with col_a:
-        overlay["show_refs"] = st.checkbox(
-            "Referencias anatómicas",
-            value=overlay.get("show_refs", False),
-            key=f"ref_show_{ref['id']}_{img_idx}",
-        )
-    with col_b:
+    col_btn1, col_btn2 = st.columns([1, 1], gap="small")
+    with col_btn1:
+        st.caption("3 referencias anatómicas dentro de la imagen")
+    with col_btn2:
         if st.button("🗑️ Borrar imagen", key=f"del_{ref['id']}_{img_idx}", use_container_width=True):
             img_state[f"img{img_idx}"] = None
             st.rerun()
-
-    if overlay.get("show_refs"):
-        for i in range(5):
-            cc1, cc2 = st.columns([1, 3], gap="small")
-            with cc1:
-                overlay["refs"][i]["enabled"] = st.checkbox(
-                    f"R{i+1}",
-                    value=overlay["refs"][i].get("enabled", False),
-                    key=f"r_enabled_{ref['id']}_{img_idx}_{i}",
-                )
-            with cc2:
-                overlay["refs"][i]["text"] = st.text_input(
-                    f"Anatomía {i+1}",
-                    value=overlay["refs"][i].get("text", ""),
-                    key=f"r_text_{ref['id']}_{img_idx}_{i}",
-                )
 
 
 def _render_panel_rec(rec_id: str, recons_planas):
