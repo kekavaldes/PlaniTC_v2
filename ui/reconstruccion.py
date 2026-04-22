@@ -254,7 +254,7 @@ def render_canvas_recon_cuadrado(
     html = f"""
 <div style="text-align:center; margin:0;">
   <div style="display:inline-block; font-size:11px; color:#aaa; margin-bottom:4px;">
-    Arrastra el cuadrado para moverlo. Usa una esquina para cambiar su tamaño. Siempre mantiene forma cuadrada.
+    Ajusta el Dfov
   </div>
   <div style="font-size:15px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
   <canvas id="reconSquareCanvas" width="{canvas_width}" height="{canvas_height}"
