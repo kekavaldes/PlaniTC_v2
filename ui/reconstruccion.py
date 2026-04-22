@@ -1345,14 +1345,10 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         return
 
     color_rec = _color_exploracion(exp)
-    st.markdown(
-        f"<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>✅ <b>{topo_data['titulo']}</b></div>",
-        unsafe_allow_html=True,
-    )
 
     img_b64 = _pil_to_b64_jpeg(img_pil, max_width=800)
     if not img_b64:
-        st.image(img_pil, caption=topo_data.get("caption", ""), width=300)
+        st.image(img_pil, width=300)
         return
 
     html_topo = render_canvas_topo_dfov_rect(
@@ -1371,7 +1367,6 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         components.html(html_topo, height=410, scrolling=False)
     else:
         st.image(img_pil, width=260)
-    st.caption(topo_data.get("caption", ""))
 
 
 def _render_panel_central(adquisiciones_validas):
@@ -1428,7 +1423,6 @@ def _render_panel_central(adquisiciones_validas):
     region_anat = _get_region_group_for_exp(exp_activa)
     _panel_header("🔄", f"{rec_actual.get('nombre', 'Reconstrucción')} · {nombre_exp}")
 
-    _panel_header("🖼️", "Imagen de reconstrucción y topogramas")
     topogramas_data, topo_error = _get_topogramas_de_adquisicion(exp_activa, rec_actual)
 
     if topo_error:
