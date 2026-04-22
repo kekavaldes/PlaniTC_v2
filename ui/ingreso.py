@@ -302,12 +302,15 @@ def render_ingreso():
                     value=st.session_state.get("metodo_inyeccion_widget"),
                 )
 
-                cantidad_contraste = selectbox_con_placeholder(
-                    "Cantidad de medio de contraste",
-                    [f"{i} cc" for i in range(10, 151, 10)],
-                    "cantidad_contraste_widget",
-                    value=st.session_state.get("cantidad_contraste_widget"),
-                )
+                if metodo_inyeccion == "INYECCIÓN MANUAL":
+                    cantidad_contraste = selectbox_con_placeholder(
+                        "Cantidad de medio de contraste",
+                        [f"{i} cc" for i in range(10, 151, 10)],
+                        "cantidad_contraste_widget",
+                        value=st.session_state.get("cantidad_contraste_widget"),
+                    )
+                else:
+                    st.session_state["cantidad_contraste_widget"] = None
 
                 if metodo_inyeccion == "INYECTORA AUTOMÁTICA":
                     st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
@@ -320,6 +323,8 @@ def render_ingreso():
                             use_container_width=True,
                         ):
                             _ir_a_inyectora()
+            else:
+                st.session_state["cantidad_contraste_widget"] = None
 
     _build_store(
         nombre=nombre,
@@ -335,7 +340,7 @@ def render_ingreso():
         contraste_ev=contraste_ev,
         vvp=vvp if contraste_ev else None,
         metodo_inyeccion=metodo_inyeccion if contraste_ev else None,
-        cantidad_contraste=cantidad_contraste if contraste_ev else None,
+        cantidad_contraste=cantidad_contraste if (contraste_ev and metodo_inyeccion == "INYECCIÓN MANUAL") else None,
     )
 
     return st.session_state["ingreso_store"]
