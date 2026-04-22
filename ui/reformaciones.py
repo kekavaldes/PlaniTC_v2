@@ -928,11 +928,7 @@ def _overlay_canvas_html(
   for (let i = 0; i < 3; i++) {{
     if (refBtns[i]) {{
       refBtns[i].addEventListener('click', function() {{
-        var wasEnabled = !!state.refs[i].enabled;
-        for (let j = 0; j < 3; j++) {{
-          state.refs[j].enabled = false;
-        }}
-        state.refs[i].enabled = !wasEnabled;
+        state.refs[i].enabled = !state.refs[i].enabled;
         saveState();
         drawImage();
       }});
