@@ -273,10 +273,16 @@ def render_canvas_recon_cuadrado(
   img.src = 'data:image/jpeg;base64,' + imgB64;
 
   var square = {{ x: 0.23, y: 0.23, s: 0.34 }};
+  // Handle activo: 'body' (mover), 'tl', 'tr', 'bl', 'br' (esquinas),
+  // 't', 'b', 'l', 'r' (bordes), o null.
   var dragMode = null;
   var dragOffsetX = 0;
   var dragOffsetY = 0;
-  var cornerSize = 16;
+  // Tolerancia para detectar handles (en px del canvas interno)
+  var cornerTol = 22;
+  var edgeTol = 14;
+  // Tamaño visual de los manijas dibujados sobre el cuadrado
+  var handleVisual = 11;
   var minS = 0.10;
   var maxS = 0.96;
 
@@ -319,8 +325,130 @@ def render_canvas_recon_cuadrado(
     return mx >= sp.x && mx <= sp.x + sp.s && my >= sp.y && my <= sp.y + sp.s;
   }}
 
-  function onResizeHandle(mx, my, sp) {{
-    return Math.abs(mx - (sp.x + sp.s)) <= cornerSize && Math.abs(my - (sp.y + sp.s)) <= cornerSize;
+  // Detecta qué zona del cuadrado está bajo el puntero. Las esquinas
+  // tienen prioridad sobre los bordes; los bordes sobre el interior.
+  function detectHandle(mx, my, sp) {{
+    var left = sp.x, right = sp.x + sp.s;
+    var top = sp.y, bottom = sp.y + sp.s;
+
+    var nearLeft = Math.abs(mx - left) <= cornerTol;
+    var nearRight = Math.abs(mx - right) <= cornerTol;
+    var nearTop = Math.abs(my - top) <= cornerTol;
+    var nearBottom = Math.abs(my - bottom) <= cornerTol;
+
+    if (nearLeft && nearTop) return 'tl';
+    if (nearRight && nearTop) return 'tr';
+    if (nearLeft && nearBottom) return 'bl';
+    if (nearRight && nearBottom) return 'br';
+
+    // Bordes: cerca del borde y dentro del rango perpendicular (con margen)
+    if (Math.abs(my - top) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 't';
+    if (Math.abs(my - bottom) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 'b';
+    if (Math.abs(mx - left) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'l';
+    if (Math.abs(mx - right) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'r';
+
+    if (isInsideSquare(mx, my, sp)) return 'body';
+    return null;
+  }}
+
+  // Aplica el resize según el handle. El cuadrado siempre se mantiene
+  // cuadrado (s es único). Cada handle tiene su punto de anclaje:
+  // - esquinas: la esquina opuesta queda fija.
+  // - bordes: el borde opuesto queda fijo y la dimensión perpendicular
+  //   se expande/contrae simétricamente (se mantiene el centro del eje
+  //   perpendicular sobre el que NO se está arrastrando).
+  function resizeFromHandle(handle, pos) {{
+    var minDim = Math.min(W, H);
+    var minPx = minS * minDim;
+    var maxPx = maxS * minDim;
+
+    var left = square.x * W;
+    var top = square.y * H;
+    var sz = square.s * minDim;
+    var right = left + sz;
+    var bottom = top + sz;
+    var cx = left + sz / 2;
+    var cy = top + sz / 2;
+
+    var newS;
+    switch (handle) {{
+      case 'br': {{
+        var w = pos.x - left;
+        var h = pos.y - top;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.s = newS / minDim;
+        // x, y no cambian (anclado en top-left)
+        break;
+      }}
+      case 'tl': {{
+        var w = right - pos.x;
+        var h = bottom - pos.y;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = (right - newS) / W;
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'tr': {{
+        var w = pos.x - left;
+        var h = bottom - pos.y;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = left / W; // queda como estaba
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'bl': {{
+        var w = right - pos.x;
+        var h = pos.y - top;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = (right - newS) / W;
+        square.y = top / H; // queda como estaba
+        square.s = newS / minDim;
+        break;
+      }}
+      case 't': {{
+        // Fijo: borde inferior + centro horizontal
+        var h = bottom - pos.y;
+        newS = Math.max(minPx, Math.min(maxPx, h));
+        square.x = (cx - newS / 2) / W;
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'b': {{
+        // Fijo: borde superior + centro horizontal
+        var h = pos.y - top;
+        newS = Math.max(minPx, Math.min(maxPx, h));
+        square.x = (cx - newS / 2) / W;
+        square.y = top / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'l': {{
+        // Fijo: borde derecho + centro vertical
+        var w = right - pos.x;
+        newS = Math.max(minPx, Math.min(maxPx, w));
+        square.x = (right - newS) / W;
+        square.y = (cy - newS / 2) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'r': {{
+        // Fijo: borde izquierdo + centro vertical
+        var w = pos.x - left;
+        newS = Math.max(minPx, Math.min(maxPx, w));
+        square.x = left / W;
+        square.y = (cy - newS / 2) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+    }}
+    clampSquare();
   }}
 
   function drawBaseImage() {{
@@ -340,15 +468,38 @@ def render_canvas_recon_cuadrado(
   function drawSquare() {{
     clampSquare();
     var sp = getSquarePx();
+    // Relleno semitransparente
     ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
     ctx.fillRect(sp.x, sp.y, sp.s, sp.s);
+    // Borde punteado
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 3;
     ctx.setLineDash([10, 6]);
     ctx.strokeRect(sp.x, sp.y, sp.s, sp.s);
     ctx.setLineDash([]);
+
+    // Manijas: 4 esquinas + 4 puntos medios de borde
+    var hs = handleVisual;
+    var cx = sp.x + sp.s / 2;
+    var cy = sp.y + sp.s / 2;
+    var points = [
+      [sp.x, sp.y],                 // tl
+      [sp.x + sp.s, sp.y],          // tr
+      [sp.x, sp.y + sp.s],          // bl
+      [sp.x + sp.s, sp.y + sp.s],   // br
+      [cx, sp.y],                   // t
+      [cx, sp.y + sp.s],            // b
+      [sp.x, cy],                   // l
+      [sp.x + sp.s, cy],            // r
+    ];
     ctx.fillStyle = strokeColor;
-    ctx.fillRect(sp.x + sp.s - 6, sp.y + sp.s - 6, 12, 12);
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 1.5;
+    for (var i = 0; i < points.length; i++) {{
+      var px = points[i][0], py = points[i][1];
+      ctx.fillRect(px - hs / 2, py - hs / 2, hs, hs);
+      ctx.strokeRect(px - hs / 2, py - hs / 2, hs, hs);
+    }}
   }}
 
   function draw() {{
@@ -364,90 +515,402 @@ def render_canvas_recon_cuadrado(
     return {{ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }};
   }}
 
-  function updateCursor(mx, my) {{
-    var sp = getSquarePx();
-    if (onResizeHandle(mx, my, sp)) canvas.style.cursor = 'nwse-resize';
-    else if (isInsideSquare(mx, my, sp)) canvas.style.cursor = 'grab';
-    else canvas.style.cursor = 'default';
+  function cursorForHandle(h) {{
+    if (h === 'tl' || h === 'br') return 'nwse-resize';
+    if (h === 'tr' || h === 'bl') return 'nesw-resize';
+    if (h === 't' || h === 'b') return 'ns-resize';
+    if (h === 'l' || h === 'r') return 'ew-resize';
+    if (h === 'body') return 'grab';
+    return 'default';
   }}
 
-  canvas.addEventListener('mousedown', function(e) {{
-    var pos = getMousePos(e);
+  function updateCursor(mx, my) {{
     var sp = getSquarePx();
-    if (onResizeHandle(pos.x, pos.y, sp)) {{
-      dragMode = 'resize-square';
-      return;
-    }}
-    if (isInsideSquare(pos.x, pos.y, sp)) {{
-      dragMode = 'move-square';
+    var h = detectHandle(mx, my, sp);
+    canvas.style.cursor = cursorForHandle(h);
+  }}
+
+  function startDrag(pos) {{
+    var sp = getSquarePx();
+    var h = detectHandle(pos.x, pos.y, sp);
+    if (!h) return;
+    if (h === 'body') {{
+      dragMode = 'body';
       dragOffsetX = pos.x - sp.x;
       dragOffsetY = pos.y - sp.y;
       canvas.style.cursor = 'grabbing';
+    }} else {{
+      dragMode = h;
+      canvas.style.cursor = cursorForHandle(h);
     }}
+  }}
+
+  function applyDrag(pos) {{
+    if (!dragMode) return;
+    if (dragMode === 'body') {{
+      square.x = (pos.x - dragOffsetX) / W;
+      square.y = (pos.y - dragOffsetY) / H;
+      clampSquare();
+    }} else {{
+      resizeFromHandle(dragMode, pos);
+    }}
+    draw();
+  }}
+
+  canvas.addEventListener('mousedown', function(e) {{
+    startDrag(getMousePos(e));
   }});
 
   canvas.addEventListener('mousemove', function(e) {{
     var pos = getMousePos(e);
-    updateCursor(pos.x, pos.y);
-    if (!dragMode) return;
-
-    if (dragMode === 'move-square') {{
-      square.x = (pos.x - dragOffsetX) / W;
-      square.y = (pos.y - dragOffsetY) / H;
-      clampSquare();
-    }} else if (dragMode === 'resize-square') {{
-      var anchor = getSquarePx();
-      var newSizeX = (pos.x - anchor.x) / Math.min(W, H);
-      var newSizeY = (pos.y - anchor.y) / Math.min(W, H);
-      square.s = Math.max(minS, Math.max(newSizeX, newSizeY));
-      clampSquare();
-    }}
-    draw();
+    if (!dragMode) updateCursor(pos.x, pos.y);
+    else applyDrag(pos);
   }});
 
   function endDrag() {{
     dragMode = null;
-    canvas.style.cursor = 'grab';
     saveState();
   }}
 
   canvas.addEventListener('mouseup', endDrag);
   canvas.addEventListener('mouseleave', endDrag);
+
   canvas.addEventListener('touchstart', function(e) {{
     e.preventDefault();
     var t = e.touches[0];
-    var pos = getMousePos(t);
-    var sp = getSquarePx();
-    if (onResizeHandle(pos.x, pos.y, sp)) {{
-      dragMode = 'resize-square';
-      return;
-    }}
-    if (isInsideSquare(pos.x, pos.y, sp)) {{
-      dragMode = 'move-square';
-      dragOffsetX = pos.x - sp.x;
-      dragOffsetY = pos.y - sp.y;
-    }}
+    startDrag(getMousePos(t));
   }}, {{passive:false}});
 
   canvas.addEventListener('touchmove', function(e) {{
     e.preventDefault();
     if (!dragMode) return;
     var t = e.touches[0];
-    var pos = getMousePos(t);
-    if (dragMode === 'move-square') {{
-      square.x = (pos.x - dragOffsetX) / W;
-      square.y = (pos.y - dragOffsetY) / H;
-      clampSquare();
-    }} else if (dragMode === 'resize-square') {{
-      var anchor = getSquarePx();
-      var newSizeX = (pos.x - anchor.x) / Math.min(W, H);
-      var newSizeY = (pos.y - anchor.y) / Math.min(W, H);
-      square.s = Math.max(minS, Math.max(newSizeX, newSizeY));
-      clampSquare();
-    }}
-    draw();
+    applyDrag(getMousePos(t));
   }}, {{passive:false}});
 
+  canvas.addEventListener('touchend', endDrag);
+  img.onload = function() {{ draw(); }};
+  if (img.complete) draw();
+}})();
+</script>
+"""
+    return html
+
+
+def render_canvas_topo_dfov_rect(
+    img_b64,
+    storage_key,
+    color="#00D2FF",
+    titulo="Topograma",
+    default_y_ini=0.25,
+    default_y_fin=0.75,
+    default_x=0.15,
+    default_w=0.70,
+    canvas_css_width=300,
+    canvas_css_height=420,
+    canvas_width=600,
+    canvas_height=840,
+):
+    """Topograma con caja DFOV rectangular (no cuadrada), movible y
+    redimensionable desde las 4 esquinas o los 4 bordes. Misma UX que la
+    caja axial pero con ancho y alto independientes.
+
+    default_y_ini / default_y_fin: posiciones Y (0-1) del rect inicial.
+    Se toman, por ejemplo, de get_y_position_with_offset(inicio_recons) y
+    get_y_position_with_offset(fin_recons). Una vez que el usuario
+    interactúa, el estado queda en localStorage y los defaults se
+    ignoran."""
+    if not img_b64:
+        return None
+
+    # Sanear defaults
+    try:
+        y_ini = max(0.02, min(0.95, float(default_y_ini)))
+        y_fin = max(0.05, min(0.98, float(default_y_fin)))
+    except Exception:
+        y_ini, y_fin = 0.25, 0.75
+    if y_fin < y_ini:
+        y_ini, y_fin = y_fin, y_ini
+    d_y = y_ini
+    d_h = max(0.05, y_fin - y_ini)
+    d_x = max(0.02, min(0.9, float(default_x)))
+    d_w = max(0.08, min(0.95 - d_x, float(default_w)))
+
+    canvas_id = "canvas_" + storage_key
+
+    html = f"""
+<div style="text-align:center; margin:0;">
+  <div style="display:inline-block; font-size:14px; font-weight:600; color:#ddd; margin-bottom:4px;">
+    {titulo}
+  </div>
+  <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
+    style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+</div>
+<script>
+(function() {{
+  var imgB64 = {json.dumps(img_b64)};
+  var storageKey = {json.dumps('planitc_' + storage_key)};
+  var strokeColor = {json.dumps(color)};
+  var canvas = document.getElementById({json.dumps(canvas_id)});
+  if (!canvas) return;
+
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var img = new Image();
+  img.src = 'data:image/jpeg;base64,' + imgB64;
+
+  // Rectángulo en coordenadas normalizadas 0-1. x,y = esquina sup-izq.
+  var rect = {{ x: {d_x}, y: {d_y}, w: {d_w}, h: {d_h} }};
+
+  var dragMode = null;
+  var dragOffsetX = 0, dragOffsetY = 0;
+  var cornerTol = 18;
+  var edgeTol = 12;
+  var handleVisual = 10;
+  var minDim = 0.03;
+  var maxDim = 0.97;
+
+  function rgbaFromHex(hex, alpha) {{
+    if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
+    var h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(function(c) {{ return c + c; }}).join('');
+    if (h.length !== 6) return 'rgba(0,210,255,' + alpha + ')';
+    var r = parseInt(h.substring(0,2), 16);
+    var g = parseInt(h.substring(2,4), 16);
+    var b = parseInt(h.substring(4,6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }}
+
+  try {{
+    var saved = localStorage.getItem(storageKey);
+    if (saved) {{
+      var parsed = JSON.parse(saved);
+      if (parsed && parsed.rect) rect = parsed.rect;
+    }}
+  }} catch (e) {{}}
+
+  function saveState() {{
+    try {{
+      localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
+    }} catch (e) {{}}
+  }}
+
+  function clampRect() {{
+    rect.w = Math.max(minDim, Math.min(maxDim, rect.w));
+    rect.h = Math.max(minDim, Math.min(maxDim, rect.h));
+    rect.x = Math.max(0.01, Math.min(0.99 - rect.w, rect.x));
+    rect.y = Math.max(0.01, Math.min(0.99 - rect.h, rect.y));
+  }}
+
+  function getRectPx() {{
+    return {{ x: rect.x * W, y: rect.y * H, w: rect.w * W, h: rect.h * H }};
+  }}
+
+  function isInsideRect(mx, my, rp) {{
+    return mx >= rp.x && mx <= rp.x + rp.w && my >= rp.y && my <= rp.y + rp.h;
+  }}
+
+  function detectHandle(mx, my, rp) {{
+    var left = rp.x, right = rp.x + rp.w;
+    var top = rp.y, bottom = rp.y + rp.h;
+
+    var nearLeft = Math.abs(mx - left) <= cornerTol;
+    var nearRight = Math.abs(mx - right) <= cornerTol;
+    var nearTop = Math.abs(my - top) <= cornerTol;
+    var nearBottom = Math.abs(my - bottom) <= cornerTol;
+
+    if (nearLeft && nearTop) return 'tl';
+    if (nearRight && nearTop) return 'tr';
+    if (nearLeft && nearBottom) return 'bl';
+    if (nearRight && nearBottom) return 'br';
+
+    if (Math.abs(my - top) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 't';
+    if (Math.abs(my - bottom) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 'b';
+    if (Math.abs(mx - left) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'l';
+    if (Math.abs(mx - right) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'r';
+
+    if (isInsideRect(mx, my, rp)) return 'body';
+    return null;
+  }}
+
+  // Cada handle ajusta ancho/alto de forma independiente. No se fuerza
+  // aspecto (a diferencia de la caja axial cuadrada). La esquina/borde
+  // opuesto queda fijo.
+  function resizeFromHandle(handle, pos) {{
+    var left = rect.x * W;
+    var top = rect.y * H;
+    var wpx = rect.w * W;
+    var hpx = rect.h * H;
+    var right = left + wpx;
+    var bottom = top + hpx;
+    var minPxW = minDim * W;
+    var minPxH = minDim * H;
+
+    switch (handle) {{
+      case 'br': {{
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 'tl': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.x = nx / W;
+        rect.y = ny / H;
+        rect.w = (right - nx) / W;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'tr': {{
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.y = ny / H;
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'bl': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        rect.x = nx / W;
+        rect.w = (right - nx) / W;
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 't': {{
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.y = ny / H;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'b': {{
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 'l': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        rect.x = nx / W;
+        rect.w = (right - nx) / W;
+        break;
+      }}
+      case 'r': {{
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        break;
+      }}
+    }}
+    clampRect();
+  }}
+
+  function drawBaseImage() {{
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (img.width && img.height) {{
+      var scale = Math.min(W / img.width, H / img.height);
+      var drawW = img.width * scale;
+      var drawH = img.height * scale;
+      var dx = (W - drawW) / 2;
+      var dy = (H - drawH) / 2;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+    }}
+  }}
+
+  function drawRect() {{
+    clampRect();
+    var rp = getRectPx();
+    ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
+    ctx.fillRect(rp.x, rp.y, rp.w, rp.h);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+    ctx.strokeRect(rp.x, rp.y, rp.w, rp.h);
+    ctx.setLineDash([]);
+
+    var hs = handleVisual;
+    var cx = rp.x + rp.w / 2;
+    var cy = rp.y + rp.h / 2;
+    var points = [
+      [rp.x, rp.y], [rp.x + rp.w, rp.y],
+      [rp.x, rp.y + rp.h], [rp.x + rp.w, rp.y + rp.h],
+      [cx, rp.y], [cx, rp.y + rp.h],
+      [rp.x, cy], [rp.x + rp.w, cy],
+    ];
+    ctx.fillStyle = strokeColor;
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 1.5;
+    for (var i = 0; i < points.length; i++) {{
+      ctx.fillRect(points[i][0] - hs / 2, points[i][1] - hs / 2, hs, hs);
+      ctx.strokeRect(points[i][0] - hs / 2, points[i][1] - hs / 2, hs, hs);
+    }}
+  }}
+
+  function draw() {{
+    drawBaseImage();
+    drawRect();
+    saveState();
+  }}
+
+  function getMousePos(e) {{
+    var r = canvas.getBoundingClientRect();
+    return {{ x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }};
+  }}
+
+  function cursorForHandle(h) {{
+    if (h === 'tl' || h === 'br') return 'nwse-resize';
+    if (h === 'tr' || h === 'bl') return 'nesw-resize';
+    if (h === 't' || h === 'b') return 'ns-resize';
+    if (h === 'l' || h === 'r') return 'ew-resize';
+    if (h === 'body') return 'grab';
+    return 'default';
+  }}
+
+  function updateCursor(mx, my) {{
+    var rp = getRectPx();
+    canvas.style.cursor = cursorForHandle(detectHandle(mx, my, rp));
+  }}
+
+  function startDrag(pos) {{
+    var rp = getRectPx();
+    var h = detectHandle(pos.x, pos.y, rp);
+    if (!h) return;
+    if (h === 'body') {{
+      dragMode = 'body';
+      dragOffsetX = pos.x - rp.x;
+      dragOffsetY = pos.y - rp.y;
+      canvas.style.cursor = 'grabbing';
+    }} else {{
+      dragMode = h;
+      canvas.style.cursor = cursorForHandle(h);
+    }}
+  }}
+
+  function applyDrag(pos) {{
+    if (!dragMode) return;
+    if (dragMode === 'body') {{
+      rect.x = (pos.x - dragOffsetX) / W;
+      rect.y = (pos.y - dragOffsetY) / H;
+      clampRect();
+    }} else {{
+      resizeFromHandle(dragMode, pos);
+    }}
+    draw();
+  }}
+
+  canvas.addEventListener('mousedown', function(e) {{ startDrag(getMousePos(e)); }});
+  canvas.addEventListener('mousemove', function(e) {{
+    var pos = getMousePos(e);
+    if (!dragMode) updateCursor(pos.x, pos.y);
+    else applyDrag(pos);
+  }});
+  function endDrag() {{ dragMode = null; saveState(); }}
+  canvas.addEventListener('mouseup', endDrag);
+  canvas.addEventListener('mouseleave', endDrag);
+  canvas.addEventListener('touchstart', function(e) {{
+    e.preventDefault();
+    startDrag(getMousePos(e.touches[0]));
+  }}, {{passive:false}});
+  canvas.addEventListener('touchmove', function(e) {{
+    e.preventDefault();
+    if (dragMode) applyDrag(getMousePos(e.touches[0]));
+  }}, {{passive:false}});
   canvas.addEventListener('touchend', endDrag);
   img.onload = function() {{ draw(); }};
   if (img.complete) draw();
@@ -795,6 +1258,115 @@ def _render_sidebar_reconstruccion(adquisiciones_validas):
                 st.rerun()
 
 
+def _render_topogramas_de_adquisicion(exp, rec_actual):
+    """Muestra, en el panel derecho, el/los topograma(s) asociados a la
+    adquisición desde la que se está reconstruyendo, con una caja DFOV
+    rectangular arrastrable y redimensionable desde cualquier lado.
+
+    La caja se inicializa verticalmente en las posiciones Y que corresponden
+    a `inicio_recons` y `fin_recons` (usando la tabla POSICIONES_Y de
+    ui.adquisicion). Luego se persiste en localStorage por (reconstrucción,
+    topograma)."""
+    tstore = _get_topograma_set_for_exp(exp)
+    hay_topo1 = bool(tstore.get("topograma_iniciado", False))
+    hay_topo2 = bool(
+        tstore.get("aplica_topo2") and tstore.get("topograma2_iniciado", False)
+    )
+
+    _panel_header("🗺️", "Topogramas de la adquisición")
+
+    if not hay_topo1 and not hay_topo2:
+        st.info(
+            "Esta adquisición no tiene topograma iniciado. "
+            "Inícialo en la pestaña **Topograma** para verlo aquí."
+        )
+        return
+
+    try:
+        from ui.topograma import obtener_imagen_topograma_adquirido
+    except Exception as e:
+        st.warning(f"No se pudo cargar el módulo de topograma: {e}")
+        return
+
+    # Posiciones Y por referencia anatómica — se toman de ui.adquisicion
+    # para que la caja inicial caiga sobre la región correcta del topograma.
+    try:
+        from ui.adquisicion import get_y_position_with_offset
+        y_ini_default = get_y_position_with_offset(rec_actual.get("inicio_recons"), 0)
+        y_fin_default = get_y_position_with_offset(rec_actual.get("fin_recons"), 0)
+    except Exception:
+        y_ini_default, y_fin_default = 0.25, 0.75
+
+    color_rec = _color_exploracion(exp)
+
+    def _caption_topo(tubo, largo, etiqueta):
+        tubo_txt = tubo or "—"
+        largo_txt = f"{largo} mm" if largo not in (None, "", "Seleccionar") else "— mm"
+        return f"{etiqueta} · Tubo: {tubo_txt} · {largo_txt} · 100 kV · 40 mA"
+
+    def _mostrar_topo(img_pil, storage_suffix, titulo_html, caption):
+        """Renderiza un topograma PIL con su caja DFOV encima."""
+        if img_pil is None:
+            return
+        st.markdown(titulo_html, unsafe_allow_html=True)
+        img_b64 = _pil_to_b64_jpeg(img_pil, max_width=800)
+        if not img_b64:
+            st.image(img_pil, caption=caption, width=300)
+            return
+        html_topo = render_canvas_topo_dfov_rect(
+            img_b64=img_b64,
+            storage_key=f"recon_topo_rect_{rec_actual['id']}_{storage_suffix}",
+            color=color_rec,
+            titulo="Ajuste el DFOV",
+            default_y_ini=y_ini_default,
+            default_y_fin=y_fin_default,
+            canvas_css_width=300,
+            canvas_css_height=420,
+        )
+        if html_topo:
+            components.html(html_topo, height=470, scrolling=False)
+        else:
+            st.image(img_pil, width=300)
+        st.caption(caption)
+
+    if hay_topo1:
+        img1, err1 = obtener_imagen_topograma_adquirido(
+            tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("posicion") or "",
+            tstore.get("entrada") or "",
+            tstore.get("t1pt") or "",
+        )
+        if img1 is not None:
+            _mostrar_topo(
+                img1,
+                storage_suffix="topo1",
+                titulo_html="<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>"
+                             "✅ <b>Topograma 1</b></div>",
+                caption=_caption_topo(tstore.get("t1pt"), tstore.get("t1l"), "Topo 1"),
+            )
+        elif err1:
+            st.warning(f"Topograma 1: {err1}")
+
+    if hay_topo2:
+        img2, err2 = obtener_imagen_topograma_adquirido(
+            tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
+            tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
+            tstore.get("t2_posicion_tubo") or tstore.get("t2pt") or "",
+        )
+        if img2 is not None:
+            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
+            _mostrar_topo(
+                img2,
+                storage_suffix="topo2",
+                titulo_html="<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>"
+                             "✅ <b>Topograma 2</b></div>",
+                caption=_caption_topo(tstore.get("t2pt"), tstore.get("t2l"), "Topo 2"),
+            )
+        elif err2:
+            st.warning(f"Topograma 2: {err2}")
+
+
 def _render_panel_central(adquisiciones_validas):
     """Panel central: si hay reconstrucción seleccionada muestra sus parámetros;
     si no, muestra un resumen de la adquisición activa."""
@@ -849,9 +1421,13 @@ def _render_panel_central(adquisiciones_validas):
     region_anat = _get_region_group_for_exp(exp_activa)
     _panel_header("🔄", f"{rec_actual.get('nombre', 'Reconstrucción')} · {nombre_exp}")
 
-    col_img_param = st.columns([1.0, 1.15], gap="medium")
+    # Layout: izquierda = imagen axial + parámetros debajo
+    #         derecha  = topograma(s) de la adquisición asociada
+    col_axial_params, col_topos = st.columns([1.0, 1.0], gap="large")
 
-    with col_img_param[0]:
+    # ── Columna izquierda: imagen axial (DFOV) + parámetros debajo ──
+    with col_axial_params:
+        # Imagen con el cuadrado DFOV
         c_img_left, c_img_center, c_img_right = st.columns([0.08, 1.0, 0.08], gap="small")
         with c_img_center:
             img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
@@ -900,7 +1476,8 @@ def _render_panel_central(adquisiciones_validas):
                     st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
 
-    with col_img_param[1]:
+        # Parámetros debajo de la imagen
+        st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
         _panel_header("🔧", "Parámetros de Reconstrucción")
 
         col_pr1, col_pr2 = st.columns([1, 1], gap="small")
@@ -949,6 +1526,10 @@ def _render_panel_central(adquisiciones_validas):
             rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
         with col_fin:
             rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
+
+    # ── Columna derecha: topograma(s) de la adquisición asociada ──
+    with col_topos:
+        _render_topogramas_de_adquisicion(exp_activa, rec_actual)
 
     st.markdown("---")
     _panel_header("📝", "Resumen de reconstrucción activa")
