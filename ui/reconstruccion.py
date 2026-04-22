@@ -855,18 +855,30 @@ def _render_panel_central(adquisiciones_validas):
     with col_img_param[0]:
         c_img_left, c_img_center, c_img_right = st.columns([0.08, 1.0, 0.08], gap="small")
         with c_img_center:
-            imagen_recon = st.file_uploader(
-                "Subir imagen de reconstrucción",
-                type=["png", "jpg", "jpeg", "webp"],
-                key=f"img_recon_upload_{rec_actual['id']}",
-            )
-            if imagen_recon is not None:
-                st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
-                    "name": imagen_recon.name,
-                    "bytes": imagen_recon.getvalue(),
-                }
+            img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+
+            if img_guardada is None:
+                imagen_recon = st.file_uploader(
+                    "Subir imagen de reconstrucción",
+                    type=["png", "jpg", "jpeg", "webp"],
+                    key=f"img_recon_upload_{rec_actual['id']}",
+                )
+                if imagen_recon is not None:
+                    st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
+                        "name": imagen_recon.name,
+                        "bytes": imagen_recon.getvalue(),
+                    }
+                    st.rerun()
+
             img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
             if img_guardada is not None:
+                col_img_btn, col_img_sp = st.columns([1, 3], gap="small")
+                with col_img_btn:
+                    if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=True):
+                        st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
+                        st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
+                        st.rerun()
+
                 try:
                     img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
                     img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
