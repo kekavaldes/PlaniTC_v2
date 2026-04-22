@@ -360,7 +360,7 @@ def _color_reconstruccion(rec: dict) -> str:
 
 def _default_overlay_settings(ref_id: str, img_idx: int):
     return {
-        "show_ranges": True,
+        "show_ranges": False,
         "range_count": 3,
         "angle_deg": 0,
         "show_refs": True,
@@ -379,7 +379,7 @@ def _ensure_image_state(ref_id: str):
     for idx in (1, 2, 3):
         store[ref_id].setdefault(f"img{idx}", None)
         overlay = store[ref_id].setdefault(f"overlay{idx}", _default_overlay_settings(ref_id, idx))
-        overlay.setdefault("show_ranges", True)
+        overlay.setdefault("show_ranges", False)
         overlay.setdefault("range_count", 3)
         overlay.setdefault("angle_deg", 0)
         overlay.setdefault("show_refs", True)
@@ -430,10 +430,13 @@ def _overlay_canvas_html(
         refs_cfg.append({"enabled": False, "text": ""})
     html = f"""
 <div style="text-align:center; margin:0;">
-  <div id="toolbar_{storage_key}" style="width:{css_width}px; margin:0 auto 10px auto; display:flex; gap:8px; justify-content:flex-start; align-items:center;">
+  <div id="toolbar_{storage_key}" style="width:{css_width}px; margin:0 auto 10px auto; display:flex; gap:8px; justify-content:flex-start; align-items:center; flex-wrap:wrap;">
+    <div style="color:#d7d7d7; font-size:13px; font-weight:700; margin-right:4px;">Referencia anatómica</div>
     <button id="btn_{storage_key}_r1" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R1</button>
     <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R2</button>
     <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R3</button>
+    <div style="width:14px;"></div>
+    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">Cortes</button>
   </div>
   <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
     <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
@@ -468,7 +471,7 @@ def _overlay_canvas_html(
   var storageKey = {json.dumps('planitc_ref_' + storage_key)};
   var acqColor = {json.dumps(acq_color)};
   var recColor = {json.dumps(rec_color)};
-  var showRanges = {json.dumps(bool(settings.get('show_ranges', True)))};
+  var showRanges = {json.dumps(bool(settings.get('show_ranges', False)))};
   var defaultRangeCount = {json.dumps(int(settings.get('range_count', 3)))};
   var defaultAngleDeg = {json.dumps(float(settings.get('angle_deg', 0)))};
   var refsCfg = {json.dumps(refs_cfg)};
@@ -541,6 +544,7 @@ def _overlay_canvas_html(
     document.getElementById({json.dumps('btn_' + storage_key + '_r2')}),
     document.getElementById({json.dumps('btn_' + storage_key + '_r3')}),
   ];
+  var cutsBtn = document.getElementById({json.dumps('btn_' + storage_key + '_cuts')});
 
   function saveState() {{
     try {{
@@ -704,6 +708,11 @@ def _overlay_canvas_html(
       refBtns[i].style.background = state.refs[i].enabled ? recColor : 'rgba(0,0,0,0.65)';
       refBtns[i].style.color = '#fff';
       refBtns[i].style.borderColor = recColor;
+    }}
+    if (cutsBtn) {{
+      cutsBtn.style.background = showRanges ? acqColor : 'rgba(0,0,0,0.65)';
+      cutsBtn.style.color = '#fff';
+      cutsBtn.style.borderColor = acqColor;
     }}
   }}
 
@@ -907,6 +916,14 @@ def _overlay_canvas_html(
     if (state.drag) saveState();
     state.drag = null;
   }});
+
+  if (cutsBtn) {{
+    cutsBtn.addEventListener('click', function() {{
+      showRanges = !showRanges;
+      saveState();
+      drawImage();
+    }});
+  }}
 
   for (let i = 0; i < 3; i++) {{
     if (refBtns[i]) {{
