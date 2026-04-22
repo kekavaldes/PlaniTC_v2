@@ -426,14 +426,19 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
   var LINE_LEN = Math.max(W, H) * 0.42;
   var MIN_RANGES = 1;
   var MAX_RANGES = 15;
-  var ROT_HIT = 18;          // radio de hit en manijas rotación
-  var EXT_HIT = 16;          // radio de hit en manijas extensión
+  var ROT_HIT = 22;          // radio de hit en manijas rotación
+  var EXT_HIT = 18;          // radio de hit en manijas extensión (cantidad de líneas)
+  var LEN_HIT = 18;          // radio de hit en manijas de largo
+  var HANDLE_OFFSET = 26;    // separa manijas de rotación del haz para que no se oculten
+  var MIN_LINE_LEN = Math.max(W, H) * 0.14;
+  var MAX_LINE_LEN = Math.max(W, H) * 0.62;
   var minDim = Math.min(W, H);
 
   var state = {{
     linesOffset: 0,                              // offset perpendicular (normalizado)
     rangeCount: defaultRangeCount,               // override local, integer
     angleDeg: defaultAngleDeg,                   // override local, float
+    lineLen: LINE_LEN,                           // largo editable del corte
     savedDefaultRange: defaultRangeCount,        // para detectar cambios del slider
     savedDefaultAngle: defaultAngleDeg,
     refs: [
@@ -460,6 +465,9 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
       if (parsed && parsed.savedDefaultAngle === defaultAngleDeg && typeof parsed.angleDeg === 'number') {{
         state.angleDeg = parsed.angleDeg;
       }}
+      if (parsed && typeof parsed.lineLen === 'number') {{
+        state.lineLen = Math.max(MIN_LINE_LEN, Math.min(MAX_LINE_LEN, parsed.lineLen));
+      }}
     }}
   }} catch(e) {{}}
 
@@ -470,6 +478,7 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
         linesOffset: state.linesOffset,
         rangeCount: state.rangeCount,
         angleDeg: state.angleDeg,
+        lineLen: state.lineLen,
         savedDefaultRange: state.savedDefaultRange,
         savedDefaultAngle: state.savedDefaultAngle
       }}));
@@ -501,15 +510,24 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
   }}
 
   function drawHandles(g) {{
-    // Manijas de rotación en los extremos de la LÍNEA CENTRAL del haz
-    var rotA = {{x: g.cx - g.dx * LINE_LEN, y: g.cy - g.dy * LINE_LEN}};
-    var rotB = {{x: g.cx + g.dx * LINE_LEN, y: g.cy + g.dy * LINE_LEN}};
-    // Manijas de extensión en el centro de la PRIMERA y ÚLTIMA línea
+    var liveLineLen = state.lineLen;
+    // Manijas de rotación separadas del haz, para que sigan visibles aunque quede perpendicular
+    var rotA = {{x: g.cx - g.dx * liveLineLen - g.nx * HANDLE_OFFSET, y: g.cy - g.dy * liveLineLen - g.ny * HANDLE_OFFSET}};
+    var rotB = {{x: g.cx + g.dx * liveLineLen + g.nx * HANDLE_OFFSET, y: g.cy + g.dy * liveLineLen + g.ny * HANDLE_OFFSET}};
+
+    // Manijas de extensión en el centro de la primera y última línea (cambia cantidad de líneas)
     var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
-    if (state.rangeCount === 1) halfSpan = SPACING;  // para poder "agarrar" aunque haya 1 sola
+    if (state.rangeCount === 1) halfSpan = SPACING;
     var extA = {{x: g.cx - g.nx * halfSpan, y: g.cy - g.ny * halfSpan}};
     var extB = {{x: g.cx + g.nx * halfSpan, y: g.cy + g.ny * halfSpan}};
-    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, halfSpan:halfSpan}};
+
+    // Manijas de largo en los 4 extremos del bloque externo
+    var lenA1 = {{x: g.cx - g.nx * halfSpan - g.dx * liveLineLen, y: g.cy - g.ny * halfSpan - g.dy * liveLineLen}};
+    var lenA2 = {{x: g.cx + g.nx * halfSpan - g.dx * liveLineLen, y: g.cy + g.ny * halfSpan - g.dy * liveLineLen}};
+    var lenB1 = {{x: g.cx - g.nx * halfSpan + g.dx * liveLineLen, y: g.cy - g.ny * halfSpan + g.dy * liveLineLen}};
+    var lenB2 = {{x: g.cx + g.nx * halfSpan + g.dx * liveLineLen, y: g.cy + g.ny * halfSpan + g.dy * liveLineLen}};
+
+    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan}};
 
     // Rotación: círculo amarillo
     ctx.fillStyle = '#FFD700';
@@ -517,7 +535,7 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     ctx.lineWidth = 2;
     [rotA, rotB].forEach(function(p) {{
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
       ctx.fill(); ctx.stroke();
     }});
 
@@ -526,6 +544,15 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     ctx.strokeStyle = '#1a1a1a';
     drawTriangle(extA.x, extA.y, -g.nx, -g.ny, 11);
     drawTriangle(extB.x, extB.y, g.nx, g.ny, 11);
+
+    // Largo: cuadrados celestes en los bordes del bloque
+    ctx.fillStyle = '#7FDBFF';
+    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{
+      ctx.beginPath();
+      ctx.rect(p.x - 7, p.y - 7, 14, 14);
+      ctx.fill();
+      ctx.stroke();
+    }});
   }}
 
   function drawTriangle(cx, cy, dirX, dirY, size) {{
@@ -560,8 +587,8 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     for (var i=0; i<state.rangeCount; i++) {{
       var off = (i - (state.rangeCount-1)/2) * SPACING;
       var ox = g.nx*off, oy = g.ny*off;
-      var x1 = g.cx + ox - g.dx*LINE_LEN, y1 = g.cy + oy - g.dy*LINE_LEN;
-      var x2 = g.cx + ox + g.dx*LINE_LEN, y2 = g.cy + oy + g.dy*LINE_LEN;
+      var x1 = g.cx + ox - g.dx*state.lineLen, y1 = g.cy + oy - g.dy*state.lineLen;
+      var x2 = g.cx + ox + g.dx*state.lineLen, y2 = g.cy + oy + g.dy*state.lineLen;
       ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
@@ -632,6 +659,8 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     if (Math.hypot(pos.x-h.rotB.x, pos.y-h.rotB.y) < ROT_HIT) return {{type:'rot', side:'b'}};
     if (Math.hypot(pos.x-h.extA.x, pos.y-h.extA.y) < EXT_HIT) return {{type:'ext', side:'a'}};
     if (Math.hypot(pos.x-h.extB.x, pos.y-h.extB.y) < EXT_HIT) return {{type:'ext', side:'b'}};
+    if (Math.hypot(pos.x-h.lenA1.x, pos.y-h.lenA1.y) < LEN_HIT || Math.hypot(pos.x-h.lenA2.x, pos.y-h.lenA2.y) < LEN_HIT) return {{type:'len', side:'a'}};
+    if (Math.hypot(pos.x-h.lenB1.x, pos.y-h.lenB1.y) < LEN_HIT || Math.hypot(pos.x-h.lenB2.x, pos.y-h.lenB2.y) < LEN_HIT) return {{type:'len', side:'b'}};
     return null;
   }}
 
@@ -642,14 +671,20 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     var along = dxp*g.dx + dyp*g.dy;
     var perp = dxp*g.nx + dyp*g.ny;
     var halfSpan = Math.max(SPACING*0.5, ((state.rangeCount-1)/2) * SPACING);
-    return Math.abs(perp) < halfSpan + 6 && Math.abs(along) < LINE_LEN;
+    return Math.abs(perp) < halfSpan + 8 && Math.abs(along) < state.lineLen;
   }}
 
   function setCursorFor(pos) {{
     if (hitRef(pos)) {{ canvas.style.cursor = 'grab'; return; }}
     var bh = hitBeamHandle(pos);
     if (bh) {{
-      canvas.style.cursor = (bh.type === 'rot') ? 'grab' : (bh.side === 'a' ? 'nw-resize' : 'se-resize');
+      if (bh.type === 'rot') {{
+        canvas.style.cursor = 'grab';
+      }} else if (bh.type === 'ext') {{
+        canvas.style.cursor = (bh.side === 'a' ? 'nw-resize' : 'se-resize');
+      }} else {{
+        canvas.style.cursor = 'ew-resize';
+      }}
       return;
     }}
     if (hitInsideBeam(pos)) {{ canvas.style.cursor = 'move'; return; }}
@@ -696,6 +731,10 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
         var perp = Math.abs(dxp2*g.nx + dyp2*g.ny);
         var n = Math.round((2 * perp) / SPACING) + 1;
         state.rangeCount = Math.max(MIN_RANGES, Math.min(MAX_RANGES, n));
+      }} else if (state.drag.sub === 'len') {{
+        var dxpLen = pos.x - g.cx, dypLen = pos.y - g.cy;
+        var alongLen = Math.abs(dxpLen*g.dx + dypLen*g.dy);
+        state.lineLen = Math.max(MIN_LINE_LEN, Math.min(MAX_LINE_LEN, alongLen));
       }} else if (state.drag.sub === 'move') {{
         var dxp3 = pos.x - W/2, dyp3 = pos.y - H/2;
         var newOff = (dxp3*g.nx + dyp3*g.ny) / minDim;
@@ -780,6 +819,7 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
         st.caption(
             "🟡 Arrastra los círculos amarillos para rotar · "
             "▶ Triángulos blancos para agregar o quitar líneas · "
+            "🟦 Cuadrados celestes para alargar o acortar los cortes · "
             "Área interior para mover el haz."
         )
     except Exception as e:
