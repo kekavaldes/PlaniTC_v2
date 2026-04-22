@@ -1508,24 +1508,63 @@ def _render_panel_central(adquisiciones_validas):
     _panel_header("🔧", "Parámetros de Reconstrucción")
 
     col_pr1, col_pr2, col_pr3 = st.columns([1, 1, 1], gap="small")
+
     with col_pr1:
-        rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}_c1", value=rec_actual.get("fase_recons"))
-        rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}_c1", value=rec_actual.get("kernel_sel"))
+        rec_actual["fase_recons"] = selectbox_con_placeholder(
+            "Fase a reconstruir",
+            FASES_RECONS,
+            key=f"fase_recons_{rec_actual['id']}_pr1",
+            value=rec_actual.get("fase_recons"),
+        )
+        rec_actual["kernel_sel"] = selectbox_con_placeholder(
+            "Algoritmo (Kernel)",
+            KERNELS,
+            key=f"kernel_sel_{rec_actual['id']}_pr1",
+            value=rec_actual.get("kernel_sel"),
+        )
 
     with col_pr2:
-        rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}_c2", value=rec_actual.get("tipo_recons"))
-        rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}_c2", value=rec_actual.get("grosor_recons"))
+        rec_actual["tipo_recons"] = selectbox_con_placeholder(
+            "Tipo de reconstrucción",
+            TIPOS_RECONS,
+            key=f"tipo_recons_{rec_actual['id']}_pr2",
+            value=rec_actual.get("tipo_recons"),
+        )
+        rec_actual["grosor_recons"] = selectbox_con_placeholder(
+            "Grosor reconstrucción",
+            GROSORES_RECONS,
+            key=f"grosor_recons_{rec_actual['id']}_pr2",
+            value=rec_actual.get("grosor_recons"),
+        )
 
     with col_pr3:
         if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-            rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}_c3", value=rec_actual.get("algoritmo_iter"))
+            rec_actual["algoritmo_iter"] = selectbox_con_placeholder(
+                "Algoritmo iterativo",
+                ALGORITMOS_ITERATIVOS,
+                key=f"alg_iter_{rec_actual['id']}_pr3",
+                value=rec_actual.get("algoritmo_iter"),
+            )
             niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
-            rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}_c3", value=rec_actual.get("nivel_iter"))
+            rec_actual["nivel_iter"] = selectbox_con_placeholder(
+                "Nivel / Porcentaje / Modo",
+                niveles_disp,
+                key=f"nivel_iter_{rec_actual['id']}_pr3",
+                value=rec_actual.get("nivel_iter"),
+            )
         else:
-            st.markdown("<div style='height:0.15rem;'></div>", unsafe_allow_html=True)
+            rec_actual["algoritmo_iter"] = "—"
+            rec_actual["nivel_iter"] = "—"
+            st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
             st.caption("Algoritmo iterativo no aplica")
-            st.caption("Nivel iterativo no aplica")
-        rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}_c3", value=rec_actual.get("incremento"))
+            st.markdown("<div style='height:1.65rem;'></div>", unsafe_allow_html=True)
+
+        rec_actual["incremento"] = selectbox_con_placeholder(
+            "Incremento",
+            INCREMENTOS_RECONS,
+            key=f"incremento_{rec_actual['id']}_pr3",
+            value=rec_actual.get("incremento"),
+        )
 
     _panel_header("🪟", "Ventana de Visualización")
     ventanas_disp = list(VENTANAS.keys())
@@ -1539,12 +1578,38 @@ def _render_panel_central(adquisiciones_validas):
 
     col_v1, col_v2, col_v3 = st.columns([1, 1, 1], gap="small")
     with col_v1:
-        rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}_c1", value=rec_actual.get("ventana_preset"))
+        rec_actual["ventana_preset"] = selectbox_con_placeholder(
+            "Preset de ventana",
+            ventanas_disp,
+            key=f"preset_ventana_{rec_actual['id']}_vv1",
+            value=rec_actual.get("ventana_preset"),
+        )
+
     with col_v2:
-        rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}_c2")
+        rec_actual["ww_val"] = st.number_input(
+            "WW",
+            min_value=1,
+            max_value=5000,
+            value=int(rec_actual.get("ww_val", ww_default)),
+            step=1,
+            key=f"ww_{rec_actual['id']}_vv2",
+        )
+
     with col_v3:
-        rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}_c3")
-        rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}_c3", value=rec_actual.get("dfov"))
+        rec_actual["wl_val"] = st.number_input(
+            "WL",
+            min_value=-1500,
+            max_value=3000,
+            value=int(rec_actual.get("wl_val", wl_default)),
+            step=1,
+            key=f"wl_{rec_actual['id']}_vv3",
+        )
+        rec_actual["dfov"] = selectbox_con_placeholder(
+            "DFOV",
+            DFOV_OPCIONES,
+            key=f"dfov_{rec_actual['id']}_vv3",
+            value=rec_actual.get("dfov"),
+        )
 
     _panel_header("📍", "Rango de Reconstrucción")
     refs_ini_r = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
