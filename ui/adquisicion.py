@@ -1547,10 +1547,10 @@ def _render_topogramas_adq(exp, es_bolus):
                     color=color_exp,
                     show_labels=False,
                     roi_label="ROI",
-                    canvas_css_width=380,
-                    canvas_css_height=260,
-                    canvas_width=760,
-                    canvas_height=520,
+                    canvas_css_width=500,
+                    canvas_css_height=300,
+                    canvas_width=980,
+                    canvas_height=600,
                 )
             except Exception:
                 html_roi_corte = None
