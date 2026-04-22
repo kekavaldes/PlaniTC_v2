@@ -1,60 +1,182 @@
-import uuid
+import copy
 import io
 import json
 import base64
-import hashlib
 
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
-TIPOS_REFORMACION = ["MPR", "MIP", "MinIP", "VR"]
-SUBTIPOS = {
-    "MPR": None,
-    "MIP": ["Grueso", "Fino"],
-    "MinIP": None,
-    "VR": None,
-}
-PARAMS_POR_TIPO = {
-    ("MPR", None): ["plano", "grosor", "distancia"],
-    ("MIP", "Grueso"): ["n_vistas", "angulo"],
-    ("MIP", "Fino"): ["plano", "grosor", "distancia"],
-    ("MinIP", None): ["grosor", "distancia"],
-    ("VR", None): ["n_vistas", "angulo"],
-}
-PARAMS_OPCIONES = {
-    "plano": ["AXIAL", "CORONAL", "SAGITAL", "CURVO"],
-    "grosor": ["1 mm", "2 mm", "3 mm", "4 mm", "5 mm", "7 mm", "10 mm"],
-    "distancia": ["0,5 mm", "1 mm", "2 mm", "3 mm", "5 mm"],
-    "n_vistas": [6, 8, 10, 12, 15, 18, 24, 30, 36, 60, 72],
-    "angulo": ["5°", "10°", "12°", "15°", "20°", "30°", "45°", "60°"],
-}
-PARAMS_LABELS = {
-    "plano": "Plano",
-    "grosor": "Grosor",
-    "distancia": "Distancia entre imágenes",
-    "n_vistas": "N° de vistas",
-    "angulo": "Ángulo entre vistas",
+
+def _inject_recon_css():
+    st.markdown(
+        """
+        <style>
+        /* Botones de reconstrucción más bajos */
+        div[data-testid="stButton"] > button[kind] {
+            white-space: nowrap !important;
+            padding-top: 0.30rem !important;
+            padding-bottom: 0.30rem !important;
+            min-height: 2.0rem !important;
+            font-size: 0.82rem !important;
+            line-height: 1.05 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        div[data-testid="stButton"] > button[kind] p {
+            font-size: 0.82rem !important;
+            line-height: 1.05 !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            color: white !important;
+        }
+
+        /* Botones ✕ de eliminar (tertiary) */
+        button[kind="tertiary"] {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            min-height: 2.25rem !important;
+            height: 2.25rem !important;
+            width: 2.25rem !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            font-size: 1.05rem !important;
+            color: #d8d8d8 !important;
+        }
+        button[kind="tertiary"]:hover {
+            background: rgba(255,255,255,0.06) !important;
+            color: white !important;
+        }
+        button[kind="tertiary"] p {
+            margin: 0 !important;
+            line-height: 1 !important;
+            font-size: 1.05rem !important;
+        }
+
+        /* Botón + Reconstrucción — gris más claro (identificado por st-key) */
+        .st-key-rec_btn_add_recon button[kind="secondary"],
+        div.stApp .st-key-rec_btn_add_recon button[kind="secondary"] {
+            background-color: #6b6f7a !important;
+            background: #6b6f7a !important;
+            border: 1px solid #80848f !important;
+            color: #ffffff !important;
+            box-sizing: border-box !important;
+            min-height: 2.75rem !important;
+            height: 2.75rem !important;
+            max-height: 2.75rem !important;
+            font-size: 0.9rem !important;
+            padding: 0 1rem !important;
+            line-height: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        .st-key-rec_btn_add_recon button[kind="secondary"]:hover,
+        div.stApp .st-key-rec_btn_add_recon button[kind="secondary"]:hover {
+            background-color: #7c808a !important;
+            background: #7c808a !important;
+            border-color: #90949e !important;
+            color: #ffffff !important;
+        }
+        .st-key-rec_btn_add_recon button[kind="secondary"] p,
+        .st-key-rec_btn_add_recon button[kind="secondary"] span,
+        .st-key-rec_btn_add_recon button[kind="secondary"] div {
+            font-size: 0.9rem !important;
+            line-height: 1 !important;
+            color: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Selects y number inputs un poco más angostos visualmente */
+        div[data-testid="stSelectbox"] > div,
+        div[data-testid="stNumberInput"] > div {
+            max-width: 260px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+REFS_INICIO = {
+    "CABEZA": ["VERTEX", "SOBRE SENO FRONTAL", "TECHO ORBITARIO", "CAE",
+                "PISO ORBITARIO", "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR",
+                "BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO"],
+    "CUELLO": ["TECHO ORBITARIO", "CAE", "ARCO AÓRTICO"],
+    "EESS": ["SOBRE ART. ACROMIOCLAV.", "BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO",
+              "TERCIO PROXIMAL RADIO-CUBITO", "TERCIO PROXIMAL MTC", "COMPLETAR FALANGES DISTALES"],
+    "COLUMNA": ["CAE", "SOBRE BASE DE CRÁNEO", "C6-C7", "T1-T2", "T11-T12", "L1-L2", "L4-L5", "S1-S2"],
+    "CUERPO": ["SOBRE ÁPICES PULMONARES", "SOBRE CÚPULAS DIAF.", "ARCO AÓRTICO",
+               "BAJO ANGULOS COSTOFR.", "L5-S1"],
+    "EEII": ["EIAS", "TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+             "TERCIO PROXIMAL TIBIA-PERONÉ", "TERCIO DISTAL TIBIA-PERONÉ",
+             "BAJO CALCÁNEO", "HASTA COMPLETAR ORTEJOS"],
+    "ANGIO": ["SOBRE ÁPICES PULMONARES", "ARCO AÓRTICO", "SOBRE CÚPULAS DIAF.",
+              "BAJO ANGULOS COSTOFR.", "L5-S1", "COMPLETAR FALANGE DISTAL"],
 }
 
-EXPLORACION_COLORS = [
-    "#00D2FF", "#FFB000", "#7CFF6B", "#FF5CA8",
-    "#A78BFA", "#FF7A59", "#5EEAD4", "#FACC15",
+REFS_FIN = {
+    "CABEZA": ["BAJO BASE DE CRÁNEO", "MENTON", "ARCO AÓRTICO", "PISO ORBITARIO",
+                "SOBRE REGION PETROSA", "ARCADA DENTARIA SUPERIOR"],
+    "CUELLO": ["CAE", "ARCO AÓRTICO", "MENTON"],
+    "EESS": ["BAJO ESCÁPULA", "TERCIO DISTAL HÚMERO", "TERCIO PROXIMAL MTC",
+              "COMPLETAR FALANGES DISTALES"],
+    "COLUMNA": ["SOBRE BASE DE CRÁNEO", "T1-T2", "T11-T12", "L4-L5", "S1-S2",
+                "1 CM BAJO COXIS", "L5-S1"],
+    "CUERPO": ["SOBRE CÚPULAS DIAF.", "BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA"],
+    "EEII": ["TERCIO PROXIMAL FEMUR", "TERCIO DISTAL FEMUR",
+             "TERCIO PROXIMAL TIBIA-PERONÉ", "BAJO CALCÁNEO",
+             "HASTA COMPLETAR ORTEJOS", "COMPLETAR ORTEJOS"],
+    "ANGIO": ["BAJO ANGULOS COSTOFR.", "L5-S1", "BAJO PELVIS OSEA",
+              "COMPLETAR FALANGE DISTAL", "COMPLETAR ORTEJOS"],
+}
+
+FASES_RECONS = [
+    "SIN CONTRASTE", "ARTERIAL", "VENOSA", "TARDIA",
+    "ANGIOGRÁFICA", "REPOSO", "VALSALVA", "INSPIRACIÓN", "ESPIRACIÓN",
 ]
-RECON_COLOR_DEFAULT = "#FFFFFF"
+
+TIPOS_RECONS = ["RETROP. FILTRADA", "RECONS. ITERATIVA"]
+ALGORITMOS_ITERATIVOS = ["SAFIRE", "ADMIRE", "iDOSE", "ASIR-V", "AIDR-3D", "VEO"]
+
+NIVEL_ITERATIVO = {
+    "SAFIRE": [1, 2, 3, 4, 5],
+    "ADMIRE": [1, 2, 3, 4, 5],
+    "iDOSE": [1, 2, 3, 4, 5, 6, 7],
+    "ASIR-V": ["0 (%)", "10 (%)", "20 (%)", "30 (%)", "40 (%)", "50 (%)", "60 (%)", "70 (%)", "80 (%)", "90 (%)"],
+    "AIDR-3D": ["Mild", "Standard", "Strong"],
+    "VEO": ["—"],
+}
+
+KERNELS = ["SUAVE 20f", "STANDARD 30f", "DEFINIDO 60f", "ULTRADEFINIDO 80f"]
+GROSORES_RECONS = ["0,6 mm", "0,625 mm", "1 mm", "1,2 mm", "1,25 mm", "1,5 mm", "2 mm", "3 mm", "4 mm", "5 mm"]
+INCREMENTOS_RECONS = ["0,3 mm", "0,5 mm", "0,6 mm", "0,75 mm", "1 mm", "1,5 mm", "2 mm", "2,5 mm"]
+
+VENTANAS = {
+    "PULMONAR": {"ww": 1500, "wl": -600},
+    "PARTES BLANDAS": {"ww": 400, "wl": 40},
+    "CEREBRO": {"ww": 80, "wl": 35},
+    "OSEO": {"ww": 2000, "wl": 400},
+    "ANGIOGRÁFICA": {"ww": 600, "wl": 150},
+}
+
+DFOV_OPCIONES = ["Mayor al SFOV", "Igual a SFOV", "Menor a SFOV"]
 
 
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
-    opciones = ["Seleccionar"] + [str(o) for o in options]
-    val_str = str(value) if value is not None else None
-    idx = opciones.index(val_str) if val_str in opciones else 0
+    opciones = ["Seleccionar"] + list(options)
+    idx = opciones.index(value) if value in options else 0
     val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
-    if val == "Seleccionar":
-        return None
-    for o in options:
-        if str(o) == val:
-            return o
-    return val
+    return None if val == "Seleccionar" else val
 
 
 def _panel_header(emoji: str, titulo: str):
@@ -81,1145 +203,1435 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
-def _inject_sidebar_css():
+def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
     st.markdown(
-        """
-        <style>
-        section[data-testid="stVerticalBlock"] h3:first-of-type {
-            font-size: 1.15rem !important;
-            margin-bottom: 0.6rem !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-            line-height: 1.2 !important;
-        }
-        button[kind="tertiary"] {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            min-height: 2.25rem !important;
-            height: 2.25rem !important;
-            width: 2.25rem !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border-radius: 8px !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            line-height: 1 !important;
-            font-size: 1.05rem !important;
-            color: #d8d8d8 !important;
-        }
-        button[kind="tertiary"]:hover {
-            background: rgba(255,255,255,0.06) !important;
-            color: white !important;
-        }
-        div[data-testid="stButton"] > button[kind="secondary"],
-        div[data-testid="stButton"] > button[kind="primary"] {
-            min-height: 2.4rem !important;
-            padding-top: 0.45rem !important;
-            padding-bottom: 0.45rem !important;
-            padding-left: 0.7rem !important;
-            padding-right: 0.7rem !important;
-            font-size: 0.85rem !important;
-            line-height: 1.25 !important;
-            white-space: normal !important;
-            text-align: center !important;
-        }
-        .st-key-ref_btn_add_ref button[kind="secondary"],
-        div.stApp .st-key-ref_btn_add_ref button[kind="secondary"] {
-            background-color: #6b6f7a !important;
-            border: 1px solid #80848f !important;
-            color: #ffffff !important;
-            min-height: 2.75rem !important;
-            height: 2.75rem !important;
-            font-size: 0.9rem !important;
-            padding: 0 1rem !important;
-        }
-        </style>
+        f"""
+        <div style="
+            border:1px solid {color};
+            border-radius:12px;
+            height:0.22rem;
+            background:{color};
+            margin-bottom:0.45rem;
+        "></div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _pil_to_b64_jpeg(img, max_width=1200):
+
+def _pil_to_b64_jpeg(img, max_width=900):
     if img is None:
         return None
-    im = img.copy()
-    if im.mode not in ("RGB", "L"):
-        im = im.convert("RGB")
-    elif im.mode == "L":
-        im = im.convert("RGB")
-    if max_width and im.width > max_width:
-        ratio = max_width / float(im.width)
-        im = im.resize((int(im.width * ratio), int(im.height * ratio)))
-    buf = io.BytesIO()
-    im.save(buf, format="JPEG", quality=92)
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
-
-
-def _new_id() -> str:
-    return f"ref_{uuid.uuid4().hex[:8]}"
-
-
-def _next_order() -> int:
-    st.session_state["_ref_next_order"] = int(st.session_state.get("_ref_next_order", 0)) + 1
-    return st.session_state["_ref_next_order"]
-
-
-def _init_state():
-    st.session_state.setdefault("reformaciones_por_rec", {})
-    st.session_state.setdefault("_ref_rec_order", {})
-    st.session_state.setdefault("ref_activa", None)
-    st.session_state.setdefault("imagenes_ref_por_id", {})
-
-
-def _crear_reformacion_base(rec_id: str) -> dict:
-    return {
-        "id": _new_id(),
-        "rec_id": rec_id,
-        "order": _next_order(),
-        "tipo": None,
-        "subtipo": None,
-        "plano": None,
-        "grosor": None,
-        "distancia": None,
-        "n_vistas": None,
-        "angulo": None,
-    }
-
-
-def _reconstruccion_completada(rec) -> bool:
-    img_ok = bool(st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id")))
-    campos = [
-        rec.get("fase_recons"), rec.get("tipo_recons"), rec.get("kernel_sel"),
-        rec.get("grosor_recons"), rec.get("incremento"), rec.get("ventana_preset"), rec.get("dfov"),
-    ]
-    params_ok = all(v not in (None, "", "Seleccionar") for v in campos)
-    return img_ok and params_ok
-
-
-def _get_region_label_for_exp_ref(exp: dict) -> str:
-    """Obtiene el nombre del examen/región asociado a la exploración para
-    mostrarlo junto al nombre de la reconstrucción en Reformaciones."""
-    if not isinstance(exp, dict):
-        return ""
-
-    # 1) Intentar desde el set de topogramas asociado a la exploración
-    sets = st.session_state.get("topograma_sets", []) or []
-    topo_idx = exp.get("topo_set_idx", 0)
     try:
-        if 0 <= int(topo_idx) < len(sets):
-            topo = sets[int(topo_idx)] or {}
-            region = topo.get("examen") or topo.get("region_anat") or topo.get("region") or ""
-            if region:
-                return str(region).strip()
+        im = img.copy()
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        elif im.mode == "L":
+            im = im.convert("RGB")
+        if max_width and im.width > max_width:
+            ratio = max_width / float(im.width)
+            im = im.resize((int(im.width * ratio), int(im.height * ratio)))
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=92)
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception:
-        pass
-
-    # 2) Fallback directo desde la propia exploración
-    region = exp.get("examen") or exp.get("region_anat") or exp.get("region") or ""
-    if region:
-        return str(region).strip()
-
-    # 3) Último fallback: store legado
-    topo_store = st.session_state.get("topograma_store", {}) or {}
-    region = topo_store.get("examen") or topo_store.get("region_anat") or topo_store.get("region") or ""
-    return str(region).strip() if region else ""
+        return None
 
 
-def _obtener_reconstrucciones_planas():
-    recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
-    exploraciones = st.session_state.get("exploraciones", []) or []
-    nombre_por_exp_id = {}
-    for idx, exp in enumerate(exploraciones, start=1):
-        if not isinstance(exp, dict):
-            continue
-        eid = exp.get("id") or f"exp_{idx}"
-        nombre_base = exp.get("nombre") or f"Exploración {idx}"
-        region = _get_region_label_for_exp_ref(exp)
-        nombre_por_exp_id[eid] = f"{region} · {nombre_base}" if region else nombre_base
-
-    resultado = []
-    for exp_id, lista_recons in recons_map.items():
-        if not isinstance(lista_recons, list):
-            continue
-        for rec in lista_recons:
-            if not isinstance(rec, dict):
-                continue
-            rid = rec.get("id")
-            if not rid or not _reconstruccion_completada(rec):
-                continue
-            resultado.append({
-                "id": rid,
-                "nombre": rec.get("nombre") or "Reconstrucción",
-                "exp_id": exp_id,
-                "exp_nombre": nombre_por_exp_id.get(exp_id, exp_id),
-                "rec": rec,
-            })
-            if rid not in st.session_state["_ref_rec_order"]:
-                st.session_state["_ref_rec_order"][rid] = _next_order()
-    return resultado
-
-
-def _contar_reconstrucciones_totales() -> int:
-    recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
-    total = 0
-    for lista_recons in recons_map.values():
-        if isinstance(lista_recons, list):
-            total += sum(1 for r in lista_recons if isinstance(r, dict))
-    return total
-
-
-def _rec_target_id(recons_planas):
-    activa = st.session_state["ref_activa"]
-    if isinstance(activa, str):
-        for lista in st.session_state["reformaciones_por_rec"].values():
-            for ref in lista:
-                if ref["id"] == activa:
-                    return ref.get("rec_id")
-    if isinstance(activa, dict) and activa.get("kind") == "rec":
-        return activa.get("rec_id")
-    if recons_planas:
-        return recons_planas[0]["id"]
-    return None
-
-
-def _nombre_reformacion(ref: dict) -> str:
-    tipo = ref.get("tipo")
-    subt = ref.get("subtipo")
-    if tipo and subt:
-        return f"{tipo} {subt}"
-    if tipo:
-        return tipo
-    return "Reformación"
-
-
-def _eliminar_reformacion(ref_id: str, rec_id):
-    mapa = st.session_state["reformaciones_por_rec"]
-    if rec_id and rec_id in mapa:
-        mapa[rec_id] = [r for r in mapa[rec_id] if r.get("id") != ref_id]
-    else:
-        for rid, lista in mapa.items():
-            mapa[rid] = [r for r in lista if r.get("id") != ref_id]
-    st.session_state.get("imagenes_ref_por_id", {}).pop(ref_id, None)
-    if st.session_state.get("ref_activa") == ref_id:
-        st.session_state["ref_activa"] = None
-
-
-def _render_sidebar(recons_planas):
-    _inject_sidebar_css()
-    st.markdown("### 📐 Reformaciones")
-
-    if not recons_planas:
-        total_existentes = _contar_reconstrucciones_totales()
-        if total_existentes == 0:
-            st.info("No hay reconstrucciones aún. Ve a la pestaña **Reconstrucción** para crear al menos una.")
-        else:
-            st.info(f"{total_existentes} reconstrucción(es) en edición. Cárgales imagen y completa sus parámetros para poder reformarlas aquí.")
-        return
-
-    reformaciones_map = st.session_state["reformaciones_por_rec"]
-    for r in recons_planas:
-        reformaciones_map.setdefault(r["id"], [])
-
-    rec_order = st.session_state["_ref_rec_order"]
-    activa = st.session_state["ref_activa"]
-
-    rec_id_expandida = None
-    if isinstance(activa, dict) and activa.get("kind") == "rec":
-        rec_id_expandida = activa.get("rec_id")
-    elif isinstance(activa, str):
-        for rid, lista in reformaciones_map.items():
-            for ref in lista:
-                if ref.get("id") == activa:
-                    rec_id_expandida = rid
-                    break
-            if rec_id_expandida:
-                break
-
-    recons_ordenadas = sorted(recons_planas, key=lambda r: rec_order.get(r["id"], 0))
-
-    for r in recons_ordenadas:
-        rec_id = r["id"]
-        refs_de_esta_rec = sorted(reformaciones_map.get(rec_id, []), key=lambda x: x.get("order", 0))
-        n_refs = len(refs_de_esta_rec)
-        esta_expandida = (rec_id == rec_id_expandida)
-        es_activo_rec = isinstance(activa, dict) and activa.get("kind") == "rec" and activa.get("rec_id") == rec_id
-        contador = f"  ({n_refs})" if (n_refs > 0 and not esta_expandida) else ""
-
-        if st.button(f"🧩 {r['nombre']} · {r['exp_nombre']}{contador}", key=f"ref_btn_rec_{rec_id}", type="primary" if es_activo_rec else "secondary", use_container_width=True):
-            st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
-            st.rerun()
-
-        if esta_expandida:
-            for ref in refs_de_esta_rec:
-                es_activo_ref = isinstance(activa, str) and activa == ref["id"]
-                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
-                with c_main:
-                    if st.button(f"📐 {_nombre_reformacion(ref)}", key=f"ref_btn_ref_{ref['id']}", type="primary" if es_activo_ref else "secondary", use_container_width=True):
-                        st.session_state["ref_activa"] = ref["id"]
-                        st.rerun()
-                with c_del:
-                    if st.button("✕", key=f"ref_btn_del_{ref['id']}", type="tertiary", use_container_width=True):
-                        _eliminar_reformacion(ref["id"], ref.get("rec_id"))
-                        st.rerun()
-        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
-
-    target_rec_id = _rec_target_id(recons_planas)
-    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
-    if st.button("+ Reformación", key="ref_btn_add_ref", type="secondary", use_container_width=True):
-        if target_rec_id is None:
-            st.warning("Selecciona una reconstrucción primero.")
-        else:
-            nueva = _crear_reformacion_base(target_rec_id)
-            st.session_state["reformaciones_por_rec"].setdefault(target_rec_id, []).append(nueva)
-            st.session_state["ref_activa"] = nueva["id"]
-            st.rerun()
-
-
-def _color_exploracion_por_exp_id(exp_id: str) -> str:
-    exploraciones = st.session_state.get("exploraciones", [])
-    try:
-        idx = next(i for i, e in enumerate(exploraciones) if isinstance(e, dict) and e.get("id") == exp_id)
-    except Exception:
-        idx = 0
-    return EXPLORACION_COLORS[idx % len(EXPLORACION_COLORS)]
-
-
-def _color_reconstruccion(rec: dict) -> str:
-    return _color_exploracion_por_exp_id(rec.get("exp_id")) if rec else RECON_COLOR_DEFAULT
-
-
-def _default_overlay_settings(ref_id: str, img_idx: int):
-    return {
-        "show_ranges": False,
-        "range_count": 3,
-        "angle_deg": 0,
-        "show_refs": False,
-        "refs": [
-            {"enabled": False, "text": "", "ax": 0.28, "ay": 0.22, "tx": 0.18, "ty": 0.12},
-            {"enabled": False, "text": "", "ax": 0.72, "ay": 0.26, "tx": 0.70, "ty": 0.12},
-            {"enabled": False, "text": "", "ax": 0.50, "ay": 0.78, "tx": 0.40, "ty": 0.86},
-        ],
-    }
-
-
-def _ensure_image_state(ref_id: str):
-    store = st.session_state.setdefault("imagenes_ref_por_id", {})
-    if ref_id not in store:
-        store[ref_id] = {}
-    for idx in (1, 2, 3):
-        store[ref_id].setdefault(f"img{idx}", None)
-        overlay = store[ref_id].setdefault(f"overlay{idx}", _default_overlay_settings(ref_id, idx))
-        overlay.setdefault("show_ranges", False)
-        overlay.setdefault("range_count", 3)
-        overlay.setdefault("angle_deg", 0)
-        overlay.setdefault("show_refs", False)
-        refs = overlay.setdefault("refs", [])
-        defaults = _default_overlay_settings(ref_id, idx)["refs"]
-        # Normalizar a exactamente 3 referencias
-        refs = list(refs[:3])
-        while len(refs) < 3:
-            refs.append(defaults[len(refs)].copy())
-        for i in range(3):
-            refs[i].setdefault("enabled", False)
-            refs[i].setdefault("text", "")
-            refs[i].setdefault("ax", defaults[i]["ax"])
-            refs[i].setdefault("ay", defaults[i]["ay"])
-            refs[i].setdefault("tx", defaults[i]["tx"])
-            refs[i].setdefault("ty", defaults[i]["ty"])
-        overlay["refs"] = refs
-    return store[ref_id]
-
-
-def _render_image_uploader(ref_id: str, img_idx: int, titulo: str):
-    img_state = _ensure_image_state(ref_id)
-    key_img = f"img{img_idx}"
-    key_overlay = f"overlay{img_idx}"
-    file_obj = st.file_uploader(titulo, type=["png", "jpg", "jpeg", "webp"], key=f"up_{ref_id}_{img_idx}")
-    if file_obj is not None:
-        data = file_obj.getvalue()
-        file_sig = hashlib.md5(data).hexdigest()[:10]
-        img_state[key_img] = {"name": file_obj.name, "bytes": data, "sig": file_sig}
-        img_state[key_overlay] = _default_overlay_settings(ref_id, img_idx)
-    if img_state.get(key_img) is not None:
-        if st.button(f"🗑️ Borrar {titulo}", key=f"del_{ref_id}_{img_idx}", use_container_width=True):
-            img_state[key_img] = None
-            img_state[key_overlay] = _default_overlay_settings(ref_id, img_idx)
-            st.rerun()
-    return img_state.get(key_img)
-
-
-def _overlay_canvas_html(
+def render_canvas_recon_cuadrado(
     img_b64,
     storage_key,
-    acq_color,
-    rec_color,
-    settings,
-    title="Imagen",
-    css_width=320,
-    css_height=260,
-    internal_w=900,
-    internal_h=700,
+    color="#00D2FF",
+    titulo="Imagen cargada",
+    canvas_css_width=360,
+    canvas_css_height=360,
+    canvas_width=760,
+    canvas_height=760,
 ):
-    refs_cfg = settings.get("refs", [])[:3]
-    while len(refs_cfg) < 3:
-        refs_cfg.append({"enabled": False, "text": ""})
+    if not img_b64:
+        return None
+
     html = f"""
 <div style="text-align:center; margin:0;">
-  <div id="toolbar_{storage_key}" style="width:{css_width}px; margin:0 auto 10px auto; display:flex; gap:8px; justify-content:flex-start; align-items:center; flex-wrap:wrap;">
-    <div style="color:#d7d7d7; font-size:13px; font-weight:700; margin-right:4px;">Referencia anatómica</div>
-    <button id="btn_{storage_key}_r1" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R1</button>
-    <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R2</button>
-    <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R3</button>
-    <div style="width:14px;"></div>
-    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">Rangos paralelos</button>
+  <div style="display:inline-block; font-size:16px; font-weight:600; color:#ddd; margin-bottom:6px;">
+    {titulo}
   </div>
-  <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
-    <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
-      style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;touch-action:none;"></canvas>
-
-    <div id="label_wrap_{storage_key}_0" style="position:absolute; display:none; z-index:7; align-items:center; gap:6px;">
-      <div id="label_drag_{storage_key}_0" style="width:24px; height:24px; border-radius:999px; background:{rec_color}; color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:grab; user-select:none;">1</div>
-      <input id="label_input_{storage_key}_0" type="text" value="{json.dumps(refs_cfg[0].get('text',''))[1:-1]}"
-        style="width:150px; background:rgba(0,0,0,0.72); color:#fff; border:2px solid {rec_color}; border-radius:12px; padding:6px 10px; outline:none;" />
-    </div>
-    <div id="label_wrap_{storage_key}_1" style="position:absolute; display:none; z-index:7; align-items:center; gap:6px;">
-      <div id="label_drag_{storage_key}_1" style="width:24px; height:24px; border-radius:999px; background:{rec_color}; color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:grab; user-select:none;">2</div>
-      <input id="label_input_{storage_key}_1" type="text" value="{json.dumps(refs_cfg[1].get('text',''))[1:-1]}"
-        style="width:150px; background:rgba(0,0,0,0.72); color:#fff; border:2px solid {rec_color}; border-radius:12px; padding:6px 10px; outline:none;" />
-    </div>
-    <div id="label_wrap_{storage_key}_2" style="position:absolute; display:none; z-index:7; align-items:center; gap:6px;">
-      <div id="label_drag_{storage_key}_2" style="width:24px; height:24px; border-radius:999px; background:{rec_color}; color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:grab; user-select:none;">3</div>
-      <input id="label_input_{storage_key}_2" type="text" value="{json.dumps(refs_cfg[2].get('text',''))[1:-1]}"
-        style="width:150px; background:rgba(0,0,0,0.72); color:#fff; border:2px solid {rec_color}; border-radius:12px; padding:6px 10px; outline:none;" />
-    </div>
-  </div>
+  <canvas id="reconSquareCanvas" width="{canvas_width}" height="{canvas_height}"
+    style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
 </div>
 <script>
 (function() {{
-  var canvas = document.getElementById({json.dumps('canvas_' + storage_key)});
+  var imgB64 = {json.dumps(img_b64)};
+  var storageKey = {json.dumps('planitc_' + storage_key)};
+  var strokeColor = {json.dumps(color)};
+  var canvas = document.getElementById('reconSquareCanvas');
   if (!canvas) return;
-  var wrapper = canvas.parentElement;
+
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var img = new Image();
-  img.src = 'data:image/jpeg;base64,' + {json.dumps(img_b64)};
-  var storageKey = {json.dumps('planitc_ref_' + storage_key)};
-  var acqColor = {json.dumps(acq_color)};
-  var recColor = {json.dumps(rec_color)};
-  var showRanges = {json.dumps(bool(settings.get('show_ranges', False)))};
-  var defaultRangeCount = {json.dumps(int(settings.get('range_count', 3)))};
-  var defaultAngleDeg = {json.dumps(float(settings.get('angle_deg', 0)))};
-  var refsCfg = {json.dumps(refs_cfg)};
+  img.src = 'data:image/jpeg;base64,' + imgB64;
 
-  var SPACING = 32;
-  var LINE_LEN = Math.max(W, H) * 0.30;
-  var MIN_RANGES = 1;
-  var MAX_RANGES = 50;
-  var ROT_HIT = 20;
-  var EXT_HIT = 18;
-  var LEN_HIT = 18;
-  var HANDLE_OFFSET = 24;
-  var MIN_LINE_LEN = Math.max(W, H) * 0.08;
-  var MAX_LINE_LEN = Math.max(W, H) * 0.55;
-  var minDim = Math.min(W, H);
+  var square = {{ x: 0.23, y: 0.23, s: 0.34 }};
+  // Handle activo: 'body' (mover), 'tl', 'tr', 'bl', 'br' (esquinas),
+  // 't', 'b', 'l', 'r' (bordes), o null.
+  var dragMode = null;
+  var dragOffsetX = 0;
+  var dragOffsetY = 0;
+  // Tolerancia para detectar handles (en px del canvas interno)
+  var cornerTol = 22;
+  var edgeTol = 14;
+  // Tamaño visual de los manijas dibujados sobre el cuadrado
+  var handleVisual = 11;
+  var minS = 0.10;
+  var maxS = 0.96;
 
-  var displayScaleX = parseFloat(canvas.style.width) / W;
-  var displayScaleY = parseFloat(canvas.style.height) / H;
-
-  var state = {{
-    linesOffset: 0,
-    rangeCount: defaultRangeCount,
-    angleDeg: defaultAngleDeg,
-    lineLen: LINE_LEN,
-    refs: [
-      refsCfg[0] ? {{enabled: !!refsCfg[0].enabled, text: refsCfg[0].text || '', ax: refsCfg[0].ax || 0.28, ay: refsCfg[0].ay || 0.22, tx: refsCfg[0].tx || 0.18, ty: refsCfg[0].ty || 0.12}} : {{enabled:false,text:'',ax:0.28,ay:0.22,tx:0.18,ty:0.12}},
-      refsCfg[1] ? {{enabled: !!refsCfg[1].enabled, text: refsCfg[1].text || '', ax: refsCfg[1].ax || 0.72, ay: refsCfg[1].ay || 0.26, tx: refsCfg[1].tx || 0.70, ty: refsCfg[1].ty || 0.12}} : {{enabled:false,text:'',ax:0.72,ay:0.26,tx:0.70,ty:0.12}},
-      refsCfg[2] ? {{enabled: !!refsCfg[2].enabled, text: refsCfg[2].text || '', ax: refsCfg[2].ax || 0.50, ay: refsCfg[2].ay || 0.78, tx: refsCfg[2].tx || 0.40, ty: refsCfg[2].ty || 0.86}} : {{enabled:false,text:'',ax:0.50,ay:0.78,tx:0.40,ty:0.86}},
-    ],
-    drag: null,
-    _handles: null,
-    imageRect: {{x:0,y:0,w:W,h:H}}
-  }};
-
-  function clamp(v, lo, hi) {{ return Math.max(lo, Math.min(hi, v)); }}
+  function rgbaFromHex(hex, alpha) {{
+    if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
+    var h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(function(c) {{ return c + c; }}).join('');
+    if (h.length !== 6) return 'rgba(0,210,255,' + alpha + ')';
+    var r = parseInt(h.substring(0,2), 16);
+    var g = parseInt(h.substring(2,4), 16);
+    var b = parseInt(h.substring(4,6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }}
 
   try {{
     var saved = localStorage.getItem(storageKey);
     if (saved) {{
       var parsed = JSON.parse(saved);
-      if (parsed && parsed.refs && parsed.refs.length) {{
-        for (var i = 0; i < Math.min(3, parsed.refs.length); i++) {{
-          state.refs[i] = Object.assign(state.refs[i], parsed.refs[i]);
-        }}
-      }}
-      if (parsed && typeof parsed.linesOffset === 'number') state.linesOffset = parsed.linesOffset;
-      if (parsed && typeof parsed.rangeCount === 'number') state.rangeCount = clamp(Math.round(parsed.rangeCount), MIN_RANGES, MAX_RANGES);
-      if (parsed && typeof parsed.angleDeg === 'number') state.angleDeg = parsed.angleDeg;
-      if (parsed && typeof parsed.lineLen === 'number') state.lineLen = clamp(parsed.lineLen, MIN_LINE_LEN, MAX_LINE_LEN);
+      if (parsed && parsed.square) square = parsed.square;
     }}
-  }} catch(e) {{}}
-
-  var labelWraps = [
-    document.getElementById({json.dumps('label_wrap_' + storage_key + '_0')}),
-    document.getElementById({json.dumps('label_wrap_' + storage_key + '_1')}),
-    document.getElementById({json.dumps('label_wrap_' + storage_key + '_2')}),
-  ];
-  var labelDrags = [
-    document.getElementById({json.dumps('label_drag_' + storage_key + '_0')}),
-    document.getElementById({json.dumps('label_drag_' + storage_key + '_1')}),
-    document.getElementById({json.dumps('label_drag_' + storage_key + '_2')}),
-  ];
-  var labelInputs = [
-    document.getElementById({json.dumps('label_input_' + storage_key + '_0')}),
-    document.getElementById({json.dumps('label_input_' + storage_key + '_1')}),
-    document.getElementById({json.dumps('label_input_' + storage_key + '_2')}),
-  ];
-  var refBtns = [
-    document.getElementById({json.dumps('btn_' + storage_key + '_r1')}),
-    document.getElementById({json.dumps('btn_' + storage_key + '_r2')}),
-    document.getElementById({json.dumps('btn_' + storage_key + '_r3')}),
-  ];
-  var cutsBtn = document.getElementById({json.dumps('btn_' + storage_key + '_cuts')});
+  }} catch (e) {{}}
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{
-        refs: state.refs,
-        linesOffset: state.linesOffset,
-        rangeCount: state.rangeCount,
-        angleDeg: state.angleDeg,
-        lineLen: state.lineLen
-      }}));
-    }} catch(e) {{}}
+      localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
+    }} catch (e) {{}}
   }}
 
-  function imageBounds() {{
-    return state.imageRect;
+  function clampSquare() {{
+    square.s = Math.max(minS, Math.min(maxS, square.s));
+    square.x = Math.max(0.02, Math.min(0.98 - square.s, square.x));
+    square.y = Math.max(0.02, Math.min(0.98 - square.s, square.y));
   }}
 
-  function normToPx(nx, ny) {{
-    var r = imageBounds();
-    return {{x: r.x + clamp(nx,0,1) * r.w, y: r.y + clamp(ny,0,1) * r.h}};
+  function getSquarePx() {{
+    return {{ x: square.x * W, y: square.y * H, s: square.s * Math.min(W, H) }};
   }}
 
-  function pxToNorm(px, py) {{
-    var r = imageBounds();
-    return {{
-      x: clamp((px - r.x) / r.w, 0, 1),
-      y: clamp((py - r.y) / r.h, 0, 1)
-    }};
+  function isInsideSquare(mx, my, sp) {{
+    return mx >= sp.x && mx <= sp.x + sp.s && my >= sp.y && my <= sp.y + sp.s;
   }}
 
-  function getGeometry() {{
-    var ang = state.angleDeg * Math.PI / 180;
-    var dx = Math.cos(ang), dy = Math.sin(ang);
-    var nx = -dy, ny = dx;
-    var r = imageBounds();
-    var cx = r.x + r.w/2 + nx * state.linesOffset * Math.min(r.w, r.h);
-    var cy = r.y + r.h/2 + ny * state.linesOffset * Math.min(r.w, r.h);
-    return {{ang:ang, dx:dx, dy:dy, nx:nx, ny:ny, cx:cx, cy:cy}};
-  }}
+  // Detecta qué zona del cuadrado está bajo el puntero. Las esquinas
+  // tienen prioridad sobre los bordes; los bordes sobre el interior.
+  function detectHandle(mx, my, sp) {{
+    var left = sp.x, right = sp.x + sp.s;
+    var top = sp.y, bottom = sp.y + sp.s;
 
-  function clipSegmentToRect(x1, y1, x2, y2, rect) {{
-    var dx = x2 - x1, dy = y2 - y1;
-    var t0 = 0, t1 = 1;
-    var p = [-dx, dx, -dy, dy];
-    var q = [x1 - rect.x, rect.x + rect.w - x1, y1 - rect.y, rect.y + rect.h - y1];
-    for (var i = 0; i < 4; i++) {{
-      if (p[i] === 0) {{
-        if (q[i] < 0) return null;
-      }} else {{
-        var r = q[i] / p[i];
-        if (p[i] < 0) {{
-          if (r > t1) return null;
-          if (r > t0) t0 = r;
-        }} else {{
-          if (r < t0) return null;
-          if (r < t1) t1 = r;
-        }}
-      }}
-    }}
-    return {{
-      x1: x1 + t0 * dx, y1: y1 + t0 * dy,
-      x2: x1 + t1 * dx, y2: y1 + t1 * dy
-    }};
-  }}
+    var nearLeft = Math.abs(mx - left) <= cornerTol;
+    var nearRight = Math.abs(mx - right) <= cornerTol;
+    var nearTop = Math.abs(my - top) <= cornerTol;
+    var nearBottom = Math.abs(my - bottom) <= cornerTol;
 
-  function drawArrow(fromX, fromY, toX, toY, color) {{
-    var head = 12;
-    var dx = toX - fromX, dy = toY - fromY;
-    var ang = Math.atan2(dy, dx);
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(fromX, fromY); ctx.lineTo(toX, toY); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(toX, toY);
-    ctx.lineTo(toX - head*Math.cos(ang-Math.PI/6), toY - head*Math.sin(ang-Math.PI/6));
-    ctx.lineTo(toX - head*Math.cos(ang+Math.PI/6), toY - head*Math.sin(ang+Math.PI/6));
-    ctx.closePath(); ctx.fill();
-  }}
+    if (nearLeft && nearTop) return 'tl';
+    if (nearRight && nearTop) return 'tr';
+    if (nearLeft && nearBottom) return 'bl';
+    if (nearRight && nearBottom) return 'br';
 
-  function drawTriangle(cx, cy, dirX, dirY, size) {{
-    var px = -dirY, py = dirX;
-    ctx.beginPath();
-    ctx.moveTo(cx + dirX*size, cy + dirY*size);
-    ctx.lineTo(cx + px*size*0.75, cy + py*size*0.75);
-    ctx.lineTo(cx - px*size*0.75, cy - py*size*0.75);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-  }}
+    // Bordes: cerca del borde y dentro del rango perpendicular (con margen)
+    if (Math.abs(my - top) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 't';
+    if (Math.abs(my - bottom) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 'b';
+    if (Math.abs(mx - left) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'l';
+    if (Math.abs(mx - right) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'r';
 
-  function drawHandles(g) {{
-    if (!showRanges) return;
-    var r = imageBounds();
-    var halfSpan = ((state.rangeCount - 1) / 2) * SPACING;
-    if (state.rangeCount === 1) halfSpan = SPACING;
-
-    var rotA = {{
-      x: clamp(g.cx - g.dx * state.lineLen - g.nx * HANDLE_OFFSET, r.x, r.x + r.w),
-      y: clamp(g.cy - g.dy * state.lineLen - g.ny * HANDLE_OFFSET, r.y, r.y + r.h)
-    }};
-    var rotB = {{
-      x: clamp(g.cx + g.dx * state.lineLen + g.nx * HANDLE_OFFSET, r.x, r.x + r.w),
-      y: clamp(g.cy + g.dy * state.lineLen + g.ny * HANDLE_OFFSET, r.y, r.y + r.h)
-    }};
-    var extA = {{
-      x: clamp(g.cx - g.nx * halfSpan, r.x, r.x + r.w),
-      y: clamp(g.cy - g.ny * halfSpan, r.y, r.y + r.h)
-    }};
-    var extB = {{
-      x: clamp(g.cx + g.nx * halfSpan, r.x, r.x + r.w),
-      y: clamp(g.cy + g.ny * halfSpan, r.y, r.y + r.h)
-    }};
-    var lenA1 = {{x: clamp(g.cx - g.nx * halfSpan - g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy - g.ny * halfSpan - g.dy * state.lineLen, r.y, r.y + r.h)}};
-    var lenA2 = {{x: clamp(g.cx + g.nx * halfSpan - g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + g.ny * halfSpan - g.dy * state.lineLen, r.y, r.y + r.h)}};
-    var lenB1 = {{x: clamp(g.cx - g.nx * halfSpan + g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy - g.ny * halfSpan + g.dy * state.lineLen, r.y, r.y + r.h)}};
-    var lenB2 = {{x: clamp(g.cx + g.nx * halfSpan + g.dx * state.lineLen, r.x, r.x + r.w), y: clamp(g.cy + g.ny * halfSpan + g.dy * state.lineLen, r.y, r.y + r.h)}};
-
-    state._handles = {{rotA:rotA, rotB:rotB, extA:extA, extB:extB, lenA1:lenA1, lenA2:lenA2, lenB1:lenB1, lenB2:lenB2, halfSpan:halfSpan}};
-
-    ctx.fillStyle = '#FFD700';
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 2;
-    [rotA, rotB].forEach(function(p) {{
-      ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    }});
-
-    ctx.fillStyle = '#FFFFFF';
-    drawTriangle(extA.x, extA.y, -g.nx, -g.ny, 9);
-    drawTriangle(extB.x, extB.y, g.nx, g.ny, 9);
-
-    ctx.fillStyle = '#7FDBFF';
-    [lenA1, lenA2, lenB1, lenB2].forEach(function(p) {{
-      ctx.beginPath(); ctx.rect(p.x - 5, p.y - 5, 10, 10); ctx.fill(); ctx.stroke();
-    }});
-  }}
-
-  function drawRanges() {{
-    if (!showRanges) return;
-    var g = getGeometry();
-    var rect = imageBounds();
-    for (var i = 0; i < state.rangeCount; i++) {{
-      var off = (i - (state.rangeCount - 1) / 2) * SPACING;
-      var ox = g.nx * off, oy = g.ny * off;
-      var x1 = g.cx + ox - g.dx * state.lineLen, y1 = g.cy + oy - g.dy * state.lineLen;
-      var x2 = g.cx + ox + g.dx * state.lineLen, y2 = g.cy + oy + g.dy * state.lineLen;
-      var clipped = clipSegmentToRect(x1, y1, x2, y2, rect);
-      if (!clipped) continue;
-      ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(clipped.x1, clipped.y1);
-      ctx.lineTo(clipped.x2, clipped.y2);
-      ctx.stroke();
-    }}
-    drawHandles(g);
-  }}
-
-  function updateRefButtons() {{
-    for (var i = 0; i < 3; i++) {{
-      if (!refBtns[i]) continue;
-      refBtns[i].style.background = state.refs[i].enabled ? recColor : 'rgba(0,0,0,0.65)';
-      refBtns[i].style.color = '#fff';
-      refBtns[i].style.borderColor = recColor;
-    }}
-    if (cutsBtn) {{
-      cutsBtn.style.background = showRanges ? acqColor : 'rgba(0,0,0,0.65)';
-      cutsBtn.style.color = '#fff';
-      cutsBtn.style.borderColor = acqColor;
-    }}
-  }}
-
-  function syncLabelOverlays() {{
-    var rectCanvas = canvas.getBoundingClientRect();
-    var wrapRect = wrapper.getBoundingClientRect();
-    displayScaleX = rectCanvas.width / W;
-    displayScaleY = rectCanvas.height / H;
-
-    for (var i = 0; i < 3; i++) {{
-      var wrap = labelWraps[i], input = labelInputs[i], drag = labelDrags[i];
-      if (!wrap || !input || !drag) continue;
-      var ref = state.refs[i];
-      if (!ref.enabled) {{
-        wrap.style.display = 'none';
-        continue;
-      }}
-      input.value = ref.text || '';
-      wrap.style.display = 'flex';
-      var p = normToPx(ref.tx, ref.ty);
-      wrap.style.left = (p.x * displayScaleX) + 'px';
-      wrap.style.top = (p.y * displayScaleY) + 'px';
-    }}
-    updateRefButtons();
-  }}
-
-  function drawRefs() {{
-    for (var i = 0; i < 3; i++) {{
-      var ref = state.refs[i];
-      if (!ref.enabled) continue;
-      var ap = normToPx(ref.ax, ref.ay);
-      var tp = normToPx(ref.tx, ref.ty);
-      drawArrow(tp.x + 18, tp.y + 14, ap.x, ap.y, recColor);
-      ctx.beginPath();
-      ctx.fillStyle = acqColor;
-      ctx.arc(ap.x, ap.y, 7, 0, Math.PI*2);
-      ctx.fill();
-      ctx.strokeStyle = '#0a0a0a';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }}
-  }}
-
-  function drawImage() {{
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-
-    if (img.width && img.height) {{
-      var scale = Math.min(W / img.width, H / img.height);
-      var dw = img.width * scale, dh = img.height * scale;
-      var dx = (W - dw) / 2, dy = (H - dh) / 2;
-      state.imageRect = {{x: dx, y: dy, w: dw, h: dh}};
-      ctx.drawImage(img, dx, dy, dw, dh);
-    }} else {{
-      state.imageRect = {{x: 0, y: 0, w: W, h: H}};
-    }}
-
-    drawRanges();
-    drawRefs();
-    syncLabelOverlays();
-    saveState();
-  }}
-
-  function getPos(evt) {{
-    var rect = canvas.getBoundingClientRect();
-    var cx = (evt.touches && evt.touches[0]) ? evt.touches[0].clientX : evt.clientX;
-    var cy = (evt.touches && evt.touches[0]) ? evt.touches[0].clientY : evt.clientY;
-    return {{x: (cx - rect.left) * (W / rect.width), y: (cy - rect.top) * (H / rect.height)}};
-  }}
-
-  function hitRefPoint(pos) {{
-    for (var i = 0; i < 3; i++) {{
-      if (!state.refs[i].enabled) continue;
-      var ap = normToPx(state.refs[i].ax, state.refs[i].ay);
-      if (Math.hypot(pos.x - ap.x, pos.y - ap.y) < 16) return i;
-    }}
-    return -1;
-  }}
-
-  function hitBeamHandle(pos) {{
-    if (!showRanges || !state._handles) return null;
-    var h = state._handles;
-    function near(a,b,r) {{ return Math.hypot(pos.x-a, pos.y-b) < r; }}
-    if (near(h.rotA.x, h.rotA.y, ROT_HIT)) return {{type:'rot', side:'a'}};
-    if (near(h.rotB.x, h.rotB.y, ROT_HIT)) return {{type:'rot', side:'b'}};
-    if (near(h.extA.x, h.extA.y, EXT_HIT)) return {{type:'ext', side:'a'}};
-    if (near(h.extB.x, h.extB.y, EXT_HIT)) return {{type:'ext', side:'b'}};
-    if (near(h.lenA1.x, h.lenA1.y, LEN_HIT) || near(h.lenA2.x, h.lenA2.y, LEN_HIT)) return {{type:'len', side:'a'}};
-    if (near(h.lenB1.x, h.lenB1.y, LEN_HIT) || near(h.lenB2.x, h.lenB2.y, LEN_HIT)) return {{type:'len', side:'b'}};
+    if (isInsideSquare(mx, my, sp)) return 'body';
     return null;
   }}
 
-  function hitInsideBeam(pos) {{
-    if (!showRanges) return false;
-    var g = getGeometry();
-    var dxp = pos.x - g.cx, dyp = pos.y - g.cy;
-    var along = dxp * g.dx + dyp * g.dy;
-    var perp = dxp * g.nx + dyp * g.ny;
-    var halfSpan = Math.max(SPACING * 0.5, ((state.rangeCount - 1) / 2) * SPACING);
-    return Math.abs(perp) < halfSpan + 8 && Math.abs(along) < state.lineLen;
+  // Aplica el resize según el handle. El cuadrado siempre se mantiene
+  // cuadrado (s es único). Cada handle tiene su punto de anclaje:
+  // - esquinas: la esquina opuesta queda fija.
+  // - bordes: el borde opuesto queda fijo y la dimensión perpendicular
+  //   se expande/contrae simétricamente (se mantiene el centro del eje
+  //   perpendicular sobre el que NO se está arrastrando).
+  function resizeFromHandle(handle, pos) {{
+    var minDim = Math.min(W, H);
+    var minPx = minS * minDim;
+    var maxPx = maxS * minDim;
+
+    var left = square.x * W;
+    var top = square.y * H;
+    var sz = square.s * minDim;
+    var right = left + sz;
+    var bottom = top + sz;
+    var cx = left + sz / 2;
+    var cy = top + sz / 2;
+
+    var newS;
+    switch (handle) {{
+      case 'br': {{
+        var w = pos.x - left;
+        var h = pos.y - top;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.s = newS / minDim;
+        // x, y no cambian (anclado en top-left)
+        break;
+      }}
+      case 'tl': {{
+        var w = right - pos.x;
+        var h = bottom - pos.y;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = (right - newS) / W;
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'tr': {{
+        var w = pos.x - left;
+        var h = bottom - pos.y;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = left / W; // queda como estaba
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'bl': {{
+        var w = right - pos.x;
+        var h = pos.y - top;
+        newS = Math.max(w, h);
+        newS = Math.max(minPx, Math.min(maxPx, newS));
+        square.x = (right - newS) / W;
+        square.y = top / H; // queda como estaba
+        square.s = newS / minDim;
+        break;
+      }}
+      case 't': {{
+        // Fijo: borde inferior + centro horizontal
+        var h = bottom - pos.y;
+        newS = Math.max(minPx, Math.min(maxPx, h));
+        square.x = (cx - newS / 2) / W;
+        square.y = (bottom - newS) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'b': {{
+        // Fijo: borde superior + centro horizontal
+        var h = pos.y - top;
+        newS = Math.max(minPx, Math.min(maxPx, h));
+        square.x = (cx - newS / 2) / W;
+        square.y = top / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'l': {{
+        // Fijo: borde derecho + centro vertical
+        var w = right - pos.x;
+        newS = Math.max(minPx, Math.min(maxPx, w));
+        square.x = (right - newS) / W;
+        square.y = (cy - newS / 2) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+      case 'r': {{
+        // Fijo: borde izquierdo + centro vertical
+        var w = pos.x - left;
+        newS = Math.max(minPx, Math.min(maxPx, w));
+        square.x = left / W;
+        square.y = (cy - newS / 2) / H;
+        square.s = newS / minDim;
+        break;
+      }}
+    }}
+    clampSquare();
   }}
 
-  function setCursorFor(pos) {{
-    if (hitRefPoint(pos) >= 0) {{ canvas.style.cursor = 'grab'; return; }}
-    var bh = hitBeamHandle(pos);
-    if (bh) {{
-      canvas.style.cursor = (bh.type === 'len') ? 'ew-resize' : 'grab';
-      return;
+  function drawBaseImage() {{
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (img.width && img.height) {{
+      var scale = Math.min(W / img.width, H / img.height);
+      var drawW = img.width * scale;
+      var drawH = img.height * scale;
+      var dx = (W - drawW) / 2;
+      var dy = (H - drawH) / 2;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
     }}
-    if (hitInsideBeam(pos)) {{ canvas.style.cursor = 'move'; return; }}
-    canvas.style.cursor = 'crosshair';
+  }}
+
+  function drawSquare() {{
+    clampSquare();
+    var sp = getSquarePx();
+    // Relleno semitransparente
+    ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
+    ctx.fillRect(sp.x, sp.y, sp.s, sp.s);
+    // Borde punteado
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+    ctx.strokeRect(sp.x, sp.y, sp.s, sp.s);
+    ctx.setLineDash([]);
+
+    // Manijas: 4 esquinas + 4 puntos medios de borde
+    var hs = handleVisual;
+    var cx = sp.x + sp.s / 2;
+    var cy = sp.y + sp.s / 2;
+    var points = [
+      [sp.x, sp.y],                 // tl
+      [sp.x + sp.s, sp.y],          // tr
+      [sp.x, sp.y + sp.s],          // bl
+      [sp.x + sp.s, sp.y + sp.s],   // br
+      [cx, sp.y],                   // t
+      [cx, sp.y + sp.s],            // b
+      [sp.x, cy],                   // l
+      [sp.x + sp.s, cy],            // r
+    ];
+    ctx.fillStyle = strokeColor;
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 1.5;
+    for (var i = 0; i < points.length; i++) {{
+      var px = points[i][0], py = points[i][1];
+      ctx.fillRect(px - hs / 2, py - hs / 2, hs, hs);
+      ctx.strokeRect(px - hs / 2, py - hs / 2, hs, hs);
+    }}
+  }}
+
+  function draw() {{
+    drawBaseImage();
+    drawSquare();
+    saveState();
+  }}
+
+  function getMousePos(e) {{
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = W / rect.width;
+    var scaleY = H / rect.height;
+    return {{ x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }};
+  }}
+
+  function cursorForHandle(h) {{
+    if (h === 'tl' || h === 'br') return 'nwse-resize';
+    if (h === 'tr' || h === 'bl') return 'nesw-resize';
+    if (h === 't' || h === 'b') return 'ns-resize';
+    if (h === 'l' || h === 'r') return 'ew-resize';
+    if (h === 'body') return 'grab';
+    return 'default';
+  }}
+
+  function updateCursor(mx, my) {{
+    var sp = getSquarePx();
+    var h = detectHandle(mx, my, sp);
+    canvas.style.cursor = cursorForHandle(h);
+  }}
+
+  function startDrag(pos) {{
+    var sp = getSquarePx();
+    var h = detectHandle(pos.x, pos.y, sp);
+    if (!h) return;
+    if (h === 'body') {{
+      dragMode = 'body';
+      dragOffsetX = pos.x - sp.x;
+      dragOffsetY = pos.y - sp.y;
+      canvas.style.cursor = 'grabbing';
+    }} else {{
+      dragMode = h;
+      canvas.style.cursor = cursorForHandle(h);
+    }}
+  }}
+
+  function applyDrag(pos) {{
+    if (!dragMode) return;
+    if (dragMode === 'body') {{
+      square.x = (pos.x - dragOffsetX) / W;
+      square.y = (pos.y - dragOffsetY) / H;
+      clampSquare();
+    }} else {{
+      resizeFromHandle(dragMode, pos);
+    }}
+    draw();
   }}
 
   canvas.addEventListener('mousedown', function(e) {{
-    var pos = getPos(e);
-    var refIdx = hitRefPoint(pos);
-    if (refIdx >= 0) {{
-      state.drag = {{type:'refPoint', i: refIdx}};
-      canvas.style.cursor = 'grabbing';
-      return;
-    }}
-    var bh = hitBeamHandle(pos);
-    if (bh) {{
-      state.drag = {{type:'beam', sub: bh.type, side: bh.side}};
-      canvas.style.cursor = 'grabbing';
-      return;
-    }}
-    if (hitInsideBeam(pos)) {{
-      state.drag = {{type:'beam', sub:'move'}};
-      canvas.style.cursor = 'grabbing';
-    }}
+    startDrag(getMousePos(e));
   }});
-
-  function applyDrag(pos) {{
-    if (!state.drag) return;
-    var r = imageBounds();
-    if (state.drag.type === 'refPoint') {{
-      var n = pxToNorm(pos.x, pos.y);
-      state.refs[state.drag.i].ax = n.x;
-      state.refs[state.drag.i].ay = n.y;
-      drawImage();
-      return;
-    }}
-    var g = getGeometry();
-    if (state.drag.sub === 'rot') {{
-      var dxp = pos.x - g.cx, dyp = pos.y - g.cy;
-      var ang = Math.atan2(dyp, dxp) * 180 / Math.PI;
-      if (state.drag.side === 'a') ang += 180;
-      while (ang > 180) ang -= 360;
-      while (ang < -180) ang += 360;
-      state.angleDeg = ang;
-    }} else if (state.drag.sub === 'ext') {{
-      var dxp2 = pos.x - g.cx, dyp2 = pos.y - g.cy;
-      var perp = Math.abs(dxp2 * g.nx + dyp2 * g.ny);
-      var nRanges = Math.round((2 * perp) / SPACING) + 1;
-      state.rangeCount = clamp(nRanges, MIN_RANGES, MAX_RANGES);
-    }} else if (state.drag.sub === 'len') {{
-      var dxpLen = pos.x - g.cx, dypLen = pos.y - g.cy;
-      var alongLen = Math.abs(dxpLen * g.dx + dypLen * g.dy);
-      state.lineLen = clamp(alongLen, MIN_LINE_LEN, MAX_LINE_LEN);
-    }} else if (state.drag.sub === 'move') {{
-      var dxp3 = pos.x - (r.x + r.w / 2), dyp3 = pos.y - (r.y + r.h / 2);
-      var newOff = (dxp3 * g.nx + dyp3 * g.ny) / Math.min(r.w, r.h);
-      state.linesOffset = clamp(newOff, -0.5, 0.5);
-    }}
-    drawImage();
-  }}
 
   canvas.addEventListener('mousemove', function(e) {{
-    var pos = getPos(e);
-    if (!state.drag) {{ setCursorFor(pos); return; }}
-    applyDrag(pos);
+    var pos = getMousePos(e);
+    if (!dragMode) updateCursor(pos.x, pos.y);
+    else applyDrag(pos);
   }});
-  window.addEventListener('mousemove', function(e) {{
-    if (!state.drag) return;
-    applyDrag(getPos(e));
-  }});
-  window.addEventListener('mouseup', function() {{
-    if (state.drag) saveState();
-    state.drag = null;
-    canvas.style.cursor = 'crosshair';
-  }});
+
+  function endDrag() {{
+    dragMode = null;
+    saveState();
+  }}
+
+  canvas.addEventListener('mouseup', endDrag);
+  canvas.addEventListener('mouseleave', endDrag);
 
   canvas.addEventListener('touchstart', function(e) {{
-    if (!e.touches || !e.touches.length) return;
     e.preventDefault();
-    var pos = getPos(e);
-    var refIdx = hitRefPoint(pos);
-    if (refIdx >= 0) {{ state.drag = {{type:'refPoint', i: refIdx}}; return; }}
-    var bh = hitBeamHandle(pos);
-    if (bh) {{ state.drag = {{type:'beam', sub: bh.type, side: bh.side}}; return; }}
-    if (hitInsideBeam(pos)) state.drag = {{type:'beam', sub:'move'}};
+    var t = e.touches[0];
+    startDrag(getMousePos(t));
   }}, {{passive:false}});
+
   canvas.addEventListener('touchmove', function(e) {{
-    if (!state.drag || !e.touches || !e.touches.length) return;
     e.preventDefault();
-    applyDrag(getPos(e));
+    if (!dragMode) return;
+    var t = e.touches[0];
+    applyDrag(getMousePos(t));
   }}, {{passive:false}});
-  canvas.addEventListener('touchend', function() {{
-    if (state.drag) saveState();
-    state.drag = null;
-  }});
 
-  if (cutsBtn) {{
-    cutsBtn.addEventListener('click', function() {{
-      showRanges = !showRanges;
-      saveState();
-      drawImage();
-    }});
-  }}
-
-  for (let i = 0; i < 3; i++) {{
-    if (refBtns[i]) {{
-      refBtns[i].addEventListener('click', function() {{
-        state.refs[i].enabled = !state.refs[i].enabled;
-        saveState();
-        drawImage();
-      }});
-    }}
-    if (labelInputs[i]) {{
-      labelInputs[i].addEventListener('input', function() {{
-        state.refs[i].text = this.value;
-        saveState();
-      }});
-      labelInputs[i].addEventListener('mousedown', function(e) {{ e.stopPropagation(); }});
-      labelInputs[i].addEventListener('click', function(e) {{ e.stopPropagation(); }});
-      labelInputs[i].addEventListener('touchstart', function(e) {{ e.stopPropagation(); }}, {{passive:true}});
-    }}
-    if (labelDrags[i]) {{
-      labelDrags[i].addEventListener('mousedown', function(e) {{
-        e.preventDefault();
-        e.stopPropagation();
-        state.drag = {{type:'label', i:i}};
-        canvas.style.cursor = 'grabbing';
-      }});
-      labelDrags[i].addEventListener('touchstart', function(e) {{
-        e.preventDefault();
-        e.stopPropagation();
-        state.drag = {{type:'label', i:i}};
-      }}, {{passive:false}});
-    }}
-  }}
-
-  function moveLabelFromEvent(evt) {{
-    if (!state.drag || state.drag.type !== 'label') return;
-    var rect = wrapper.getBoundingClientRect();
-    var cx = (evt.touches && evt.touches[0]) ? evt.touches[0].clientX : evt.clientX;
-    var cy = (evt.touches && evt.touches[0]) ? evt.touches[0].clientY : evt.clientY;
-    var xDisp = cx - rect.left;
-    var yDisp = cy - rect.top;
-    var xCanvas = xDisp / displayScaleX;
-    var yCanvas = yDisp / displayScaleY;
-    var n = pxToNorm(xCanvas, yCanvas);
-    state.refs[state.drag.i].tx = n.x;
-    state.refs[state.drag.i].ty = n.y;
-    drawImage();
-  }}
-
-  window.addEventListener('mousemove', function(e) {{
-    if (state.drag && state.drag.type === 'label') moveLabelFromEvent(e);
-  }});
-  window.addEventListener('touchmove', function(e) {{
-    if (state.drag && state.drag.type === 'label') {{
-      e.preventDefault();
-      moveLabelFromEvent(e);
-    }}
-  }}, {{passive:false}});
-  window.addEventListener('mouseup', function() {{
-    if (state.drag && state.drag.type === 'label') saveState();
-    if (state.drag && state.drag.type === 'label') state.drag = null;
-  }});
-  window.addEventListener('touchend', function() {{
-    if (state.drag && state.drag.type === 'label') saveState();
-    if (state.drag && state.drag.type === 'label') state.drag = null;
-  }});
-
-  img.onload = drawImage;
-  if (img.complete) drawImage();
+  canvas.addEventListener('touchend', endDrag);
+  img.onload = function() {{ draw(); }};
+  if (img.complete) draw();
 }})();
 </script>
 """
     return html
 
 
-def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_height=250):
-    img_state = _ensure_image_state(ref["id"])
-    image_data = img_state.get(f"img{img_idx}")
-    overlay = img_state.get(f"overlay{img_idx}")
+def render_canvas_topo_dfov_rect(
+    img_b64,
+    storage_key,
+    color="#00D2FF",
+    titulo="Topograma",
+    default_y_ini=0.25,
+    default_y_fin=0.75,
+    default_x=0.15,
+    default_w=0.70,
+    canvas_css_width=300,
+    canvas_css_height=420,
+    canvas_width=600,
+    canvas_height=840,
+):
+    """Topograma con caja DFOV rectangular (no cuadrada), movible y
+    redimensionable desde las 4 esquinas o los 4 bordes. Misma UX que la
+    caja axial pero con ancho y alto independientes.
 
-    if image_data is None:
-        _panel_header("🖼️", title)
-        uploaded = _render_image_uploader(ref["id"], img_idx, f"Subir {title.lower()}")
-        image_data = uploaded if uploaded is not None else img_state.get(f"img{img_idx}")
-        if image_data is None:
-            return
-        st.rerun()
+    default_y_ini / default_y_fin: posiciones Y (0-1) del rect inicial.
+    Se toman, por ejemplo, de get_y_position_with_offset(inicio_recons) y
+    get_y_position_with_offset(fin_recons). Una vez que el usuario
+    interactúa, el estado queda en localStorage y los defaults se
+    ignoran."""
+    if not img_b64:
+        return None
+
+    # Sanear defaults
+    try:
+        y_ini = max(0.02, min(0.95, float(default_y_ini)))
+        y_fin = max(0.05, min(0.98, float(default_y_fin)))
+    except Exception:
+        y_ini, y_fin = 0.25, 0.75
+    if y_fin < y_ini:
+        y_ini, y_fin = y_fin, y_ini
+    d_y = y_ini
+    d_h = max(0.05, y_fin - y_ini)
+    d_x = max(0.02, min(0.9, float(default_x)))
+    d_w = max(0.08, min(0.95 - d_x, float(default_w)))
+
+    canvas_id = "canvas_" + storage_key
+
+    html = f"""
+<div style="text-align:center; margin:0;">
+  <div style="display:inline-block; font-size:14px; font-weight:600; color:#ddd; margin-bottom:4px;">
+    {titulo}
+  </div>
+  <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
+    style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+</div>
+<script>
+(function() {{
+  var imgB64 = {json.dumps(img_b64)};
+  var storageKey = {json.dumps('planitc_' + storage_key)};
+  var strokeColor = {json.dumps(color)};
+  var canvas = document.getElementById({json.dumps(canvas_id)});
+  if (!canvas) return;
+
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var img = new Image();
+  img.src = 'data:image/jpeg;base64,' + imgB64;
+
+  // Rectángulo en coordenadas normalizadas 0-1. x,y = esquina sup-izq.
+  var rect = {{ x: {d_x}, y: {d_y}, w: {d_w}, h: {d_h} }};
+
+  var dragMode = null;
+  var dragOffsetX = 0, dragOffsetY = 0;
+  var cornerTol = 18;
+  var edgeTol = 12;
+  var handleVisual = 10;
+  var minDim = 0.03;
+  var maxDim = 0.97;
+
+  function rgbaFromHex(hex, alpha) {{
+    if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
+    var h = hex.replace('#','');
+    if (h.length === 3) h = h.split('').map(function(c) {{ return c + c; }}).join('');
+    if (h.length !== 6) return 'rgba(0,210,255,' + alpha + ')';
+    var r = parseInt(h.substring(0,2), 16);
+    var g = parseInt(h.substring(2,4), 16);
+    var b = parseInt(h.substring(4,6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }}
+
+  try {{
+    var saved = localStorage.getItem(storageKey);
+    if (saved) {{
+      var parsed = JSON.parse(saved);
+      if (parsed && parsed.rect) rect = parsed.rect;
+    }}
+  }} catch (e) {{}}
+
+  function saveState() {{
+    try {{
+      localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
+    }} catch (e) {{}}
+  }}
+
+  function clampRect() {{
+    rect.w = Math.max(minDim, Math.min(maxDim, rect.w));
+    rect.h = Math.max(minDim, Math.min(maxDim, rect.h));
+    rect.x = Math.max(0.01, Math.min(0.99 - rect.w, rect.x));
+    rect.y = Math.max(0.01, Math.min(0.99 - rect.h, rect.y));
+  }}
+
+  function getRectPx() {{
+    return {{ x: rect.x * W, y: rect.y * H, w: rect.w * W, h: rect.h * H }};
+  }}
+
+  function isInsideRect(mx, my, rp) {{
+    return mx >= rp.x && mx <= rp.x + rp.w && my >= rp.y && my <= rp.y + rp.h;
+  }}
+
+  function detectHandle(mx, my, rp) {{
+    var left = rp.x, right = rp.x + rp.w;
+    var top = rp.y, bottom = rp.y + rp.h;
+
+    var nearLeft = Math.abs(mx - left) <= cornerTol;
+    var nearRight = Math.abs(mx - right) <= cornerTol;
+    var nearTop = Math.abs(my - top) <= cornerTol;
+    var nearBottom = Math.abs(my - bottom) <= cornerTol;
+
+    if (nearLeft && nearTop) return 'tl';
+    if (nearRight && nearTop) return 'tr';
+    if (nearLeft && nearBottom) return 'bl';
+    if (nearRight && nearBottom) return 'br';
+
+    if (Math.abs(my - top) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 't';
+    if (Math.abs(my - bottom) <= edgeTol && mx >= left - edgeTol && mx <= right + edgeTol) return 'b';
+    if (Math.abs(mx - left) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'l';
+    if (Math.abs(mx - right) <= edgeTol && my >= top - edgeTol && my <= bottom + edgeTol) return 'r';
+
+    if (isInsideRect(mx, my, rp)) return 'body';
+    return null;
+  }}
+
+  // Cada handle ajusta ancho/alto de forma independiente. No se fuerza
+  // aspecto (a diferencia de la caja axial cuadrada). La esquina/borde
+  // opuesto queda fijo.
+  function resizeFromHandle(handle, pos) {{
+    var left = rect.x * W;
+    var top = rect.y * H;
+    var wpx = rect.w * W;
+    var hpx = rect.h * H;
+    var right = left + wpx;
+    var bottom = top + hpx;
+    var minPxW = minDim * W;
+    var minPxH = minDim * H;
+
+    switch (handle) {{
+      case 'br': {{
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 'tl': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.x = nx / W;
+        rect.y = ny / H;
+        rect.w = (right - nx) / W;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'tr': {{
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.y = ny / H;
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'bl': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        rect.x = nx / W;
+        rect.w = (right - nx) / W;
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 't': {{
+        var ny = Math.min(bottom - minPxH, pos.y);
+        rect.y = ny / H;
+        rect.h = (bottom - ny) / H;
+        break;
+      }}
+      case 'b': {{
+        rect.h = Math.max(minPxH, pos.y - top) / H;
+        break;
+      }}
+      case 'l': {{
+        var nx = Math.min(right - minPxW, pos.x);
+        rect.x = nx / W;
+        rect.w = (right - nx) / W;
+        break;
+      }}
+      case 'r': {{
+        rect.w = Math.max(minPxW, pos.x - left) / W;
+        break;
+      }}
+    }}
+    clampRect();
+  }}
+
+  function drawBaseImage() {{
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    if (img.width && img.height) {{
+      var scale = Math.min(W / img.width, H / img.height);
+      var drawW = img.width * scale;
+      var drawH = img.height * scale;
+      var dx = (W - drawW) / 2;
+      var dy = (H - drawH) / 2;
+      ctx.drawImage(img, dx, dy, drawW, drawH);
+    }}
+  }}
+
+  function drawRect() {{
+    clampRect();
+    var rp = getRectPx();
+    ctx.fillStyle = rgbaFromHex(strokeColor, 0.14);
+    ctx.fillRect(rp.x, rp.y, rp.w, rp.h);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 6]);
+    ctx.strokeRect(rp.x, rp.y, rp.w, rp.h);
+    ctx.setLineDash([]);
+
+    var hs = handleVisual;
+    var cx = rp.x + rp.w / 2;
+    var cy = rp.y + rp.h / 2;
+    var points = [
+      [rp.x, rp.y], [rp.x + rp.w, rp.y],
+      [rp.x, rp.y + rp.h], [rp.x + rp.w, rp.y + rp.h],
+      [cx, rp.y], [cx, rp.y + rp.h],
+      [rp.x, cy], [rp.x + rp.w, cy],
+    ];
+    ctx.fillStyle = strokeColor;
+    ctx.strokeStyle = '#0a0a0a';
+    ctx.lineWidth = 1.5;
+    for (var i = 0; i < points.length; i++) {{
+      ctx.fillRect(points[i][0] - hs / 2, points[i][1] - hs / 2, hs, hs);
+      ctx.strokeRect(points[i][0] - hs / 2, points[i][1] - hs / 2, hs, hs);
+    }}
+  }}
+
+  function draw() {{
+    drawBaseImage();
+    drawRect();
+    saveState();
+  }}
+
+  function getMousePos(e) {{
+    var r = canvas.getBoundingClientRect();
+    return {{ x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) }};
+  }}
+
+  function cursorForHandle(h) {{
+    if (h === 'tl' || h === 'br') return 'nwse-resize';
+    if (h === 'tr' || h === 'bl') return 'nesw-resize';
+    if (h === 't' || h === 'b') return 'ns-resize';
+    if (h === 'l' || h === 'r') return 'ew-resize';
+    if (h === 'body') return 'grab';
+    return 'default';
+  }}
+
+  function updateCursor(mx, my) {{
+    var rp = getRectPx();
+    canvas.style.cursor = cursorForHandle(detectHandle(mx, my, rp));
+  }}
+
+  function startDrag(pos) {{
+    var rp = getRectPx();
+    var h = detectHandle(pos.x, pos.y, rp);
+    if (!h) return;
+    if (h === 'body') {{
+      dragMode = 'body';
+      dragOffsetX = pos.x - rp.x;
+      dragOffsetY = pos.y - rp.y;
+      canvas.style.cursor = 'grabbing';
+    }} else {{
+      dragMode = h;
+      canvas.style.cursor = cursorForHandle(h);
+    }}
+  }}
+
+  function applyDrag(pos) {{
+    if (!dragMode) return;
+    if (dragMode === 'body') {{
+      rect.x = (pos.x - dragOffsetX) / W;
+      rect.y = (pos.y - dragOffsetY) / H;
+      clampRect();
+    }} else {{
+      resizeFromHandle(dragMode, pos);
+    }}
+    draw();
+  }}
+
+  canvas.addEventListener('mousedown', function(e) {{ startDrag(getMousePos(e)); }});
+  canvas.addEventListener('mousemove', function(e) {{
+    var pos = getMousePos(e);
+    if (!dragMode) updateCursor(pos.x, pos.y);
+    else applyDrag(pos);
+  }});
+  function endDrag() {{ dragMode = null; saveState(); }}
+  canvas.addEventListener('mouseup', endDrag);
+  canvas.addEventListener('mouseleave', endDrag);
+  canvas.addEventListener('touchstart', function(e) {{
+    e.preventDefault();
+    startDrag(getMousePos(e.touches[0]));
+  }}, {{passive:false}});
+  canvas.addEventListener('touchmove', function(e) {{
+    e.preventDefault();
+    if (dragMode) applyDrag(getMousePos(e.touches[0]));
+  }}, {{passive:false}});
+  canvas.addEventListener('touchend', endDrag);
+  img.onload = function() {{ draw(); }};
+  if (img.complete) draw();
+}})();
+</script>
+"""
+    return html
+
+
+EXPLORACION_COLORS = [
+    "#00D2FF",  # cian
+    "#FFB000",  # ámbar
+    "#7CFF6B",  # verde
+    "#FF5CA8",  # fucsia
+    "#A78BFA",  # violeta
+    "#FF7A59",  # naranja
+    "#5EEAD4",  # turquesa
+    "#FACC15",  # amarillo
+]
+
+
+def _color_exploracion(exp) -> str:
+    """Usa la misma paleta y el mismo orden que Adquisición."""
+    exploraciones = st.session_state.get("exploraciones", [])
+    try:
+        idx = next(i for i, e in enumerate(exploraciones) if e.get("id") == exp.get("id"))
+    except Exception:
+        try:
+            idx = int(exp.get("orden", 1)) - 1
+        except Exception:
+            idx = 0
+    return EXPLORACION_COLORS[idx % len(EXPLORACION_COLORS)]
+
+
+def _fase_por_nombre_exploracion(nombre: str):
+    mapa = {
+        "SIN CONTRASTE": "SIN CONTRASTE",
+        "ARTERIAL": "ARTERIAL",
+        "VENOSA": "VENOSA",
+        "TARDÍA": "TARDIA",
+        "ANGIOGRÁFICA": "ANGIOGRÁFICA",
+        "BOLUS TEST": "ARTERIAL",
+        "BOLUS TRACKING": "ARTERIAL",
+    }
+    return mapa.get(nombre or "", FASES_RECONS[0])
+
+
+def _crear_reconstruccion_base(exp, numero, region_anat):
+    exp_id = exp.get("id")
+    ventana_def = list(VENTANAS.keys())[0]
+    ww_def = VENTANAS[ventana_def]["ww"]
+    wl_def = VENTANAS[ventana_def]["wl"]
+    refs_ini_local = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
+    refs_fin_local = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
+    algoritmo_def = ALGORITMOS_ITERATIVOS[0]
+    niveles_def = NIVEL_ITERATIVO.get(algoritmo_def, [1])
+
+    return {
+        "id": f"{exp_id}_rec_{numero}",
+        "nombre": f"Reconstrucción {numero}",
+        "fase_recons": _fase_por_nombre_exploracion(exp.get("nombre")),
+        "tipo_recons": TIPOS_RECONS[0],
+        "algoritmo_iter": algoritmo_def,
+        "nivel_iter": niveles_def[0],
+        "kernel_sel": KERNELS[1] if len(KERNELS) > 1 else KERNELS[0],
+        "grosor_recons": GROSORES_RECONS[6] if len(GROSORES_RECONS) > 6 else GROSORES_RECONS[0],
+        "incremento": INCREMENTOS_RECONS[4] if len(INCREMENTOS_RECONS) > 4 else INCREMENTOS_RECONS[0],
+        "ventana_preset": ventana_def,
+        "ww_val": ww_def,
+        "wl_val": wl_def,
+        "dfov": DFOV_OPCIONES[2] if len(DFOV_OPCIONES) > 2 else DFOV_OPCIONES[0],
+        "inicio_recons": refs_ini_local[0],
+        "fin_recons": refs_fin_local[0],
+    }
+
+
+def _get_topograma_set_for_exp(exp):
+    sets = st.session_state.get("topograma_sets", [])
+    idx = exp.get("topo_set_idx", 0) if isinstance(exp, dict) else 0
+    if isinstance(idx, int) and 0 <= idx < len(sets):
+        return sets[idx] or {}
+    return st.session_state.get("topograma_store", {}) or {}
+
+
+def _get_region_label_for_exp(exp) -> str:
+    store = _get_topograma_set_for_exp(exp)
+    return (store.get("examen") or store.get("region_anat") or store.get("region") or "").strip()
+
+
+def _get_region_group_for_exp(exp) -> str:
+    region = _get_region_label_for_exp(exp).upper()
+    if "ANGIO" in region or region.startswith("ATC"):
+        return "ANGIO"
+    for key in REFS_INICIO:
+        if key in region:
+            return key
+    return "CUERPO"
+
+
+def _reconstruccion_completada(rec, exp_id) -> bool:
+    img_ok = bool(st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id")))
+    campos = [
+        rec.get("fase_recons"),
+        rec.get("tipo_recons"),
+        rec.get("kernel_sel"),
+        rec.get("grosor_recons"),
+        rec.get("incremento"),
+        rec.get("ventana_preset"),
+        rec.get("dfov"),
+    ]
+    params_ok = all(v not in (None, "", "Seleccionar") for v in campos)
+    return img_ok and params_ok
+
+
+def _reindexar_reconstrucciones(exp_id):
+    lista_local = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])[:6]
+    st.session_state["reconstrucciones_por_exp"][exp_id] = lista_local
+    for idx_local, rec_local in enumerate(lista_local, start=1):
+        rec_local["id"] = f"{exp_id}_rec_{idx_local}"
+        rec_local["nombre"] = f"Reconstrucción {idx_local}"
+
+
+def _obtener_adquisiciones_validas():
+    exploraciones = st.session_state.get("exploraciones", [])
+    if not exploraciones:
+        exploraciones = st.session_state.get("exploraciones_adq", [])
+
+    adquisiciones = []
+    ids_vistos = set()
+    for idx, exp in enumerate(exploraciones, start=1):
+        if not isinstance(exp, dict):
+            continue
+        tipo = exp.get("tipo") or exp.get("tipo_item") or "adquisicion"
+        if tipo != "adquisicion":
+            continue
+
+        nuevo = copy.deepcopy(exp)
+        exp_id = nuevo.get("id") or f"exp_{idx}"
+        if exp_id in ids_vistos:
+            exp_id = f"{exp_id}_{idx}"
+        ids_vistos.add(exp_id)
+        nuevo["id"] = exp_id
+        nuevo["orden"] = nuevo.get("orden") or nuevo.get("order") or idx
+        nuevo["tipo_exploracion"] = nuevo.get("tipo_exploracion") or nuevo.get("tipo_exp") or "HELICOIDAL"
+        adquisiciones.append(nuevo)
+
+    return adquisiciones
+
+
+def _eliminar_reconstruccion(exp_id, rec_id):
+    """Elimina una reconstrucción específica de su exploración y limpia
+    la imagen asociada si existe."""
+    lista = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    st.session_state["reconstrucciones_por_exp"][exp_id] = [
+        r for r in lista if r.get("id") != rec_id
+    ]
+    # Limpiar imagen asociada
+    st.session_state.get("imagenes_recon_por_id", {}).pop(rec_id, None)
+    # Si era la reconstrucción activa, limpiar la referencia
+    if st.session_state["recon_activa_por_exp"].get(exp_id) == rec_id:
+        recs_restantes = st.session_state["reconstrucciones_por_exp"][exp_id]
+        st.session_state["recon_activa_por_exp"][exp_id] = (
+            recs_restantes[0]["id"] if recs_restantes else None
+        )
+
+
+def _siguiente_numero_recon(exp_id):
+    """Devuelve el número más alto + 1 entre las reconstrucciones existentes
+    de una exploración, para usarlo en la nueva."""
+    lista = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    if not lista:
+        return 1
+    nums = []
+    for r in lista:
+        # El id tiene formato "{exp_id}_rec_{n}". Tomamos el n.
+        rid = r.get("id", "")
+        try:
+            nums.append(int(rid.rsplit("_", 1)[-1]))
+        except (ValueError, IndexError):
+            pass
+    return (max(nums) + 1) if nums else (len(lista) + 1)
+
+
+def render_reconstruccion():
+    _inject_recon_css()
+    adquisiciones_validas = _obtener_adquisiciones_validas()
+
+    st.session_state.setdefault("reconstrucciones_por_exp", {})
+    st.session_state.setdefault("recon_activa_por_exp", {})
+    st.session_state.setdefault("exploracion_rec_activa", None)
+    st.session_state.setdefault("imagenes_recon_por_id", {})
+
+    ids_adq_validos = [e.get("id") for e in adquisiciones_validas]
+
+    # Limpiar reconstrucciones de adquisiciones que ya no existen
+    for exp_id_existente in list(st.session_state["reconstrucciones_por_exp"].keys()):
+        if exp_id_existente not in ids_adq_validos:
+            # También limpiar imágenes asociadas
+            recs_a_borrar = st.session_state["reconstrucciones_por_exp"].get(exp_id_existente, [])
+            for r in recs_a_borrar:
+                st.session_state["imagenes_recon_por_id"].pop(r.get("id"), None)
+            st.session_state["reconstrucciones_por_exp"].pop(exp_id_existente, None)
+            st.session_state["recon_activa_por_exp"].pop(exp_id_existente, None)
+
+    # Inicializar contenedores para adquisiciones nuevas (sin crear recons automáticas)
+    for exp in adquisiciones_validas:
+        exp_id = exp.get("id")
+        st.session_state["reconstrucciones_por_exp"].setdefault(exp_id, [])
+
+    # Auto-seleccionar la primera adquisición si no hay ninguna activa
+    if st.session_state["exploracion_rec_activa"] not in ids_adq_validos:
+        st.session_state["exploracion_rec_activa"] = ids_adq_validos[0] if ids_adq_validos else None
+
+    # ── Layout: Sidebar (col_nav) + Panel central (col_det) ──
+    col_nav, col_det = st.columns([0.8, 2.7], gap="large")
+
+    with col_nav:
+        _render_sidebar_reconstruccion(adquisiciones_validas)
+
+    with col_det:
+        _render_panel_central(adquisiciones_validas)
+
+    return st.session_state.get("reconstrucciones_por_exp", {})
+
+
+def _render_sidebar_reconstruccion(adquisiciones_validas):
+    """Sidebar con lista de adquisiciones + sus reconstrucciones colapsables.
+    Solo se expande la adquisición "activa" (la que el usuario está viendo o
+    la que contiene la reconstrucción abierta)."""
+    _panel_header("🧩", "Reconstrucciones")
+
+    if not adquisiciones_validas:
+        st.info("Primero agrega al menos una adquisición en la pestaña **Adquisición**.")
+        return
+
+    recons_map = st.session_state["reconstrucciones_por_exp"]
+    exp_activa_id = st.session_state["exploracion_rec_activa"]
+    recon_activa_ids = st.session_state["recon_activa_por_exp"]
+
+    # Determinar qué adquisición está expandida:
+    #   - Siempre la que está marcada como "exploracion_rec_activa"
+    #     (que se actualiza tanto al clickear una adquisición como una rec)
+    exp_expandida_id = exp_activa_id
+
+    for i, exp in enumerate(adquisiciones_validas):
+        exp_id = exp.get("id")
+        recs_exp = recons_map.get(exp_id, [])
+        n_recs = len(recs_exp)
+        n_completas = sum(1 for r in recs_exp if _reconstruccion_completada(r, exp_id))
+        esta_expandida = (exp_id == exp_expandida_id)
+
+        color = _color_exploracion(exp)
+        nombre_base = (
+            exp.get("nombre")
+            if exp.get("nombre") and exp.get("nombre") != "Seleccionar"
+            else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
+        )
+        region = _get_region_label_for_exp(exp)
+        nombre_visible = f"{nombre_base} · {region}".strip(" ·")
+
+        # Chip de color (igual al original)
+        _mini_chip(color, nombre_visible, "")
+
+        # Contador si está colapsada
+        contador = ""
+        if not esta_expandida and n_recs > 0:
+            contador = f"  ({n_completas}/{n_recs})"
+
+        # Botón principal de la adquisición
+        es_activa_la_adq = (
+            esta_expandida
+            and recon_activa_ids.get(exp_id) is None
+        )
+        if st.button(
+            f"⚡ {nombre_visible}{contador}",
+            key=f"btn_rec_sel_{exp_id}",
+            use_container_width=True,
+            type="primary" if es_activa_la_adq else "secondary",
+        ):
+            st.session_state["exploracion_rec_activa"] = exp_id
+            # Al seleccionar una adquisición, deseleccionar su reconstrucción
+            # activa para que el panel central muestre el resumen de la adq.
+            st.session_state["recon_activa_por_exp"][exp_id] = None
+            st.rerun()
+
+        # Reconstrucciones: solo visibles si la adquisición está expandida
+        if esta_expandida and recs_exp:
+            for rec in recs_exp:
+                rec_id = rec.get("id")
+                rec_activa = (recon_activa_ids.get(exp_id) == rec_id)
+                completa = _reconstruccion_completada(rec, exp_id)
+
+                # Icono de estado: 🟢 completa, ⚪ en edición
+                icono = "🟢" if completa else "⚪"
+
+                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
+                with c_main:
+                    if st.button(
+                        f"{icono} {rec.get('nombre', 'Reconstrucción')}",
+                        key=f"btn_rec_item_{rec_id}",
+                        use_container_width=True,
+                        type="primary" if rec_activa else "secondary",
+                    ):
+                        st.session_state["exploracion_rec_activa"] = exp_id
+                        st.session_state["recon_activa_por_exp"][exp_id] = rec_id
+                        st.rerun()
+                with c_del:
+                    if st.button(
+                        "✕",
+                        key=f"btn_rec_del_{rec_id}",
+                        type="tertiary",
+                        use_container_width=True,
+                        help=f"Eliminar {rec.get('nombre', 'Reconstrucción')}",
+                    ):
+                        _eliminar_reconstruccion(exp_id, rec_id)
+                        st.rerun()
+
+        # Espacio vertical entre adquisiciones
+        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
+
+    # ── Botón "+ Reconstrucción" ──
+    # Se agrega a la adquisición activa. Si no hay, no se puede agregar.
+    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
+
+    if st.button(
+        "+ Reconstrucción",
+        key="rec_btn_add_recon",
+        type="secondary",
+        use_container_width=True,
+    ):
+        if exp_activa_id is None:
+            st.warning("Selecciona una adquisición primero.")
+        else:
+            exp_activa = next(
+                (e for e in adquisiciones_validas if e.get("id") == exp_activa_id),
+                None,
+            )
+            if exp_activa is not None:
+                region_anat = _get_region_group_for_exp(exp_activa)
+                nuevo_num = _siguiente_numero_recon(exp_activa_id)
+                nueva = _crear_reconstruccion_base(exp_activa, nuevo_num, region_anat)
+                st.session_state["reconstrucciones_por_exp"][exp_activa_id].append(nueva)
+                # Dejar la nueva como activa
+                st.session_state["recon_activa_por_exp"][exp_activa_id] = nueva["id"]
+                st.rerun()
+
+
+def _get_topogramas_de_adquisicion(exp, rec_actual):
+    """Devuelve los topogramas de la adquisición listos para renderizar.
+
+    Cada elemento incluye imagen, título, caption y la clave de storage
+    para que luego puedan mostrarse en columnas una al lado de la otra.
+    """
+    tstore = _get_topograma_set_for_exp(exp)
+    hay_topo1 = bool(tstore.get("topograma_iniciado", False))
+    hay_topo2 = bool(
+        tstore.get("aplica_topo2") and tstore.get("topograma2_iniciado", False)
+    )
+
+    if not hay_topo1 and not hay_topo2:
+        return [], None
 
     try:
-        pil = Image.open(io.BytesIO(image_data["bytes"]))
-        img_b64 = _pil_to_b64_jpeg(pil)
-        img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
-        html = _overlay_canvas_html(
-            img_b64=img_b64,
-            storage_key=f"{ref['id']}_img{img_idx}_{img_sig}",
-            acq_color=_color_exploracion_por_exp_id(rec.get("exp_id")),
-            rec_color=_color_reconstruccion(rec),
-            settings=overlay,
-            title="",
-            css_width=css_width,
-            css_height=css_height,
-        )
-        components.html(html, height=css_height + 90, scrolling=False)
+        from ui.topograma import obtener_imagen_topograma_adquirido
     except Exception as e:
-        st.error(f"No se pudo mostrar la imagen: {e}")
+        return [], f"No se pudo cargar el módulo de topograma: {e}"
+
+    try:
+        from ui.adquisicion import get_y_position_with_offset
+        y_ini_default = get_y_position_with_offset(rec_actual.get("inicio_recons"), 0)
+        y_fin_default = get_y_position_with_offset(rec_actual.get("fin_recons"), 0)
+    except Exception:
+        y_ini_default, y_fin_default = 0.25, 0.75
+
+    def _caption_topo(tubo, largo, etiqueta):
+        tubo_txt = tubo or "—"
+        largo_txt = f"{largo} mm" if largo not in (None, "", "Seleccionar") else "— mm"
+        return f"{etiqueta} · Tubo: {tubo_txt} · {largo_txt} · 100 kV · 40 mA"
+
+    topogramas = []
+
+    if hay_topo1:
+        img1, err1 = obtener_imagen_topograma_adquirido(
+            tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("posicion") or "",
+            tstore.get("entrada") or "",
+            tstore.get("t1pt") or "",
+        )
+        if img1 is not None:
+            topogramas.append({
+                "img": img1,
+                "storage_suffix": "topo1",
+                "titulo": "Topograma 1",
+                "caption": _caption_topo(tstore.get("t1pt"), tstore.get("t1l"), "Topo 1"),
+                "default_y_ini": y_ini_default,
+                "default_y_fin": y_fin_default,
+            })
+        elif err1:
+            topogramas.append({"error": f"Topograma 1: {err1}"})
+
+    if hay_topo2:
+        img2, err2 = obtener_imagen_topograma_adquirido(
+            tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
+            tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
+            tstore.get("t2_posicion_tubo") or tstore.get("t2pt") or "",
+        )
+        if img2 is not None:
+            topogramas.append({
+                "img": img2,
+                "storage_suffix": "topo2",
+                "titulo": "Topograma 2",
+                "caption": _caption_topo(tstore.get("t2pt"), tstore.get("t2l"), "Topo 2"),
+                "default_y_ini": y_ini_default,
+                "default_y_fin": y_fin_default,
+            })
+        elif err2:
+            topogramas.append({"error": f"Topograma 2: {err2}"})
+
+    return topogramas, None
+
+
+
+def _render_topograma_en_columna(exp, rec_actual, topo_data):
+    """Renderiza un topograma individual dentro de una columna."""
+    if topo_data.get("error"):
+        st.warning(topo_data["error"])
         return
 
-    if st.button("🗑️ Borrar imagen", key=f"del_{ref['id']}_{img_idx}", use_container_width=True):
-        img_state[f"img{img_idx}"] = None
-        st.rerun()
-
-
-def _render_panel_rec(rec_id: str, recons_planas):
-    rec = next((r for r in recons_planas if r["id"] == rec_id), None)
-    if rec is None:
-        st.warning("Reconstrucción no encontrada.")
+    img_pil = topo_data.get("img")
+    if img_pil is None:
         return
-    _panel_header("🧩", f"{rec['nombre']} · {rec['exp_nombre']}")
-    recd = rec["rec"]
-    c1, c2 = st.columns(2, gap="medium")
-    with c1:
-        st.markdown(f"**Fase:** {recd.get('fase_recons', '—')}")
-        st.markdown(f"**Tipo:** {recd.get('tipo_recons', '—')}")
-        st.markdown(f"**Kernel:** {recd.get('kernel_sel', '—')}")
-        st.markdown(f"**Grosor:** {recd.get('grosor_recons', '—')}")
-        st.markdown(f"**Incremento:** {recd.get('incremento', '—')}")
-    with c2:
-        st.markdown(f"**Ventana:** {recd.get('ventana_preset', '—')}")
-        st.markdown(f"**WW / WL:** {recd.get('ww_val', '—')} / {recd.get('wl_val', '—')}")
-        st.markdown(f"**DFOV:** {recd.get('dfov', '—')}")
-        st.markdown(f"**Inicio:** {recd.get('inicio_recons', '—')}")
-        st.markdown(f"**Fin:** {recd.get('fin_recons', '—')}")
-    st.markdown("---")
-    lista_refs = st.session_state["reformaciones_por_rec"].get(rec_id, [])
-    if lista_refs:
-        st.markdown(f"**Reformaciones creadas ({len(lista_refs)}):**")
-        for ref in lista_refs:
-            st.markdown(f"- 📐 {_nombre_reformacion(ref)}")
+
+    color_rec = _color_exploracion(exp)
+
+    img_b64 = _pil_to_b64_jpeg(img_pil, max_width=800)
+    if not img_b64:
+        st.image(img_pil, width=300)
+        return
+
+    html_topo = render_canvas_topo_dfov_rect(
+        img_b64=img_b64,
+        storage_key=f"recon_topo_rect_{rec_actual['id']}_{topo_data['storage_suffix']}",
+        color=color_rec,
+        titulo="Ajuste el DFOV",
+        default_y_ini=topo_data.get("default_y_ini", 0.25),
+        default_y_fin=topo_data.get("default_y_fin", 0.75),
+        canvas_css_width=260,
+        canvas_css_height=360,
+        canvas_width=560,
+        canvas_height=780,
+    )
+    if html_topo:
+        components.html(html_topo, height=410, scrolling=False)
     else:
-        st.info("Aún no hay reformaciones para esta reconstrucción. Usa **+ Reformación** en la barra lateral para crear la primera.")
+        st.image(img_pil, width=260)
 
 
-def _reset_params(ref: dict):
-    for p in ["plano", "grosor", "distancia", "n_vistas", "angulo"]:
-        ref[p] = None
-
-
-def _render_resumen(ref: dict):
-    tipo = ref.get("tipo") or "—"
-    subt = ref.get("subtipo")
-    nombre = f"{tipo} {subt}" if subt else tipo
-    params_activos = PARAMS_POR_TIPO.get((ref.get("tipo"), ref.get("subtipo")), [])
-    lines = [f"**Tipo:** {nombre}"]
-    for p in params_activos:
-        val = ref.get(p)
-        lines.append(f"**{PARAMS_LABELS.get(p, p)}:** {val if val is not None else '—'}")
-    st.markdown("  \n".join(lines))
-
-
-def _render_panel_reformacion(ref_id: str, recons_planas):
-    ref = None
-    for lista in st.session_state["reformaciones_por_rec"].values():
-        for r in lista:
-            if r["id"] == ref_id:
-                ref = r
-                break
-        if ref:
-            break
-    if ref is None:
-        st.warning("Reformación no encontrada.")
+def _render_panel_central(adquisiciones_validas):
+    """Panel central: si hay reconstrucción seleccionada muestra sus parámetros;
+    si no, muestra un resumen de la adquisición activa."""
+    if not adquisiciones_validas or st.session_state.get("exploracion_rec_activa") is None:
+        st.warning("No hay adquisiciones disponibles para reconstruir.")
         return
 
-    rec = next((r for r in recons_planas if r["id"] == ref.get("rec_id")), None)
-    header_txt = _nombre_reformacion(ref)
-    if rec:
-        header_txt = f"{header_txt} · {rec['nombre']} ({rec['exp_nombre']})"
-    _panel_header("📐", header_txt)
+    exp_id = st.session_state["exploracion_rec_activa"]
+    exp_activa = next((e for e in adquisiciones_validas if e.get("id") == exp_id), None)
 
-    tipo_prev = ref.get("tipo")
-    ref["tipo"] = selectbox_con_placeholder("Tipo de reformación", TIPOS_REFORMACION, key=f"ref_tipo_{ref['id']}", value=tipo_prev)
-    if ref["tipo"] != tipo_prev:
-        ref["subtipo"] = None
-        _reset_params(ref)
-
-    if ref["tipo"] is None:
-        st.info("Selecciona el tipo de reformación para continuar.")
+    if exp_activa is None:
+        st.warning("No se pudo cargar la adquisición seleccionada.")
         return
 
-    subtipos = SUBTIPOS.get(ref["tipo"])
-    if subtipos:
-        subt_prev = ref.get("subtipo")
-        ref["subtipo"] = selectbox_con_placeholder(f"{ref['tipo']} — variante", subtipos, key=f"ref_subtipo_{ref['id']}", value=subt_prev)
-        if ref["subtipo"] != subt_prev:
-            _reset_params(ref)
-        if ref["subtipo"] is None:
-            st.info("Selecciona la variante para continuar.")
-            return
-    else:
-        ref["subtipo"] = None
+    recs_exp = st.session_state["reconstrucciones_por_exp"].get(exp_id, [])
+    rec_activa_id = st.session_state["recon_activa_por_exp"].get(exp_id)
+    rec_actual = None
+    if rec_activa_id:
+        rec_actual = next((r for r in recs_exp if r.get("id") == rec_activa_id), None)
 
-    # Layout solicitado
-    top_left, top_right = st.columns(2, gap="large")
-    with top_left:
-        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=520, css_height=380)
-    with top_right:
-        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=520, css_height=380)
+    # Nombre legible de la adquisición
+    nombre_base_exp = (
+        exp_activa.get("nombre")
+        if exp_activa.get("nombre") and exp_activa.get("nombre") != "Seleccionar"
+        else f"EXPLORACIÓN {exp_activa.get('orden', 1)}"
+    )
+    region_exp = _get_region_label_for_exp(exp_activa)
+    nombre_exp = f"{nombre_base_exp} · {region_exp}".strip(" ·").upper()
 
-    bottom_left, bottom_right = st.columns([1.15, 1.0], gap="large")
-    with bottom_left:
-        _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=520, css_height=380)
-    with bottom_right:
-        st.markdown("<div style='height:0.2rem;'></div>", unsafe_allow_html=True)
-        _panel_header("🎛️", "Parámetros de la reformación")
-        params = PARAMS_POR_TIPO.get((ref["tipo"], ref["subtipo"]), [])
-        if not params:
-            st.warning("Combinación no soportada.")
-            return
-        for i in range(0, len(params), 2):
-            fila = params[i:i+2]
-            cols = st.columns(len(fila), gap="medium")
-            for col, p in zip(cols, fila):
-                with col:
-                    ref[p] = selectbox_con_placeholder(
-                        PARAMS_LABELS.get(p, p.title()),
-                        PARAMS_OPCIONES.get(p, []),
-                        key=f"ref_{p}_{ref['id']}",
-                        value=ref.get(p),
-                    )
+    # ── CASO A: no hay reconstrucción seleccionada → resumen de la adquisición ──
+    if rec_actual is None:
+        _panel_header("⚡", f"Adquisición: {nombre_exp}")
+        st.caption(
+            "Usa el botón **+ Reconstrucción** de la barra lateral para crear "
+            "una nueva reconstrucción para esta adquisición."
+        )
         st.markdown("---")
-        _panel_header("📝", "Resumen")
-        _render_resumen(ref)
-        st.caption("Los rangos paralelos pueden moverse verticalmente sobre cada imagen. Las referencias anatómicas se activan por imagen y permiten escribir el nombre que se mostrará junto a una flecha.")
 
-
-def render_reformaciones():
-    _init_state()
-    recons_planas = _obtener_reconstrucciones_planas()
-    col_sidebar, col_main = st.columns([1.1, 4.5], gap="large")
-    with col_sidebar:
-        _render_sidebar(recons_planas)
-    with col_main:
-        if not recons_planas:
-            st.subheader("Reformaciones")
-            total_existentes = _contar_reconstrucciones_totales()
-            if total_existentes == 0:
-                st.info("Para crear reformaciones, primero debes programar al menos una reconstrucción en la pestaña **🧩 Reconstrucción**.")
-            else:
-                st.warning(
-                    f"Tienes {total_existentes} reconstrucción(es) en la pestaña **🧩 Reconstrucción**, pero ninguna está lista para reformar. Para que una reconstrucción aparezca aquí, debe tener:\n\n"
-                    "- Una **imagen de referencia** cargada.\n"
-                    "- Todos sus **parámetros principales** definidos (fase, tipo, kernel, grosor, incremento, ventana y DFOV)."
-                )
-            return
-        activa = st.session_state["ref_activa"]
-        if activa is None:
-            activa = {"kind": "rec", "rec_id": recons_planas[0]["id"]}
-            st.session_state["ref_activa"] = activa
-        if isinstance(activa, dict) and activa.get("kind") == "rec":
-            _render_panel_rec(activa["rec_id"], recons_planas)
-        elif isinstance(activa, str):
-            _render_panel_reformacion(activa, recons_planas)
+        if not recs_exp:
+            st.info(
+                f"Esta adquisición aún no tiene reconstrucciones. "
+                f"Agrega la primera con **+ Reconstrucción**."
+            )
         else:
-            st.info("Selecciona una reconstrucción o reformación en la barra lateral.")
+            st.markdown(f"**Reconstrucciones creadas ({len(recs_exp)}):**")
+            completas = sum(1 for r in recs_exp if _reconstruccion_completada(r, exp_id))
+            st.markdown(f"🟢 Completadas: **{completas}** · ⚪ En edición: **{len(recs_exp) - completas}**")
+            st.caption("Haz click en una reconstrucción de la barra lateral para editarla.")
+        return
+
+    # ── CASO B: hay reconstrucción seleccionada → parámetros editables ──
+    region_anat = _get_region_group_for_exp(exp_activa)
+    _panel_header("🔄", f"{rec_actual.get('nombre', 'Reconstrucción')} · {nombre_exp}")
+
+    topogramas_data, topo_error = _get_topogramas_de_adquisicion(exp_activa, rec_actual)
+
+    if topo_error:
+        st.warning(topo_error)
+
+    n_topos_visibles = len([t for t in topogramas_data if not t.get("error")])
+    if n_topos_visibles >= 2:
+        fila_cols = st.columns([1.2, 1, 1], gap="medium")
+    elif n_topos_visibles == 1:
+        fila_cols = st.columns([1.3, 1], gap="medium")
+    else:
+        fila_cols = st.columns([1], gap="medium")
+
+    # Primer bloque: subir imagen y mostrar imagen de reconstrucción
+    with fila_cols[0]:
+        img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+
+        if img_guardada is None:
+            imagen_recon = st.file_uploader(
+                "Subir imagen de reconstrucción",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"img_recon_upload_{rec_actual['id']}",
+            )
+            if imagen_recon is not None:
+                st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
+                    "name": imagen_recon.name,
+                    "bytes": imagen_recon.getvalue(),
+                }
+                st.rerun()
+
+        img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+        if img_guardada is not None:
+            if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=True):
+                st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
+                st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
+                st.rerun()
+
+            try:
+                img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
+                img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
+                color_rec = _color_exploracion(exp_activa)
+                html_canvas = render_canvas_recon_cuadrado(
+                    img_b64=img_b64,
+                    storage_key=f"recon_square_{rec_actual['id']}",
+                    color=color_rec,
+                    titulo="Ajuste el Dfov",
+                    canvas_css_width=360,
+                    canvas_css_height=360,
+                    canvas_width=760,
+                    canvas_height=760,
+                )
+                if html_canvas:
+                    components.html(html_canvas, height=430, scrolling=False)
+                else:
+                    st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+            except Exception as e:
+                st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
+                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+
+    # Topogramas a la derecha, uno al lado del otro si existen
+    next_col_idx = 1
+    for topo_data in topogramas_data:
+        if next_col_idx >= len(fila_cols):
+            break
+        with fila_cols[next_col_idx]:
+            _render_topograma_en_columna(exp_activa, rec_actual, topo_data)
+        next_col_idx += 1
+
+    if not topogramas_data:
+        st.info(
+            "Esta adquisición no tiene topograma iniciado. "
+            "Inícialo en la pestaña **Topograma** para verlo aquí."
+        )
+
+    # Parámetros debajo de toda la fila de imágenes
+    st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
+    _panel_header("🔧", "Parámetros de Reconstrucción")
+
+    col_pr1, col_pr2, col_pr3 = st.columns([1, 1, 1], gap="small")
+
+    with col_pr1:
+        rec_actual["fase_recons"] = selectbox_con_placeholder(
+            "Fase a reconstruir",
+            FASES_RECONS,
+            key=f"fase_recons_{rec_actual['id']}_pr1",
+            value=rec_actual.get("fase_recons"),
+        )
+        rec_actual["kernel_sel"] = selectbox_con_placeholder(
+            "Algoritmo (Kernel)",
+            KERNELS,
+            key=f"kernel_sel_{rec_actual['id']}_pr1",
+            value=rec_actual.get("kernel_sel"),
+        )
+
+    with col_pr2:
+        rec_actual["tipo_recons"] = selectbox_con_placeholder(
+            "Tipo de reconstrucción",
+            TIPOS_RECONS,
+            key=f"tipo_recons_{rec_actual['id']}_pr2",
+            value=rec_actual.get("tipo_recons"),
+        )
+        rec_actual["grosor_recons"] = selectbox_con_placeholder(
+            "Grosor reconstrucción",
+            GROSORES_RECONS,
+            key=f"grosor_recons_{rec_actual['id']}_pr2",
+            value=rec_actual.get("grosor_recons"),
+        )
+
+    with col_pr3:
+        if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
+            rec_actual["algoritmo_iter"] = selectbox_con_placeholder(
+                "Algoritmo iterativo",
+                ALGORITMOS_ITERATIVOS,
+                key=f"alg_iter_{rec_actual['id']}_pr3",
+                value=rec_actual.get("algoritmo_iter"),
+            )
+            niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
+            rec_actual["nivel_iter"] = selectbox_con_placeholder(
+                "Nivel / Porcentaje / Modo",
+                niveles_disp,
+                key=f"nivel_iter_{rec_actual['id']}_pr3",
+                value=rec_actual.get("nivel_iter"),
+            )
+        else:
+            rec_actual["algoritmo_iter"] = "—"
+            rec_actual["nivel_iter"] = "—"
+            st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
+            st.caption("Algoritmo iterativo no aplica")
+            st.markdown("<div style='height:1.65rem;'></div>", unsafe_allow_html=True)
+
+        rec_actual["incremento"] = selectbox_con_placeholder(
+            "Incremento",
+            INCREMENTOS_RECONS,
+            key=f"incremento_{rec_actual['id']}_pr3",
+            value=rec_actual.get("incremento"),
+        )
+
+    _panel_header("🪟", "Ventana de Visualización")
+    ventanas_disp = list(VENTANAS.keys())
+
+    if rec_actual.get("ventana_preset") in VENTANAS:
+        ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
+        wl_default = VENTANAS[rec_actual["ventana_preset"]]["wl"]
+    else:
+        ww_default = 400
+        wl_default = 40
+
+    col_v1, col_v2, col_v3 = st.columns([1, 1, 1], gap="small")
+    with col_v1:
+        rec_actual["ventana_preset"] = selectbox_con_placeholder(
+            "Preset de ventana",
+            ventanas_disp,
+            key=f"preset_ventana_{rec_actual['id']}_vv1",
+            value=rec_actual.get("ventana_preset"),
+        )
+
+    with col_v2:
+        rec_actual["ww_val"] = st.number_input(
+            "WW",
+            min_value=1,
+            max_value=5000,
+            value=int(rec_actual.get("ww_val", ww_default)),
+            step=1,
+            key=f"ww_{rec_actual['id']}_vv2",
+        )
+
+    with col_v3:
+        rec_actual["wl_val"] = st.number_input(
+            "WL",
+            min_value=-1500,
+            max_value=3000,
+            value=int(rec_actual.get("wl_val", wl_default)),
+            step=1,
+            key=f"wl_{rec_actual['id']}_vv3",
+        )
+        rec_actual["dfov"] = selectbox_con_placeholder(
+            "DFOV",
+            DFOV_OPCIONES,
+            key=f"dfov_{rec_actual['id']}_vv3",
+            value=rec_actual.get("dfov"),
+        )
+
+    _panel_header("📍", "Rango de Reconstrucción")
+    refs_ini_r = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
+    refs_fin_r = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
+
+    col_ini, col_fin = st.columns([1, 1], gap="small")
+    with col_ini:
+        rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
+    with col_fin:
+        rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
+
+    st.markdown("---")
+    _panel_header("📝", "Resumen de reconstrucción activa")
+    st.markdown(
+        f"""
+        **Adquisición:** {nombre_exp}  
+        **Nombre:** {rec_actual.get('nombre', '—')}  
+        **Fase:** {rec_actual.get('fase_recons', '—')}  
+        **Tipo:** {rec_actual.get('tipo_recons', '—')}  
+        **Algoritmo iterativo:** {rec_actual.get('algoritmo_iter', '—')}  
+        **Nivel:** {rec_actual.get('nivel_iter', '—')}  
+        **Kernel:** {rec_actual.get('kernel_sel', '—')}  
+        **Grosor:** {rec_actual.get('grosor_recons', '—')}  
+        **Incremento:** {rec_actual.get('incremento', '—')}  
+        **Ventana:** {rec_actual.get('ventana_preset', '—')}  
+        **WW / WL:** {rec_actual.get('ww_val', '—')} / {rec_actual.get('wl_val', '—')}  
+        **DFOV:** {rec_actual.get('dfov', '—')}  
+        **Inicio:** {rec_actual.get('inicio_recons', '—')}  
+        **Fin:** {rec_actual.get('fin_recons', '—')}
+        """
+    )
