@@ -105,27 +105,32 @@ def _build_store(**kwargs):
     st.session_state["ingreso_store"] = prev
 
 
+def _restore_widget_value(key, value):
+    """
+    Restaura el valor del widget desde ingreso_store cada vez que la pestaña se vuelve a cargar.
+    """
+    if key not in st.session_state or st.session_state.get(key) in (None, ""):
+        st.session_state[key] = value
+
+
 def _init_session_state():
     store = st.session_state.get("ingreso_store", {})
 
-    widget_defaults = {
-        "nombre_paciente_widget": store.get("nombre", ""),
-        "fecha_nacimiento": date.fromisoformat(store["fecha_nacimiento"]) if store.get("fecha_nacimiento") else date.today(),
-        "diagnostico_widget": store.get("diagnostico", ""),
-        "peso_widget": _safe_int(store.get("peso", 70), 70),
-        "embarazo_widget": store.get("embarazo"),
-        "requiere_creatinina_widget": bool(store.get("requiere_creatinina", False)),
-        "sexo_clearance_widget": store.get("sexo_clearance"),
-        "creatinina_serica_widget": _safe_float(store.get("creatinina_serica", 1.0), 1.0),
-        "contraste_ev_widget": bool(store.get("contraste_ev", False)),
-        "vvp_widget": store.get("vvp"),
-        "metodo_inyeccion_widget": store.get("metodo_inyeccion"),
-        "cantidad_contraste_widget": store.get("cantidad_contraste"),
-    }
-
-    for key, value in widget_defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
+    _restore_widget_value("nombre_paciente_widget", store.get("nombre", ""))
+    _restore_widget_value(
+        "fecha_nacimiento",
+        date.fromisoformat(store["fecha_nacimiento"]) if store.get("fecha_nacimiento") else date.today(),
+    )
+    _restore_widget_value("diagnostico_widget", store.get("diagnostico", ""))
+    _restore_widget_value("peso_widget", _safe_int(store.get("peso", 70), 70))
+    _restore_widget_value("embarazo_widget", store.get("embarazo"))
+    _restore_widget_value("requiere_creatinina_widget", bool(store.get("requiere_creatinina", False)))
+    _restore_widget_value("sexo_clearance_widget", store.get("sexo_clearance"))
+    _restore_widget_value("creatinina_serica_widget", _safe_float(store.get("creatinina_serica", 1.0), 1.0))
+    _restore_widget_value("contraste_ev_widget", bool(store.get("contraste_ev", False)))
+    _restore_widget_value("vvp_widget", store.get("vvp"))
+    _restore_widget_value("metodo_inyeccion_widget", store.get("metodo_inyeccion"))
+    _restore_widget_value("cantidad_contraste_widget", store.get("cantidad_contraste"))
 
 
 def _ir_a_inyectora():
@@ -135,7 +140,6 @@ def _ir_a_inyectora():
 
 def render_ingreso():
     _init_session_state()
-    store = st.session_state.get("ingreso_store", {})
 
     col_izq, col_der = st.columns([1, 1], gap="large")
 
@@ -276,6 +280,8 @@ def render_ingreso():
                         """,
                         unsafe_allow_html=True,
                     )
+            else:
+                st.session_state["sexo_clearance_widget"] = None
 
         with col_prep_der:
             contraste_ev = st.checkbox(
@@ -324,6 +330,8 @@ def render_ingreso():
                         ):
                             _ir_a_inyectora()
             else:
+                st.session_state["vvp_widget"] = None
+                st.session_state["metodo_inyeccion_widget"] = None
                 st.session_state["cantidad_contraste_widget"] = None
 
     _build_store(
