@@ -430,15 +430,14 @@ def _overlay_canvas_html(
         refs_cfg.append({"enabled": False, "text": ""})
     html = f"""
 <div style="text-align:center; margin:0;">
+  <div id="toolbar_{storage_key}" style="width:{css_width}px; margin:0 auto 10px auto; display:flex; gap:8px; justify-content:flex-start; align-items:center;">
+    <button id="btn_{storage_key}_r1" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R1</button>
+    <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R2</button>
+    <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R3</button>
+  </div>
   <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
     <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
       style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;touch-action:none;"></canvas>
-
-    <div id="toolbar_{storage_key}" style="position:absolute; top:8px; left:8px; display:flex; gap:6px; z-index:6;">
-      <button id="btn_{storage_key}_r1" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:4px 9px; font-size:12px; cursor:pointer;">R1</button>
-      <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:4px 9px; font-size:12px; cursor:pointer;">R2</button>
-      <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:4px 9px; font-size:12px; cursor:pointer;">R3</button>
-    </div>
 
     <div id="label_wrap_{storage_key}_0" style="position:absolute; display:none; z-index:7; align-items:center; gap:6px;">
       <div id="label_drag_{storage_key}_0" style="width:24px; height:24px; border-radius:999px; background:{rec_color}; color:#fff; font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:grab; user-select:none;">1</div>
@@ -912,7 +911,12 @@ def _overlay_canvas_html(
   for (let i = 0; i < 3; i++) {{
     if (refBtns[i]) {{
       refBtns[i].addEventListener('click', function() {{
-        state.refs[i].enabled = !state.refs[i].enabled;
+        var wasEnabled = !!state.refs[i].enabled;
+        for (let j = 0; j < 3; j++) {{
+          state.refs[j].enabled = false;
+        }}
+        state.refs[i].enabled = !wasEnabled;
+        saveState();
         drawImage();
       }});
     }}
