@@ -887,7 +887,7 @@ def _render_panel_central(adquisiciones_validas):
                         img_b64=img_b64,
                         storage_key=f"recon_square_{rec_actual['id']}",
                         color=color_rec,
-                        titulo="Imagen de reconstrucción",
+                        titulo="Ajuste el Dfov",
                         canvas_css_width=360,
                         canvas_css_height=360,
                         canvas_width=760,
