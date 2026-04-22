@@ -198,6 +198,35 @@ def _reconstruccion_completada(rec) -> bool:
     return img_ok and params_ok
 
 
+def _get_region_label_for_exp_ref(exp: dict) -> str:
+    """Obtiene el nombre del examen/región asociado a la exploración para
+    mostrarlo junto al nombre de la reconstrucción en Reformaciones."""
+    if not isinstance(exp, dict):
+        return ""
+
+    # 1) Intentar desde el set de topogramas asociado a la exploración
+    sets = st.session_state.get("topograma_sets", []) or []
+    topo_idx = exp.get("topo_set_idx", 0)
+    try:
+        if 0 <= int(topo_idx) < len(sets):
+            topo = sets[int(topo_idx)] or {}
+            region = topo.get("examen") or topo.get("region_anat") or topo.get("region") or ""
+            if region:
+                return str(region).strip()
+    except Exception:
+        pass
+
+    # 2) Fallback directo desde la propia exploración
+    region = exp.get("examen") or exp.get("region_anat") or exp.get("region") or ""
+    if region:
+        return str(region).strip()
+
+    # 3) Último fallback: store legado
+    topo_store = st.session_state.get("topograma_store", {}) or {}
+    region = topo_store.get("examen") or topo_store.get("region_anat") or topo_store.get("region") or ""
+    return str(region).strip() if region else ""
+
+
 def _obtener_reconstrucciones_planas():
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     exploraciones = st.session_state.get("exploraciones", []) or []
@@ -206,7 +235,9 @@ def _obtener_reconstrucciones_planas():
         if not isinstance(exp, dict):
             continue
         eid = exp.get("id") or f"exp_{idx}"
-        nombre_por_exp_id[eid] = exp.get("nombre") or f"Exploración {idx}"
+        nombre_base = exp.get("nombre") or f"Exploración {idx}"
+        region = _get_region_label_for_exp_ref(exp)
+        nombre_por_exp_id[eid] = f"{region} · {nombre_base}" if region else nombre_base
 
     resultado = []
     for exp_id, lista_recons in recons_map.items():
