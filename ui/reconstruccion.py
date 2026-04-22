@@ -253,10 +253,9 @@ def render_canvas_recon_cuadrado(
 
     html = f"""
 <div style="text-align:center; margin:0;">
-  <div style="display:inline-block; font-size:11px; color:#aaa; margin-bottom:4px;">
-    Ajusta el Dfov
+  <div style="display:inline-block; font-size:16px; font-weight:600; color:#ddd; margin-bottom:6px;">
+    {titulo}
   </div>
-  <div style="font-size:15px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
   <canvas id="reconSquareCanvas" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
 </div>
