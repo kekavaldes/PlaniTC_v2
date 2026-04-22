@@ -3,6 +3,5 @@ pandas
 openpyxl
 Pillow
 numpy
-pandas
 reportlab
-cairosvg
+svglib
