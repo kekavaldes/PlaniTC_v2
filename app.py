@@ -5,6 +5,7 @@ from ui.adquisicion import render_adquisicion
 from ui.reconstruccion import render_reconstruccion
 from ui.reformaciones import render_reformaciones
 from ui.inyectora import render_inyectora
+from ui.export_pdf import render_export_pdf
 
 st.set_page_config(page_title="PlaniTC_v2", layout="wide")
 
@@ -15,6 +16,7 @@ TAB_OPTIONS = [
     "🧩  Reconstrucción",
     "📐  Reformaciones",
     "💉  Inyectora",
+    "📄  Exportar",
 ]
 
 
@@ -162,7 +164,7 @@ def go_to_tab(tab_name: str):
 def render_top_navigation():
     current = st.session_state.get("current_tab", "🏠  Inicio")
 
-    cols = st.columns(6)
+    cols = st.columns(7)
     labels = [
         "🏠 Inicio",
         "📋 Ingreso",
@@ -170,6 +172,7 @@ def render_top_navigation():
         "🧩 Reconstrucción",
         "📐 Reformaciones",
         "💉 Inyectora",
+        "📄 Exportar",
     ]
 
     for col, tab_name, label in zip(cols, TAB_OPTIONS, labels):
@@ -205,6 +208,9 @@ def main():
 
     elif current_tab == "💉  Inyectora":
         render_inyectora()
+
+    elif current_tab == "📄  Exportar":
+        render_export_pdf()
 
 
 if __name__ == "__main__":
