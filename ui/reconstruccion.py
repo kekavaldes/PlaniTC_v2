@@ -1258,38 +1258,26 @@ def _render_sidebar_reconstruccion(adquisiciones_validas):
                 st.rerun()
 
 
-def _render_topogramas_de_adquisicion(exp, rec_actual):
-    """Muestra, en el panel derecho, el/los topograma(s) asociados a la
-    adquisición desde la que se está reconstruyendo, con una caja DFOV
-    rectangular arrastrable y redimensionable desde cualquier lado.
+def _get_topogramas_de_adquisicion(exp, rec_actual):
+    """Devuelve los topogramas de la adquisición listos para renderizar.
 
-    La caja se inicializa verticalmente en las posiciones Y que corresponden
-    a `inicio_recons` y `fin_recons` (usando la tabla POSICIONES_Y de
-    ui.adquisicion). Luego se persiste en localStorage por (reconstrucción,
-    topograma)."""
+    Cada elemento incluye imagen, título, caption y la clave de storage
+    para que luego puedan mostrarse en columnas una al lado de la otra.
+    """
     tstore = _get_topograma_set_for_exp(exp)
     hay_topo1 = bool(tstore.get("topograma_iniciado", False))
     hay_topo2 = bool(
         tstore.get("aplica_topo2") and tstore.get("topograma2_iniciado", False)
     )
 
-    _panel_header("🗺️", "Topogramas de la adquisición")
-
     if not hay_topo1 and not hay_topo2:
-        st.info(
-            "Esta adquisición no tiene topograma iniciado. "
-            "Inícialo en la pestaña **Topograma** para verlo aquí."
-        )
-        return
+        return [], None
 
     try:
         from ui.topograma import obtener_imagen_topograma_adquirido
     except Exception as e:
-        st.warning(f"No se pudo cargar el módulo de topograma: {e}")
-        return
+        return [], f"No se pudo cargar el módulo de topograma: {e}"
 
-    # Posiciones Y por referencia anatómica — se toman de ui.adquisicion
-    # para que la caja inicial caiga sobre la región correcta del topograma.
     try:
         from ui.adquisicion import get_y_position_with_offset
         y_ini_default = get_y_position_with_offset(rec_actual.get("inicio_recons"), 0)
@@ -1297,37 +1285,12 @@ def _render_topogramas_de_adquisicion(exp, rec_actual):
     except Exception:
         y_ini_default, y_fin_default = 0.25, 0.75
 
-    color_rec = _color_exploracion(exp)
-
     def _caption_topo(tubo, largo, etiqueta):
         tubo_txt = tubo or "—"
         largo_txt = f"{largo} mm" if largo not in (None, "", "Seleccionar") else "— mm"
         return f"{etiqueta} · Tubo: {tubo_txt} · {largo_txt} · 100 kV · 40 mA"
 
-    def _mostrar_topo(img_pil, storage_suffix, titulo_html, caption):
-        """Renderiza un topograma PIL con su caja DFOV encima."""
-        if img_pil is None:
-            return
-        st.markdown(titulo_html, unsafe_allow_html=True)
-        img_b64 = _pil_to_b64_jpeg(img_pil, max_width=800)
-        if not img_b64:
-            st.image(img_pil, caption=caption, width=300)
-            return
-        html_topo = render_canvas_topo_dfov_rect(
-            img_b64=img_b64,
-            storage_key=f"recon_topo_rect_{rec_actual['id']}_{storage_suffix}",
-            color=color_rec,
-            titulo="Ajuste el DFOV",
-            default_y_ini=y_ini_default,
-            default_y_fin=y_fin_default,
-            canvas_css_width=300,
-            canvas_css_height=420,
-        )
-        if html_topo:
-            components.html(html_topo, height=470, scrolling=False)
-        else:
-            st.image(img_pil, width=300)
-        st.caption(caption)
+    topogramas = []
 
     if hay_topo1:
         img1, err1 = obtener_imagen_topograma_adquirido(
@@ -1337,15 +1300,16 @@ def _render_topogramas_de_adquisicion(exp, rec_actual):
             tstore.get("t1pt") or "",
         )
         if img1 is not None:
-            _mostrar_topo(
-                img1,
-                storage_suffix="topo1",
-                titulo_html="<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>"
-                             "✅ <b>Topograma 1</b></div>",
-                caption=_caption_topo(tstore.get("t1pt"), tstore.get("t1l"), "Topo 1"),
-            )
+            topogramas.append({
+                "img": img1,
+                "storage_suffix": "topo1",
+                "titulo": "Topograma 1",
+                "caption": _caption_topo(tstore.get("t1pt"), tstore.get("t1l"), "Topo 1"),
+                "default_y_ini": y_ini_default,
+                "default_y_fin": y_fin_default,
+            })
         elif err1:
-            st.warning(f"Topograma 1: {err1}")
+            topogramas.append({"error": f"Topograma 1: {err1}"})
 
     if hay_topo2:
         img2, err2 = obtener_imagen_topograma_adquirido(
@@ -1355,16 +1319,59 @@ def _render_topogramas_de_adquisicion(exp, rec_actual):
             tstore.get("t2_posicion_tubo") or tstore.get("t2pt") or "",
         )
         if img2 is not None:
-            st.markdown("<div style='height:0.6rem;'></div>", unsafe_allow_html=True)
-            _mostrar_topo(
-                img2,
-                storage_suffix="topo2",
-                titulo_html="<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>"
-                             "✅ <b>Topograma 2</b></div>",
-                caption=_caption_topo(tstore.get("t2pt"), tstore.get("t2l"), "Topo 2"),
-            )
+            topogramas.append({
+                "img": img2,
+                "storage_suffix": "topo2",
+                "titulo": "Topograma 2",
+                "caption": _caption_topo(tstore.get("t2pt"), tstore.get("t2l"), "Topo 2"),
+                "default_y_ini": y_ini_default,
+                "default_y_fin": y_fin_default,
+            })
         elif err2:
-            st.warning(f"Topograma 2: {err2}")
+            topogramas.append({"error": f"Topograma 2: {err2}"})
+
+    return topogramas, None
+
+
+
+def _render_topograma_en_columna(exp, rec_actual, topo_data):
+    """Renderiza un topograma individual dentro de una columna."""
+    if topo_data.get("error"):
+        st.warning(topo_data["error"])
+        return
+
+    img_pil = topo_data.get("img")
+    if img_pil is None:
+        return
+
+    color_rec = _color_exploracion(exp)
+    st.markdown(
+        f"<div style='font-size:0.9rem; color:#ddd; margin:0.2rem 0 0.3rem 0;'>✅ <b>{topo_data['titulo']}</b></div>",
+        unsafe_allow_html=True,
+    )
+
+    img_b64 = _pil_to_b64_jpeg(img_pil, max_width=800)
+    if not img_b64:
+        st.image(img_pil, caption=topo_data.get("caption", ""), width=300)
+        return
+
+    html_topo = render_canvas_topo_dfov_rect(
+        img_b64=img_b64,
+        storage_key=f"recon_topo_rect_{rec_actual['id']}_{topo_data['storage_suffix']}",
+        color=color_rec,
+        titulo="Ajuste el DFOV",
+        default_y_ini=topo_data.get("default_y_ini", 0.25),
+        default_y_fin=topo_data.get("default_y_fin", 0.75),
+        canvas_css_width=260,
+        canvas_css_height=360,
+        canvas_width=560,
+        canvas_height=780,
+    )
+    if html_topo:
+        components.html(html_topo, height=410, scrolling=False)
+    else:
+        st.image(img_pil, width=260)
+    st.caption(topo_data.get("caption", ""))
 
 
 def _render_panel_central(adquisiciones_validas):
@@ -1421,115 +1428,131 @@ def _render_panel_central(adquisiciones_validas):
     region_anat = _get_region_group_for_exp(exp_activa)
     _panel_header("🔄", f"{rec_actual.get('nombre', 'Reconstrucción')} · {nombre_exp}")
 
-    # Layout: izquierda = imagen axial + parámetros debajo
-    #         derecha  = topograma(s) de la adquisición asociada
-    col_axial_params, col_topos = st.columns([1.0, 1.0], gap="large")
+    _panel_header("🖼️", "Imagen de reconstrucción y topogramas")
+    topogramas_data, topo_error = _get_topogramas_de_adquisicion(exp_activa, rec_actual)
 
-    # ── Columna izquierda: imagen axial (DFOV) + parámetros debajo ──
-    with col_axial_params:
-        # Imagen con el cuadrado DFOV
-        c_img_left, c_img_center, c_img_right = st.columns([0.08, 1.0, 0.08], gap="small")
-        with c_img_center:
-            img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+    if topo_error:
+        st.warning(topo_error)
 
-            if img_guardada is None:
-                imagen_recon = st.file_uploader(
-                    "Subir imagen de reconstrucción",
-                    type=["png", "jpg", "jpeg", "webp"],
-                    key=f"img_recon_upload_{rec_actual['id']}",
+    n_topos_visibles = len([t for t in topogramas_data if not t.get("error")])
+    if n_topos_visibles >= 2:
+        fila_cols = st.columns([1.2, 1, 1], gap="medium")
+    elif n_topos_visibles == 1:
+        fila_cols = st.columns([1.3, 1], gap="medium")
+    else:
+        fila_cols = st.columns([1], gap="medium")
+
+    # Primer bloque: subir imagen y mostrar imagen de reconstrucción
+    with fila_cols[0]:
+        img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+
+        if img_guardada is None:
+            imagen_recon = st.file_uploader(
+                "Subir imagen de reconstrucción",
+                type=["png", "jpg", "jpeg", "webp"],
+                key=f"img_recon_upload_{rec_actual['id']}",
+            )
+            if imagen_recon is not None:
+                st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
+                    "name": imagen_recon.name,
+                    "bytes": imagen_recon.getvalue(),
+                }
+                st.rerun()
+
+        img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+        if img_guardada is not None:
+            if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=True):
+                st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
+                st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
+                st.rerun()
+
+            try:
+                img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
+                img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
+                color_rec = _color_exploracion(exp_activa)
+                html_canvas = render_canvas_recon_cuadrado(
+                    img_b64=img_b64,
+                    storage_key=f"recon_square_{rec_actual['id']}",
+                    color=color_rec,
+                    titulo="Ajuste el Dfov",
+                    canvas_css_width=360,
+                    canvas_css_height=360,
+                    canvas_width=760,
+                    canvas_height=760,
                 )
-                if imagen_recon is not None:
-                    st.session_state["imagenes_recon_por_id"][rec_actual["id"]] = {
-                        "name": imagen_recon.name,
-                        "bytes": imagen_recon.getvalue(),
-                    }
-                    st.rerun()
-
-            img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
-            if img_guardada is not None:
-                col_img_btn, col_img_sp = st.columns([1, 3], gap="small")
-                with col_img_btn:
-                    if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=True):
-                        st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
-                        st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
-                        st.rerun()
-
-                try:
-                    img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
-                    img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
-                    color_rec = _color_exploracion(exp_activa)
-                    html_canvas = render_canvas_recon_cuadrado(
-                        img_b64=img_b64,
-                        storage_key=f"recon_square_{rec_actual['id']}",
-                        color=color_rec,
-                        titulo="Ajuste el Dfov",
-                        canvas_css_width=360,
-                        canvas_css_height=360,
-                        canvas_width=760,
-                        canvas_height=760,
-                    )
-                    if html_canvas:
-                        components.html(html_canvas, height=430, scrolling=False)
-                    else:
-                        st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
-                except Exception as e:
-                    st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
+                if html_canvas:
+                    components.html(html_canvas, height=430, scrolling=False)
+                else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+            except Exception as e:
+                st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
+                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
 
-        # Parámetros debajo de la imagen
-        st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
-        _panel_header("🔧", "Parámetros de Reconstrucción")
+    # Topogramas a la derecha, uno al lado del otro si existen
+    next_col_idx = 1
+    for topo_data in topogramas_data:
+        if next_col_idx >= len(fila_cols):
+            break
+        with fila_cols[next_col_idx]:
+            _render_topograma_en_columna(exp_activa, rec_actual, topo_data)
+        next_col_idx += 1
 
-        col_pr1, col_pr2 = st.columns([1, 1], gap="small")
-        with col_pr1:
-            rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}", value=rec_actual.get("fase_recons"))
-            if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-                rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}", value=rec_actual.get("algoritmo_iter"))
-            else:
-                rec_actual["algoritmo_iter"] = "—"
-            rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}", value=rec_actual.get("kernel_sel"))
-            rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}", value=rec_actual.get("grosor_recons"))
+    if not topogramas_data:
+        st.info(
+            "Esta adquisición no tiene topograma iniciado. "
+            "Inícialo en la pestaña **Topograma** para verlo aquí."
+        )
 
-        with col_pr2:
-            rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}", value=rec_actual.get("tipo_recons"))
-            if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
-                niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
-                rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}", value=rec_actual.get("nivel_iter"))
-            else:
-                rec_actual["nivel_iter"] = "—"
-            rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}", value=rec_actual.get("incremento"))
+    # Parámetros debajo de toda la fila de imágenes
+    st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
+    _panel_header("🔧", "Parámetros de Reconstrucción")
 
-        _panel_header("🪟", "Ventana de Visualización")
-        ventanas_disp = list(VENTANAS.keys())
+    col_pr1, col_pr2 = st.columns([1, 1], gap="small")
+    with col_pr1:
+        rec_actual["fase_recons"] = selectbox_con_placeholder("Fase a reconstruir", FASES_RECONS, key=f"fase_recons_{rec_actual['id']}", value=rec_actual.get("fase_recons"))
+        if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
+            rec_actual["algoritmo_iter"] = selectbox_con_placeholder("Algoritmo iterativo", ALGORITMOS_ITERATIVOS, key=f"alg_iter_{rec_actual['id']}", value=rec_actual.get("algoritmo_iter"))
+        else:
+            rec_actual["algoritmo_iter"] = "—"
+        rec_actual["kernel_sel"] = selectbox_con_placeholder("Algoritmo (Kernel)", KERNELS, key=f"kernel_sel_{rec_actual['id']}", value=rec_actual.get("kernel_sel"))
+        rec_actual["grosor_recons"] = selectbox_con_placeholder("Grosor reconstrucción", GROSORES_RECONS, key=f"grosor_recons_{rec_actual['id']}", value=rec_actual.get("grosor_recons"))
 
-        col_v1, col_v2 = st.columns([1, 1], gap="small")
-        with col_v1:
-            rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}", value=rec_actual.get("ventana_preset"))
-            if rec_actual["ventana_preset"] in VENTANAS:
-                ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
-                wl_default = VENTANAS[rec_actual["ventana_preset"]]["wl"]
-            else:
-                ww_default = 400
-                wl_default = 40
-            rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}")
+    with col_pr2:
+        rec_actual["tipo_recons"] = selectbox_con_placeholder("Tipo de reconstrucción", TIPOS_RECONS, key=f"tipo_recons_{rec_actual['id']}", value=rec_actual.get("tipo_recons"))
+        if rec_actual["tipo_recons"] == "RECONS. ITERATIVA":
+            niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
+            rec_actual["nivel_iter"] = selectbox_con_placeholder("Nivel / Porcentaje / Modo", niveles_disp, key=f"nivel_iter_{rec_actual['id']}", value=rec_actual.get("nivel_iter"))
+        else:
+            rec_actual["nivel_iter"] = "—"
+        rec_actual["incremento"] = selectbox_con_placeholder("Incremento", INCREMENTOS_RECONS, key=f"incremento_{rec_actual['id']}", value=rec_actual.get("incremento"))
 
-        with col_v2:
-            rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}")
-            rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}", value=rec_actual.get("dfov"))
+    _panel_header("🪟", "Ventana de Visualización")
+    ventanas_disp = list(VENTANAS.keys())
 
-        _panel_header("📍", "Rango de Reconstrucción")
-        refs_ini_r = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
-        refs_fin_r = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
+    col_v1, col_v2 = st.columns([1, 1], gap="small")
+    with col_v1:
+        rec_actual["ventana_preset"] = selectbox_con_placeholder("Preset de ventana", ventanas_disp, key=f"preset_ventana_{rec_actual['id']}", value=rec_actual.get("ventana_preset"))
+        if rec_actual["ventana_preset"] in VENTANAS:
+            ww_default = VENTANAS[rec_actual["ventana_preset"]]["ww"]
+            wl_default = VENTANAS[rec_actual["ventana_preset"]]["wl"]
+        else:
+            ww_default = 400
+            wl_default = 40
+        rec_actual["ww_val"] = st.number_input("WW", min_value=1, max_value=5000, value=int(rec_actual.get("ww_val", ww_default)), step=1, key=f"ww_{rec_actual['id']}")
 
-        col_ini, col_fin = st.columns([1, 1], gap="small")
-        with col_ini:
-            rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
-        with col_fin:
-            rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
+    with col_v2:
+        rec_actual["wl_val"] = st.number_input("WL", min_value=-1500, max_value=3000, value=int(rec_actual.get("wl_val", wl_default)), step=1, key=f"wl_{rec_actual['id']}")
+        rec_actual["dfov"] = selectbox_con_placeholder("DFOV", DFOV_OPCIONES, key=f"dfov_{rec_actual['id']}", value=rec_actual.get("dfov"))
 
-    # ── Columna derecha: topograma(s) de la adquisición asociada ──
-    with col_topos:
-        _render_topogramas_de_adquisicion(exp_activa, rec_actual)
+    _panel_header("📍", "Rango de Reconstrucción")
+    refs_ini_r = REFS_INICIO.get(region_anat, REFS_INICIO["CUERPO"])
+    refs_fin_r = REFS_FIN.get(region_anat, REFS_FIN["CUERPO"])
+
+    col_ini, col_fin = st.columns([1, 1], gap="small")
+    with col_ini:
+        rec_actual["inicio_recons"] = selectbox_con_placeholder("Inicio reconstrucción", refs_ini_r, key=f"ini_rec_{rec_actual['id']}", value=rec_actual.get("inicio_recons"))
+    with col_fin:
+        rec_actual["fin_recons"] = selectbox_con_placeholder("Fin reconstrucción", refs_fin_r, key=f"fin_rec_{rec_actual['id']}", value=rec_actual.get("fin_recons"))
 
     st.markdown("---")
     _panel_header("📝", "Resumen de reconstrucción activa")
