@@ -387,13 +387,21 @@ def _ensure_image_state(ref_id: str):
 def _render_image_uploader(ref_id: str, img_idx: int, titulo: str):
     img_state = _ensure_image_state(ref_id)
     key_img = f"img{img_idx}"
-    file_obj = st.file_uploader(titulo, type=["png", "jpg", "jpeg", "webp"], key=f"up_{ref_id}_{img_idx}")
-    if file_obj is not None:
-        img_state[key_img] = {"name": file_obj.name, "bytes": file_obj.getvalue()}
-    if img_state.get(key_img) is not None:
-        if st.button(f"🗑️ Borrar {titulo}", key=f"del_{ref_id}_{img_idx}", use_container_width=True):
-            img_state[key_img] = None
+    current = img_state.get(key_img)
+
+    # Solo mostrar el uploader mientras no exista imagen cargada.
+    if current is None:
+        file_obj = st.file_uploader(
+            "",
+            type=["png", "jpg", "jpeg", "webp"],
+            key=f"up_{ref_id}_{img_idx}",
+            label_visibility="collapsed",
+        )
+        if file_obj is not None:
+            current = {"name": file_obj.name, "bytes": file_obj.getvalue()}
+            img_state[key_img] = current
             st.rerun()
+
     return img_state.get(key_img)
 
 
@@ -401,7 +409,6 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     refs_cfg = settings.get("refs", [])
     html = f"""
 <div style="text-align:center; margin:0;">
-  <div style="display:inline-block; font-size:15px; font-weight:600; color:#ddd; margin-bottom:6px;">{title}</div>
   <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}" style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;margin:0 auto;touch-action:none;"></canvas>
 </div>
 <script>
@@ -425,7 +432,7 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
   var SPACING = 38;          // distancia entre líneas en px internos
   var LINE_LEN = Math.max(W, H) * 0.42;
   var MIN_RANGES = 1;
-  var MAX_RANGES = 15;
+  var MAX_RANGES = 50;
   var ROT_HIT = 22;          // radio de hit en manijas rotación
   var EXT_HIT = 18;          // radio de hit en manijas extensión (cantidad de líneas)
   var LEN_HIT = 18;          // radio de hit en manijas de largo
@@ -594,7 +601,6 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
       ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     }}
     drawHandles(g);
-    drawLabel();
   }}
 
   function drawRefs() {{
@@ -791,15 +797,11 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
 
 def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_height=250):
     img_state = _ensure_image_state(ref["id"])
-    image_data = img_state.get(f"img{img_idx}")
     overlay = img_state.get(f"overlay{img_idx}")
 
-    _panel_header("🖼️", title)
-    uploaded = _render_image_uploader(ref["id"], img_idx, f"Subir {title.lower()}")
-    image_data = uploaded if uploaded is not None else image_data
+    image_data = _render_image_uploader(ref["id"], img_idx, f"Subir {title.lower()}")
 
     if image_data is None:
-        st.info("Sube una imagen para activar los rangos y las referencias anatómicas.")
         return
 
     try:
@@ -811,35 +813,45 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
             acq_color=_color_exploracion_por_exp_id(rec.get("exp_id")),
             rec_color=_color_reconstruccion(rec),
             settings=overlay,
-            title=title,
+            title="",
             css_width=css_width,
             css_height=css_height,
         )
-        components.html(html, height=css_height + 50, scrolling=False)
-        st.caption(
-            "🟡 Arrastra los círculos amarillos para rotar · "
-            "▶ Triángulos blancos para agregar o quitar líneas · "
-            "🟦 Cuadrados celestes para alargar o acortar los cortes · "
-            "Área interior para mover el haz."
-        )
+        components.html(html, height=css_height + 24, scrolling=False)
     except Exception as e:
         st.error(f"No se pudo mostrar la imagen: {e}")
 
-    c1, c2 = st.columns(2, gap="small")
-    with c1:
-        overlay["show_ranges"] = st.checkbox("Activar rangos paralelos", value=overlay.get("show_ranges", True), key=f"rng_show_{ref['id']}_{img_idx}")
-        overlay["range_count"] = st.slider("N° de rangos (inicial)", 1, 15, int(overlay.get("range_count", 3)), key=f"rng_count_{ref['id']}_{img_idx}")
-    with c2:
-        overlay["show_refs"] = st.checkbox("Activar referencias anatómicas", value=overlay.get("show_refs", False), key=f"ref_show_{ref['id']}_{img_idx}")
-        overlay["angle_deg"] = st.slider("Ángulo inicial de rangos", -180, 180, int(float(overlay.get("angle_deg", 0))), key=f"rng_angle_{ref['id']}_{img_idx}")
+    # Los cortes se manipulan solo sobre la imagen; no se muestran barras ni sliders.
+    # Se mantienen las referencias anatómicas mediante controles simples debajo,
+    # sin texto auxiliar ni configuraciones de rangos.
+    st.markdown("<div style='height:0.15rem;'></div>", unsafe_allow_html=True)
+    col_a, col_b = st.columns([1, 1], gap="small")
+    with col_a:
+        overlay["show_refs"] = st.checkbox(
+            "Referencias anatómicas",
+            value=overlay.get("show_refs", False),
+            key=f"ref_show_{ref['id']}_{img_idx}",
+        )
+    with col_b:
+        if st.button("🗑️ Borrar imagen", key=f"del_{ref['id']}_{img_idx}", use_container_width=True):
+            img_state[f"img{img_idx}"] = None
+            st.rerun()
 
     if overlay.get("show_refs"):
         for i in range(5):
             cc1, cc2 = st.columns([1, 3], gap="small")
             with cc1:
-                overlay["refs"][i]["enabled"] = st.checkbox(f"R{i+1}", value=overlay["refs"][i].get("enabled", False), key=f"r_enabled_{ref['id']}_{img_idx}_{i}")
+                overlay["refs"][i]["enabled"] = st.checkbox(
+                    f"R{i+1}",
+                    value=overlay["refs"][i].get("enabled", False),
+                    key=f"r_enabled_{ref['id']}_{img_idx}_{i}",
+                )
             with cc2:
-                overlay["refs"][i]["text"] = st.text_input(f"Anatomía {i+1}", value=overlay["refs"][i].get("text", ""), key=f"r_text_{ref['id']}_{img_idx}_{i}")
+                overlay["refs"][i]["text"] = st.text_input(
+                    f"Anatomía {i+1}",
+                    value=overlay["refs"][i].get("text", ""),
+                    key=f"r_text_{ref['id']}_{img_idx}_{i}",
+                )
 
 
 def _render_panel_rec(rec_id: str, recons_planas):
@@ -961,7 +973,6 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         st.markdown("---")
         _panel_header("📝", "Resumen")
         _render_resumen(ref)
-        st.caption("Los rangos paralelos pueden moverse verticalmente sobre cada imagen. Las referencias anatómicas se activan por imagen y permiten escribir el nombre que se mostrará junto a una flecha.")
 
 
 def render_reformaciones():
