@@ -1001,6 +1001,12 @@ def _get_set_exp(exp) -> dict:
     return st.session_state.get("topograma_store", {}) or {}
 
 
+def _get_region_label(exp) -> str:
+    """Obtiene el nombre del examen/región asociado a una exploración."""
+    store = _get_set_exp(exp)
+    return (store.get("examen") or store.get("region_anat") or store.get("region") or "").strip()
+
+
 def _region_grupo(exp=None):
     """Determina el grupo anatómico para REFS_INICIO/REFS_FIN a partir del
     topograma de la exploración. Si no se pasa exp, cae al store legado."""
@@ -1074,10 +1080,12 @@ def _render_dot_for_exp(exp):
 
 
 def _name_visible(exp, idx):
-    n = exp.get("nombre")
-    if n and n != "Seleccionar":
-        return n
-    return f"EXPLORACIÓN {idx+1}"
+    nombre = exp.get("nombre")
+    if not nombre or nombre == "Seleccionar":
+        nombre = f"EXPLORACIÓN {idx+1}"
+
+    region = _get_region_label(exp)
+    return f"{region} · {nombre}".strip(" ·")
 
 
 def _inject_sidebar_css():
@@ -1318,7 +1326,10 @@ def _render_sidebar():
             if s_exp is not None:
                 nombre_topo = s_exp.get("examen") or s_exp.get("region_anat")
 
-            if nombre_topo:
+            region_exp = _get_region_label(exp)
+            if region_exp:
+                sufijo = ""
+            elif nombre_topo:
                 sufijo = f"  ·  {nombre_topo}"
             elif hay_varios_sets:
                 sufijo = f"  ·  T{topo_idx + 1}"
