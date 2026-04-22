@@ -1,84 +1,55 @@
-"""
-ui/reformaciones.py
-Módulo de Reformaciones para PlaniTC_v2 (TAB 5).
-
-Flujo:
-- El usuario navega las reconstrucciones creadas en la pestaña
-  "Reconstrucción" (session_state["reconstrucciones_por_exp"]).
-- Por cada reconstrucción puede crear una o varias reformaciones.
-- Cada reformación tiene un tipo (MPR / MIP / MinIP / VR); MIP tiene
-  subtipos Grueso/Fino. Los parámetros que se piden cambian según
-  tipo + subtipo (data-driven desde TIPOS_REFORMACION).
-
-Layout:
-- Sidebar izquierdo (similar a Adquisición): lista cronológica con las
-  reconstrucciones como "encabezados" y debajo las reformaciones que
-  el usuario haya creado para cada una.
-- Panel central: parámetros de la reformación activa.
-
-Entrypoint: render_reformaciones()
-"""
-
 import uuid
+import io
+import json
+import base64
 
 import streamlit as st
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# CATÁLOGO DE TIPOS Y PARÁMETROS (data-driven)
-# ═══════════════════════════════════════════════════════════════════════════
+import streamlit.components.v1 as components
+from PIL import Image
 
 TIPOS_REFORMACION = ["MPR", "MIP", "MinIP", "VR"]
-
-# Subtipos disponibles por tipo. None = sin subtipo.
 SUBTIPOS = {
     "MPR": None,
     "MIP": ["Grueso", "Fino"],
     "MinIP": None,
     "VR": None,
 }
-
-# Parámetros requeridos por combinación tipo / subtipo.
-# Clave: (tipo, subtipo)  — si el tipo no tiene subtipo, subtipo=None.
 PARAMS_POR_TIPO = {
-    ("MPR", None):     ["plano", "grosor", "distancia"],
+    ("MPR", None): ["plano", "grosor", "distancia"],
     ("MIP", "Grueso"): ["n_vistas", "angulo"],
-    ("MIP", "Fino"):   ["plano", "grosor", "distancia"],
-    ("MinIP", None):   ["grosor", "distancia"],
-    ("VR", None):      ["n_vistas", "angulo"],
+    ("MIP", "Fino"): ["plano", "grosor", "distancia"],
+    ("MinIP", None): ["grosor", "distancia"],
+    ("VR", None): ["n_vistas", "angulo"],
 }
-
-# Opciones para cada parámetro (valores estándar para TC).
 PARAMS_OPCIONES = {
-    "plano":     ["AXIAL", "CORONAL", "SAGITAL", "CURVO"],
-    "grosor":    ["1 mm", "2 mm", "3 mm", "4 mm", "5 mm", "7 mm", "10 mm"],
+    "plano": ["AXIAL", "CORONAL", "SAGITAL", "CURVO"],
+    "grosor": ["1 mm", "2 mm", "3 mm", "4 mm", "5 mm", "7 mm", "10 mm"],
     "distancia": ["0,5 mm", "1 mm", "2 mm", "3 mm", "5 mm"],
-    "n_vistas":  [6, 8, 10, 12, 15, 18, 24, 30, 36, 60, 72],
-    "angulo":    ["5°", "10°", "12°", "15°", "20°", "30°", "45°", "60°"],
+    "n_vistas": [6, 8, 10, 12, 15, 18, 24, 30, 36, 60, 72],
+    "angulo": ["5°", "10°", "12°", "15°", "20°", "30°", "45°", "60°"],
 }
-
 PARAMS_LABELS = {
-    "plano":     "Plano",
-    "grosor":    "Grosor",
+    "plano": "Plano",
+    "grosor": "Grosor",
     "distancia": "Distancia entre imágenes",
-    "n_vistas":  "N° de vistas",
-    "angulo":    "Ángulo entre vistas",
+    "n_vistas": "N° de vistas",
+    "angulo": "Ángulo entre vistas",
 }
 
+EXPLORACION_COLORS = [
+    "#00D2FF", "#FFB000", "#7CFF6B", "#FF5CA8",
+    "#A78BFA", "#FF7A59", "#5EEAD4", "#FACC15",
+]
+RECON_COLOR_DEFAULT = "#FFFFFF"
 
-# ═══════════════════════════════════════════════════════════════════════════
-# HELPERS DE UI (consistentes con el resto del proyecto)
-# ═══════════════════════════════════════════════════════════════════════════
 
 def selectbox_con_placeholder(label, options, key, value=None, label_visibility="visible"):
-    """Selectbox con 'Seleccionar' al inicio; devuelve None si no hay selección."""
     opciones = ["Seleccionar"] + [str(o) for o in options]
     val_str = str(value) if value is not None else None
     idx = opciones.index(val_str) if val_str in opciones else 0
     val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
     if val == "Seleccionar":
         return None
-    # Recuperar tipo original (para n_vistas que son int)
     for o in options:
         if str(o) == val:
             return o
@@ -109,18 +80,10 @@ def _panel_header(emoji: str, titulo: str):
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# CSS DEL SIDEBAR (mismo patrón que Adquisición)
-# ═══════════════════════════════════════════════════════════════════════════
-
 def _inject_sidebar_css():
-    """Reutilizamos el mismo CSS del sidebar de Adquisición: botones de
-    topograma/exploración, botones ✕ tertiary, y botones '+ ...' con
-    fondo gris claro identificables por st-key-*."""
     st.markdown(
         """
         <style>
-        /* Header "Reformaciones" ajustado al sidebar angosto */
         section[data-testid="stVerticalBlock"] h3:first-of-type {
             font-size: 1.15rem !important;
             margin-bottom: 0.6rem !important;
@@ -128,8 +91,6 @@ def _inject_sidebar_css():
             word-break: break-word !important;
             line-height: 1.2 !important;
         }
-
-        /* Botones de eliminar (tertiary: ✕) */
         button[kind="tertiary"] {
             background: transparent !important;
             border: none !important;
@@ -151,16 +112,9 @@ def _inject_sidebar_css():
             background: rgba(255,255,255,0.06) !important;
             color: white !important;
         }
-        button[kind="tertiary"] p {
-            margin: 0 !important;
-            line-height: 1 !important;
-        }
-
-        /* Botones principales (secondary/primary) del sidebar */
         div[data-testid="stButton"] > button[kind="secondary"],
         div[data-testid="stButton"] > button[kind="primary"] {
             min-height: 2.4rem !important;
-            height: auto !important;
             padding-top: 0.45rem !important;
             padding-bottom: 0.45rem !important;
             padding-left: 0.7rem !important;
@@ -170,55 +124,15 @@ def _inject_sidebar_css():
             white-space: normal !important;
             text-align: center !important;
         }
-        div[data-testid="stButton"] > button[kind="secondary"] p,
-        div[data-testid="stButton"] > button[kind="secondary"] span,
-        div[data-testid="stButton"] > button[kind="secondary"] div,
-        div[data-testid="stButton"] > button[kind="primary"] p,
-        div[data-testid="stButton"] > button[kind="primary"] span,
-        div[data-testid="stButton"] > button[kind="primary"] div {
-            font-size: 0.85rem !important;
-            line-height: 1.25 !important;
-            white-space: normal !important;
-            overflow: visible !important;
-            text-overflow: clip !important;
-            word-break: break-word !important;
-            overflow-wrap: break-word !important;
-            margin: 0 !important;
-        }
-
-        /* Botones de acción global (+ Reformación) — identificados por key */
         .st-key-ref_btn_add_ref button[kind="secondary"],
         div.stApp .st-key-ref_btn_add_ref button[kind="secondary"] {
             background-color: #6b6f7a !important;
-            background: #6b6f7a !important;
             border: 1px solid #80848f !important;
             color: #ffffff !important;
-            box-sizing: border-box !important;
             min-height: 2.75rem !important;
             height: 2.75rem !important;
-            max-height: 2.75rem !important;
             font-size: 0.9rem !important;
             padding: 0 1rem !important;
-            line-height: 1 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-        .st-key-ref_btn_add_ref button[kind="secondary"]:hover,
-        div.stApp .st-key-ref_btn_add_ref button[kind="secondary"]:hover {
-            background-color: #7c808a !important;
-            background: #7c808a !important;
-            border-color: #90949e !important;
-            color: #ffffff !important;
-        }
-        .st-key-ref_btn_add_ref button[kind="secondary"] p,
-        .st-key-ref_btn_add_ref button[kind="secondary"] span,
-        .st-key-ref_btn_add_ref button[kind="secondary"] div {
-            font-size: 0.9rem !important;
-            line-height: 1 !important;
-            color: #ffffff !important;
-            margin: 0 !important;
-            padding: 0 !important;
         }
         </style>
         """,
@@ -226,30 +140,36 @@ def _inject_sidebar_css():
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# ESTADO: reformaciones por reconstrucción
-# ═══════════════════════════════════════════════════════════════════════════
+def _pil_to_b64_jpeg(img, max_width=1200):
+    if img is None:
+        return None
+    im = img.copy()
+    if im.mode not in ("RGB", "L"):
+        im = im.convert("RGB")
+    elif im.mode == "L":
+        im = im.convert("RGB")
+    if max_width and im.width > max_width:
+        ratio = max_width / float(im.width)
+        im = im.resize((int(im.width * ratio), int(im.height * ratio)))
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=92)
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
 
 def _new_id() -> str:
     return f"ref_{uuid.uuid4().hex[:8]}"
 
 
 def _next_order() -> int:
-    """Contador monotónico para ordenar reconstrucciones + reformaciones
-    cronológicamente en el sidebar."""
     st.session_state["_ref_next_order"] = int(st.session_state.get("_ref_next_order", 0)) + 1
     return st.session_state["_ref_next_order"]
 
 
 def _init_state():
-    # dict: rec_id -> list[reformacion]
     st.session_state.setdefault("reformaciones_por_rec", {})
-    # orden de creación para cada reconstrucción vista por primera vez
     st.session_state.setdefault("_ref_rec_order", {})
-    # reformación activa en el panel central. Puede ser:
-    #   - un id de reformación, o
-    #   - un dict {"kind": "rec", "rec_id": "..."} para "estar mirando la rec"
     st.session_state.setdefault("ref_activa", None)
+    st.session_state.setdefault("imagenes_ref_por_id", {})
 
 
 def _crear_reformacion_base(rec_id: str) -> dict:
@@ -259,7 +179,6 @@ def _crear_reformacion_base(rec_id: str) -> dict:
         "order": _next_order(),
         "tipo": None,
         "subtipo": None,
-        # Parámetros (los que apliquen según tipo; el resto quedan en None)
         "plano": None,
         "grosor": None,
         "distancia": None,
@@ -268,43 +187,17 @@ def _crear_reformacion_base(rec_id: str) -> dict:
     }
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# LECTURA DE RECONSTRUCCIONES DESDE session_state
-# ═══════════════════════════════════════════════════════════════════════════
-
 def _reconstruccion_completada(rec) -> bool:
-    """Réplica exacta del check de `reconstruccion.py`: una reconstrucción
-    se considera 'lista' cuando tiene imagen cargada + los parámetros
-    esenciales elegidos (no en 'Seleccionar' ni vacíos)."""
-    img_ok = bool(
-        st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id"))
-    )
+    img_ok = bool(st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id")))
     campos = [
-        rec.get("fase_recons"),
-        rec.get("tipo_recons"),
-        rec.get("kernel_sel"),
-        rec.get("grosor_recons"),
-        rec.get("incremento"),
-        rec.get("ventana_preset"),
-        rec.get("dfov"),
+        rec.get("fase_recons"), rec.get("tipo_recons"), rec.get("kernel_sel"),
+        rec.get("grosor_recons"), rec.get("incremento"), rec.get("ventana_preset"), rec.get("dfov"),
     ]
     params_ok = all(v not in (None, "", "Seleccionar") for v in campos)
     return img_ok and params_ok
 
 
 def _obtener_reconstrucciones_planas():
-    """Devuelve la lista plana de reconstrucciones **completadas** (con
-    imagen subida + parámetros guardados). Las que aún están en edición
-    no aparecen en Reformaciones.
-
-    Cada item: {
-        "id": rec_id,
-        "nombre": "Reconstrucción 1",
-        "exp_id": exp_id,
-        "exp_nombre": "SIN CONTRASTE",
-        "rec": <dict original>,
-    }
-    """
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     exploraciones = st.session_state.get("exploraciones", []) or []
     nombre_por_exp_id = {}
@@ -322,13 +215,8 @@ def _obtener_reconstrucciones_planas():
             if not isinstance(rec, dict):
                 continue
             rid = rec.get("id")
-            if not rid:
+            if not rid or not _reconstruccion_completada(rec):
                 continue
-
-            # FILTRO: solo reconstrucciones completadas
-            if not _reconstruccion_completada(rec):
-                continue
-
             resultado.append({
                 "id": rid,
                 "nombre": rec.get("nombre") or "Reconstrucción",
@@ -336,18 +224,12 @@ def _obtener_reconstrucciones_planas():
                 "exp_nombre": nombre_por_exp_id.get(exp_id, exp_id),
                 "rec": rec,
             })
-
-            # Asegurar que la reconstrucción tiene un `order` asignado la
-            # primera vez que la vemos aquí, para ordenar el sidebar.
             if rid not in st.session_state["_ref_rec_order"]:
                 st.session_state["_ref_rec_order"][rid] = _next_order()
-
     return resultado
 
 
 def _contar_reconstrucciones_totales() -> int:
-    """Total de reconstrucciones existentes (completadas o no). Útil para
-    mostrar un mensaje informativo cuando hay recs pero ninguna está lista."""
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     total = 0
     for lista_recons in recons_map.values():
@@ -356,172 +238,21 @@ def _contar_reconstrucciones_totales() -> int:
     return total
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SIDEBAR
-# ═══════════════════════════════════════════════════════════════════════════
-
-def _render_sidebar(recons_planas):
-    _inject_sidebar_css()
-    st.markdown("### 📐 Reformaciones")
-
-    if not recons_planas:
-        total_existentes = _contar_reconstrucciones_totales()
-        if total_existentes == 0:
-            st.info(
-                "No hay reconstrucciones aún. Ve a la pestaña "
-                "**Reconstrucción** para crear al menos una."
-            )
-        else:
-            st.info(
-                f"{total_existentes} reconstrucción(es) en edición. "
-                "Cárgales imagen y completa sus parámetros para poder "
-                "reformarlas aquí."
-            )
-        return
-
-    # Normalizar estructura del mapa (defensivo)
-    reformaciones_map = st.session_state["reformaciones_por_rec"]
-    for r in recons_planas:
-        reformaciones_map.setdefault(r["id"], [])
-
-    rec_order = st.session_state["_ref_rec_order"]
-    activa = st.session_state["ref_activa"]
-
-    # Determinar qué reconstrucción está "expandida" (solo una a la vez):
-    #   - Si el usuario está viendo una rec (kind="rec"), es esa.
-    #   - Si tiene una reformación abierta, es la rec madre de esa ref.
-    #   - Si no hay nada, ninguna (todas colapsadas).
-    rec_id_expandida = None
-    if isinstance(activa, dict) and activa.get("kind") == "rec":
-        rec_id_expandida = activa.get("rec_id")
-    elif isinstance(activa, str):
-        for rid, lista in reformaciones_map.items():
-            for ref in lista:
-                if ref.get("id") == activa:
-                    rec_id_expandida = rid
-                    break
-            if rec_id_expandida:
-                break
-
-    # Orden de las reconstrucciones: por su `order` de aparición
-    recons_ordenadas = sorted(
-        recons_planas,
-        key=lambda r: rec_order.get(r["id"], 0),
-    )
-
-    # Renderizar AGRUPADO: cada reconstrucción, y debajo SOLO sus
-    # reformaciones si es la reconstrucción expandida. El resto se
-    # mantiene colapsado con un contador.
-    for r in recons_ordenadas:
-        rec_id = r["id"]
-        lbl = r["nombre"]
-        reg = r["exp_nombre"]
-        refs_de_esta_rec = sorted(
-            reformaciones_map.get(rec_id, []),
-            key=lambda x: x.get("order", 0),
-        )
-        n_refs = len(refs_de_esta_rec)
-        esta_expandida = (rec_id == rec_id_expandida)
-
-        # Botón de la reconstrucción
-        es_activo_rec = (
-            isinstance(activa, dict)
-            and activa.get("kind") == "rec"
-            and activa.get("rec_id") == rec_id
-        )
-        tipo_btn = "primary" if es_activo_rec else "secondary"
-
-        # Indicador de cuántas reformaciones tiene cuando NO está expandida
-        contador = f"  ({n_refs})" if (n_refs > 0 and not esta_expandida) else ""
-
-        if st.button(
-            f"🧩 {lbl} · {reg}{contador}",
-            key=f"ref_btn_rec_{rec_id}",
-            type=tipo_btn,
-            use_container_width=True,
-        ):
-            st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
-            st.rerun()
-
-        # Reformaciones: solo visibles si esta rec está expandida
-        if esta_expandida:
-            for ref in refs_de_esta_rec:
-                es_activo_ref = (isinstance(activa, str) and activa == ref["id"])
-                tipo_btn_ref = "primary" if es_activo_ref else "secondary"
-                nombre_legible = _nombre_reformacion(ref)
-
-                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
-                with c_main:
-                    if st.button(
-                        f"📐 {nombre_legible}",
-                        key=f"ref_btn_ref_{ref['id']}",
-                        type=tipo_btn_ref,
-                        use_container_width=True,
-                    ):
-                        st.session_state["ref_activa"] = ref["id"]
-                        st.rerun()
-                with c_del:
-                    if st.button(
-                        "✕",
-                        key=f"ref_btn_del_{ref['id']}",
-                        type="tertiary",
-                        use_container_width=True,
-                        help=f"Eliminar {nombre_legible}",
-                    ):
-                        _eliminar_reformacion(ref["id"], ref.get("rec_id"))
-                        st.rerun()
-
-        # Pequeño espacio vertical entre grupos de rec
-        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
-
-    # ── Botón "+ Reformación" ──
-    # Determinar a qué reconstrucción se agregará: la de la reformación
-    # activa, o la reconstrucción si es la vista activa, o la primera rec.
-    target_rec_id = _rec_target_id(recons_planas)
-
-    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
-
-    if target_rec_id is not None:
-        rec_target = next((r for r in recons_planas if r["id"] == target_rec_id), None)
-        target_name = rec_target["nombre"] if rec_target else "reconstrucción"
-    else:
-        target_name = "reconstrucción"
-
-    if st.button(
-        "+ Reformación",
-        key="ref_btn_add_ref",
-        type="secondary",
-        use_container_width=True,
-    ):
-        if target_rec_id is None:
-            st.warning("Selecciona una reconstrucción primero.")
-        else:
-            nueva = _crear_reformacion_base(target_rec_id)
-            st.session_state["reformaciones_por_rec"].setdefault(target_rec_id, []).append(nueva)
-            st.session_state["ref_activa"] = nueva["id"]
-            st.rerun()
-
-
 def _rec_target_id(recons_planas):
-    """Determina a qué reconstrucción se asocia una nueva reformación."""
     activa = st.session_state["ref_activa"]
-    # Caso 1: hay una reformación seleccionada → su rec
     if isinstance(activa, str):
         for lista in st.session_state["reformaciones_por_rec"].values():
             for ref in lista:
                 if ref["id"] == activa:
                     return ref.get("rec_id")
-    # Caso 2: el usuario está mirando una reconstrucción
     if isinstance(activa, dict) and activa.get("kind") == "rec":
         return activa.get("rec_id")
-    # Caso 3: primera disponible
     if recons_planas:
         return recons_planas[0]["id"]
     return None
 
 
 def _nombre_reformacion(ref: dict) -> str:
-    """Nombre legible para mostrar en el sidebar."""
     tipo = ref.get("tipo")
     subt = ref.get("subtipo")
     if tipo and subt:
@@ -536,28 +267,345 @@ def _eliminar_reformacion(ref_id: str, rec_id):
     if rec_id and rec_id in mapa:
         mapa[rec_id] = [r for r in mapa[rec_id] if r.get("id") != ref_id]
     else:
-        # Búsqueda defensiva
         for rid, lista in mapa.items():
             mapa[rid] = [r for r in lista if r.get("id") != ref_id]
-    # Si era la activa, limpiar
+    st.session_state.get("imagenes_ref_por_id", {}).pop(ref_id, None)
     if st.session_state.get("ref_activa") == ref_id:
         st.session_state["ref_activa"] = None
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# PANEL CENTRAL
-# ═══════════════════════════════════════════════════════════════════════════
+def _render_sidebar(recons_planas):
+    _inject_sidebar_css()
+    st.markdown("### 📐 Reformaciones")
+
+    if not recons_planas:
+        total_existentes = _contar_reconstrucciones_totales()
+        if total_existentes == 0:
+            st.info("No hay reconstrucciones aún. Ve a la pestaña **Reconstrucción** para crear al menos una.")
+        else:
+            st.info(f"{total_existentes} reconstrucción(es) en edición. Cárgales imagen y completa sus parámetros para poder reformarlas aquí.")
+        return
+
+    reformaciones_map = st.session_state["reformaciones_por_rec"]
+    for r in recons_planas:
+        reformaciones_map.setdefault(r["id"], [])
+
+    rec_order = st.session_state["_ref_rec_order"]
+    activa = st.session_state["ref_activa"]
+
+    rec_id_expandida = None
+    if isinstance(activa, dict) and activa.get("kind") == "rec":
+        rec_id_expandida = activa.get("rec_id")
+    elif isinstance(activa, str):
+        for rid, lista in reformaciones_map.items():
+            for ref in lista:
+                if ref.get("id") == activa:
+                    rec_id_expandida = rid
+                    break
+            if rec_id_expandida:
+                break
+
+    recons_ordenadas = sorted(recons_planas, key=lambda r: rec_order.get(r["id"], 0))
+
+    for r in recons_ordenadas:
+        rec_id = r["id"]
+        refs_de_esta_rec = sorted(reformaciones_map.get(rec_id, []), key=lambda x: x.get("order", 0))
+        n_refs = len(refs_de_esta_rec)
+        esta_expandida = (rec_id == rec_id_expandida)
+        es_activo_rec = isinstance(activa, dict) and activa.get("kind") == "rec" and activa.get("rec_id") == rec_id
+        contador = f"  ({n_refs})" if (n_refs > 0 and not esta_expandida) else ""
+
+        if st.button(f"🧩 {r['nombre']} · {r['exp_nombre']}{contador}", key=f"ref_btn_rec_{rec_id}", type="primary" if es_activo_rec else "secondary", use_container_width=True):
+            st.session_state["ref_activa"] = {"kind": "rec", "rec_id": rec_id}
+            st.rerun()
+
+        if esta_expandida:
+            for ref in refs_de_esta_rec:
+                es_activo_ref = isinstance(activa, str) and activa == ref["id"]
+                c_main, c_del = st.columns([6, 1], gap="small", vertical_alignment="center")
+                with c_main:
+                    if st.button(f"📐 {_nombre_reformacion(ref)}", key=f"ref_btn_ref_{ref['id']}", type="primary" if es_activo_ref else "secondary", use_container_width=True):
+                        st.session_state["ref_activa"] = ref["id"]
+                        st.rerun()
+                with c_del:
+                    if st.button("✕", key=f"ref_btn_del_{ref['id']}", type="tertiary", use_container_width=True):
+                        _eliminar_reformacion(ref["id"], ref.get("rec_id"))
+                        st.rerun()
+        st.markdown("<div style='height:0.3rem;'></div>", unsafe_allow_html=True)
+
+    target_rec_id = _rec_target_id(recons_planas)
+    st.markdown("<div style='height:0.55rem;'></div>", unsafe_allow_html=True)
+    if st.button("+ Reformación", key="ref_btn_add_ref", type="secondary", use_container_width=True):
+        if target_rec_id is None:
+            st.warning("Selecciona una reconstrucción primero.")
+        else:
+            nueva = _crear_reformacion_base(target_rec_id)
+            st.session_state["reformaciones_por_rec"].setdefault(target_rec_id, []).append(nueva)
+            st.session_state["ref_activa"] = nueva["id"]
+            st.rerun()
+
+
+def _color_exploracion_por_exp_id(exp_id: str) -> str:
+    exploraciones = st.session_state.get("exploraciones", [])
+    try:
+        idx = next(i for i, e in enumerate(exploraciones) if isinstance(e, dict) and e.get("id") == exp_id)
+    except Exception:
+        idx = 0
+    return EXPLORACION_COLORS[idx % len(EXPLORACION_COLORS)]
+
+
+def _color_reconstruccion(rec: dict) -> str:
+    return _color_exploracion_por_exp_id(rec.get("exp_id")) if rec else RECON_COLOR_DEFAULT
+
+
+def _default_overlay_settings(ref_id: str, img_idx: int):
+    return {
+        "show_ranges": True,
+        "range_count": 3,
+        "angle_deg": 0,
+        "show_refs": False,
+        "refs": [
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
+        ],
+    }
+
+
+def _ensure_image_state(ref_id: str):
+    store = st.session_state.setdefault("imagenes_ref_por_id", {})
+    if ref_id not in store:
+        store[ref_id] = {}
+    for idx in (1, 2, 3):
+        store[ref_id].setdefault(f"img{idx}", None)
+        store[ref_id].setdefault(f"overlay{idx}", _default_overlay_settings(ref_id, idx))
+    return store[ref_id]
+
+
+def _render_image_uploader(ref_id: str, img_idx: int, titulo: str):
+    img_state = _ensure_image_state(ref_id)
+    key_img = f"img{img_idx}"
+    file_obj = st.file_uploader(titulo, type=["png", "jpg", "jpeg", "webp"], key=f"up_{ref_id}_{img_idx}")
+    if file_obj is not None:
+        img_state[key_img] = {"name": file_obj.name, "bytes": file_obj.getvalue()}
+    if img_state.get(key_img) is not None:
+        if st.button(f"🗑️ Borrar {titulo}", key=f"del_{ref_id}_{img_idx}", use_container_width=True):
+            img_state[key_img] = None
+            st.rerun()
+    return img_state.get(key_img)
+
+
+def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, title="Imagen", css_width=320, css_height=260, internal_w=900, internal_h=700):
+    refs_cfg = settings.get("refs", [])
+    html = f"""
+<div style="text-align:center; margin:0;">
+  <div style="display:inline-block; font-size:15px; font-weight:600; color:#ddd; margin-bottom:6px;">{title}</div>
+  <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}" style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;margin:0 auto;"></canvas>
+</div>
+<script>
+(function() {{
+  var canvas = document.getElementById({json.dumps('canvas_' + storage_key)});
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  var img = new Image();
+  img.src = 'data:image/jpeg;base64,' + {json.dumps(img_b64)};
+  var storageKey = {json.dumps('planitc_ref_' + storage_key)};
+  var acqColor = {json.dumps(acq_color)};
+  var recColor = {json.dumps(rec_color)};
+  var showRanges = {json.dumps(bool(settings.get('show_ranges', True)))};
+  var rangeCount = {json.dumps(int(settings.get('range_count', 3)))};
+  var angleDeg = {json.dumps(float(settings.get('angle_deg', 0)))};
+  var showRefs = {json.dumps(bool(settings.get('show_refs', False)))};
+  var refsCfg = {json.dumps(refs_cfg)};
+
+  var state = {{
+    linesOffset: 0,
+    refs: [
+      {{ax:0.22, ay:0.18, tx:0.06, ty:0.08}},
+      {{ax:0.78, ay:0.20, tx:0.84, ty:0.08}},
+      {{ax:0.20, ay:0.50, tx:0.04, ty:0.50}},
+      {{ax:0.80, ay:0.52, tx:0.84, ty:0.50}},
+      {{ax:0.48, ay:0.82, tx:0.54, ty:0.94}},
+    ],
+    drag:null
+  }};
+  try {{
+    var saved = localStorage.getItem(storageKey);
+    if (saved) {{
+      var parsed = JSON.parse(saved);
+      if (parsed && parsed.refs) state.refs = parsed.refs;
+      if (parsed && typeof parsed.linesOffset === 'number') state.linesOffset = parsed.linesOffset;
+    }}
+  }} catch(e) {{}}
+
+  function saveState() {{
+    try {{ localStorage.setItem(storageKey, JSON.stringify({{refs:state.refs, linesOffset:state.linesOffset}})); }} catch(e) {{}}
+  }}
+
+  function drawArrow(fromX, fromY, toX, toY, color) {{
+    var head = 16;
+    var dx = toX-fromX, dy = toY-fromY;
+    var ang = Math.atan2(dy, dx);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(fromX, fromY); ctx.lineTo(toX, toY); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(toX, toY);
+    ctx.lineTo(toX - head*Math.cos(ang-Math.PI/6), toY - head*Math.sin(ang-Math.PI/6));
+    ctx.lineTo(toX - head*Math.cos(ang+Math.PI/6), toY - head*Math.sin(ang+Math.PI/6));
+    ctx.closePath(); ctx.fill();
+  }}
+
+  function drawRanges() {{
+    if (!showRanges) return;
+    var cx = W/2, cy = H/2 + state.linesOffset*H;
+    var ang = angleDeg*Math.PI/180;
+    var dx = Math.cos(ang), dy = Math.sin(ang);
+    var nx = -dy, ny = dx;
+    var spacing = 38;
+    for (var i=0; i<rangeCount; i++) {{
+      var off = (i - (rangeCount-1)/2) * spacing;
+      var ox = nx*off, oy = ny*off;
+      var len = Math.max(W,H) * 0.42;
+      var x1 = cx + ox - dx*len, y1 = cy + oy - dy*len;
+      var x2 = cx + ox + dx*len, y2 = cy + oy + dy*len;
+      ctx.strokeStyle = (i % 2 === 0) ? acqColor : recColor;
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    }}
+  }}
+
+  function drawRefs() {{
+    if (!showRefs) return;
+    ctx.font = 'bold 20px Arial';
+    for (var i=0; i<Math.min(5, refsCfg.length); i++) {{
+      var cfg = refsCfg[i];
+      if (!cfg || !cfg.enabled) continue;
+      var r = state.refs[i];
+      var ax = r.ax*W, ay = r.ay*H, tx = r.tx*W, ty = r.ty*H;
+      drawArrow(tx, ty, ax, ay, recColor);
+      var txt = cfg.text || ('Referencia ' + (i+1));
+      var pad = 8;
+      var tw = ctx.measureText(txt).width + pad*2;
+      ctx.fillStyle = 'rgba(0,0,0,0.72)';
+      ctx.fillRect(tx-4, ty-24, tw, 30);
+      ctx.strokeStyle = recColor;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(tx-4, ty-24, tw, 30);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(txt, tx+pad-4, ty-4);
+      ctx.beginPath(); ctx.fillStyle = acqColor; ctx.arc(ax, ay, 7, 0, Math.PI*2); ctx.fill();
+    }}
+  }}
+
+  function drawImage() {{
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,W,H);
+    if (img.width && img.height) {{
+      var scale = Math.min(W/img.width, H/img.height);
+      var dw = img.width*scale, dh = img.height*scale;
+      var dx = (W-dw)/2, dy = (H-dh)/2;
+      ctx.drawImage(img, dx, dy, dw, dh);
+    }}
+    drawRanges();
+    drawRefs();
+  }}
+
+  function getPos(evt) {{
+    var rect = canvas.getBoundingClientRect();
+    var clientX = evt.clientX, clientY = evt.clientY;
+    return {{x:(clientX-rect.left)*(W/rect.width), y:(clientY-rect.top)*(H/rect.height)}};
+  }}
+  function hitRef(pos) {{
+    for (var i=0; i<state.refs.length; i++) {{
+      var r = state.refs[i];
+      var ax = r.ax*W, ay = r.ay*H, tx = r.tx*W, ty = r.ty*H;
+      if (Math.hypot(pos.x-ax, pos.y-ay) < 18) return {{i:i, p:'a'}};
+      if (Math.hypot(pos.x-tx, pos.y-ty) < 18) return {{i:i, p:'t'}};
+    }}
+    return null;
+  }}
+  canvas.addEventListener('mousedown', function(e) {{
+    var pos = getPos(e);
+    state.drag = hitRef(pos);
+    if (!state.drag && showRanges) state.drag = {{i:-1, p:'l'}};
+  }});
+  canvas.addEventListener('mousemove', function(e) {{
+    if (!state.drag) return;
+    var pos = getPos(e);
+    if (state.drag.p === 'a') {{ state.refs[state.drag.i].ax = Math.max(0.02, Math.min(0.98, pos.x/W)); state.refs[state.drag.i].ay = Math.max(0.02, Math.min(0.98, pos.y/H)); }}
+    else if (state.drag.p === 't') {{ state.refs[state.drag.i].tx = Math.max(0.02, Math.min(0.98, pos.x/W)); state.refs[state.drag.i].ty = Math.max(0.02, Math.min(0.98, pos.y/H)); }}
+    else if (state.drag.p === 'l') {{ state.linesOffset = Math.max(-0.35, Math.min(0.35, (pos.y/H)-0.5)); }}
+    drawImage();
+  }});
+  window.addEventListener('mouseup', function() {{ if (state.drag) saveState(); state.drag = null; }});
+  img.onload = drawImage;
+  if (img.complete) drawImage();
+}})();
+</script>
+"""
+    return html
+
+
+def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_height=250):
+    img_state = _ensure_image_state(ref["id"])
+    image_data = img_state.get(f"img{img_idx}")
+    overlay = img_state.get(f"overlay{img_idx}")
+
+    _panel_header("🖼️", title)
+    uploaded = _render_image_uploader(ref["id"], img_idx, f"Subir {title.lower()}")
+    image_data = uploaded if uploaded is not None else image_data
+
+    if image_data is None:
+        st.info("Sube una imagen para activar los rangos y las referencias anatómicas.")
+        return
+
+    try:
+        pil = Image.open(io.BytesIO(image_data["bytes"]))
+        img_b64 = _pil_to_b64_jpeg(pil)
+        html = _overlay_canvas_html(
+            img_b64=img_b64,
+            storage_key=f"{ref['id']}_img{img_idx}",
+            acq_color=_color_exploracion_por_exp_id(rec.get("exp_id")),
+            rec_color=_color_reconstruccion(rec),
+            settings=overlay,
+            title=title,
+            css_width=css_width,
+            css_height=css_height,
+        )
+        components.html(html, height=css_height + 50, scrolling=False)
+    except Exception as e:
+        st.error(f"No se pudo mostrar la imagen: {e}")
+
+    c1, c2 = st.columns(2, gap="small")
+    with c1:
+        overlay["show_ranges"] = st.checkbox("Activar rangos paralelos", value=overlay.get("show_ranges", True), key=f"rng_show_{ref['id']}_{img_idx}")
+        overlay["range_count"] = st.slider("N° de rangos", 1, 6, int(overlay.get("range_count", 3)), key=f"rng_count_{ref['id']}_{img_idx}")
+    with c2:
+        overlay["show_refs"] = st.checkbox("Activar referencias anatómicas", value=overlay.get("show_refs", False), key=f"ref_show_{ref['id']}_{img_idx}")
+        overlay["angle_deg"] = st.slider("Ángulo de rangos", -180, 180, int(float(overlay.get("angle_deg", 0))), key=f"rng_angle_{ref['id']}_{img_idx}")
+
+    if overlay.get("show_refs"):
+        for i in range(5):
+            cc1, cc2 = st.columns([1, 3], gap="small")
+            with cc1:
+                overlay["refs"][i]["enabled"] = st.checkbox(f"R{i+1}", value=overlay["refs"][i].get("enabled", False), key=f"r_enabled_{ref['id']}_{img_idx}_{i}")
+            with cc2:
+                overlay["refs"][i]["text"] = st.text_input(f"Anatomía {i+1}", value=overlay["refs"][i].get("text", ""), key=f"r_text_{ref['id']}_{img_idx}_{i}")
+
 
 def _render_panel_rec(rec_id: str, recons_planas):
-    """Vista cuando el usuario está sobre un encabezado de reconstrucción."""
     rec = next((r for r in recons_planas if r["id"] == rec_id), None)
     if rec is None:
         st.warning("Reconstrucción no encontrada.")
         return
-
     _panel_header("🧩", f"{rec['nombre']} · {rec['exp_nombre']}")
-
-    recd = rec["rec"]  # dict original de la reconstrucción
+    recd = rec["rec"]
     c1, c2 = st.columns(2, gap="medium")
     with c1:
         st.markdown(f"**Fase:** {recd.get('fase_recons', '—')}")
@@ -571,25 +619,34 @@ def _render_panel_rec(rec_id: str, recons_planas):
         st.markdown(f"**DFOV:** {recd.get('dfov', '—')}")
         st.markdown(f"**Inicio:** {recd.get('inicio_recons', '—')}")
         st.markdown(f"**Fin:** {recd.get('fin_recons', '—')}")
-
     st.markdown("---")
-
-    # Reformaciones ya creadas para esta reconstrucción
     lista_refs = st.session_state["reformaciones_por_rec"].get(rec_id, [])
     if lista_refs:
         st.markdown(f"**Reformaciones creadas ({len(lista_refs)}):**")
         for ref in lista_refs:
             st.markdown(f"- 📐 {_nombre_reformacion(ref)}")
     else:
-        st.info(
-            "Aún no hay reformaciones para esta reconstrucción. "
-            "Usa **+ Reformación** en la barra lateral para crear la primera."
-        )
+        st.info("Aún no hay reformaciones para esta reconstrucción. Usa **+ Reformación** en la barra lateral para crear la primera.")
+
+
+def _reset_params(ref: dict):
+    for p in ["plano", "grosor", "distancia", "n_vistas", "angulo"]:
+        ref[p] = None
+
+
+def _render_resumen(ref: dict):
+    tipo = ref.get("tipo") or "—"
+    subt = ref.get("subtipo")
+    nombre = f"{tipo} {subt}" if subt else tipo
+    params_activos = PARAMS_POR_TIPO.get((ref.get("tipo"), ref.get("subtipo")), [])
+    lines = [f"**Tipo:** {nombre}"]
+    for p in params_activos:
+        val = ref.get(p)
+        lines.append(f"**{PARAMS_LABELS.get(p, p)}:** {val if val is not None else '—'}")
+    st.markdown("  \n".join(lines))
 
 
 def _render_panel_reformacion(ref_id: str, recons_planas):
-    """Vista para editar una reformación."""
-    # Buscar la ref
     ref = None
     for lista in st.session_state["reformaciones_por_rec"].values():
         for r in lista:
@@ -608,15 +665,8 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         header_txt = f"{header_txt} · {rec['nombre']} ({rec['exp_nombre']})"
     _panel_header("📐", header_txt)
 
-    # 1) Tipo
     tipo_prev = ref.get("tipo")
-    ref["tipo"] = selectbox_con_placeholder(
-        "Tipo de reformación",
-        TIPOS_REFORMACION,
-        key=f"ref_tipo_{ref['id']}",
-        value=tipo_prev,
-    )
-    # Si cambió el tipo, resetear subtipo y params
+    ref["tipo"] = selectbox_con_placeholder("Tipo de reformación", TIPOS_REFORMACION, key=f"ref_tipo_{ref['id']}", value=tipo_prev)
     if ref["tipo"] != tipo_prev:
         ref["subtipo"] = None
         _reset_params(ref)
@@ -625,117 +675,75 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         st.info("Selecciona el tipo de reformación para continuar.")
         return
 
-    # 2) Subtipo (solo si aplica)
     subtipos = SUBTIPOS.get(ref["tipo"])
     if subtipos:
         subt_prev = ref.get("subtipo")
-        ref["subtipo"] = selectbox_con_placeholder(
-            f"{ref['tipo']} — variante",
-            subtipos,
-            key=f"ref_subtipo_{ref['id']}",
-            value=subt_prev,
-        )
+        ref["subtipo"] = selectbox_con_placeholder(f"{ref['tipo']} — variante", subtipos, key=f"ref_subtipo_{ref['id']}", value=subt_prev)
         if ref["subtipo"] != subt_prev:
             _reset_params(ref)
-
         if ref["subtipo"] is None:
             st.info("Selecciona la variante para continuar.")
             return
     else:
         ref["subtipo"] = None
 
-    # 3) Parámetros según (tipo, subtipo)
-    params = PARAMS_POR_TIPO.get((ref["tipo"], ref["subtipo"]), [])
-    if not params:
-        st.warning("Combinación no soportada.")
-        return
+    # Layout solicitado
+    top_left, top_right = st.columns(2, gap="large")
+    with top_left:
+        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=340, css_height=250)
+    with top_right:
+        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=340, css_height=250)
 
-    st.markdown("---")
-    _panel_header("🎛️", "Parámetros")
+    bottom_left, bottom_right = st.columns([1.15, 1.0], gap="large")
+    with bottom_left:
+        _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=340, css_height=250)
+    with bottom_right:
+        st.markdown("<div style='height:0.2rem;'></div>", unsafe_allow_html=True)
+        _panel_header("🎛️", "Parámetros de la reformación")
+        params = PARAMS_POR_TIPO.get((ref["tipo"], ref["subtipo"]), [])
+        if not params:
+            st.warning("Combinación no soportada.")
+            return
+        for i in range(0, len(params), 2):
+            fila = params[i:i+2]
+            cols = st.columns(len(fila), gap="medium")
+            for col, p in zip(cols, fila):
+                with col:
+                    ref[p] = selectbox_con_placeholder(
+                        PARAMS_LABELS.get(p, p.title()),
+                        PARAMS_OPCIONES.get(p, []),
+                        key=f"ref_{p}_{ref['id']}",
+                        value=ref.get(p),
+                    )
+        st.markdown("---")
+        _panel_header("📝", "Resumen")
+        _render_resumen(ref)
+        st.caption("Los rangos paralelos pueden moverse verticalmente sobre cada imagen. Las referencias anatómicas se activan por imagen y permiten escribir el nombre que se mostrará junto a una flecha.")
 
-    # Renderizamos en columnas (2 por fila para que se vea ordenado)
-    for i in range(0, len(params), 2):
-        fila = params[i:i+2]
-        cols = st.columns(len(fila), gap="medium")
-        for col, p in zip(cols, fila):
-            with col:
-                opts = PARAMS_OPCIONES.get(p, [])
-                label = PARAMS_LABELS.get(p, p.title())
-                ref[p] = selectbox_con_placeholder(
-                    label,
-                    opts,
-                    key=f"ref_{p}_{ref['id']}",
-                    value=ref.get(p),
-                )
-
-    # Resumen inferior
-    st.markdown("---")
-    _panel_header("📝", "Resumen")
-    _render_resumen(ref)
-
-
-def _reset_params(ref: dict):
-    """Limpia los parámetros cuando cambia tipo/subtipo."""
-    for p in ["plano", "grosor", "distancia", "n_vistas", "angulo"]:
-        ref[p] = None
-
-
-def _render_resumen(ref: dict):
-    tipo = ref.get("tipo") or "—"
-    subt = ref.get("subtipo")
-    nombre = f"{tipo} {subt}" if subt else tipo
-    params_activos = PARAMS_POR_TIPO.get((ref.get("tipo"), ref.get("subtipo")), [])
-
-    lines = [f"**Tipo:** {nombre}"]
-    for p in params_activos:
-        val = ref.get(p)
-        lines.append(f"**{PARAMS_LABELS.get(p, p)}:** {val if val is not None else '—'}")
-    st.markdown("  \n".join(lines))
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# ENTRYPOINT
-# ═══════════════════════════════════════════════════════════════════════════
 
 def render_reformaciones():
     _init_state()
-
     recons_planas = _obtener_reconstrucciones_planas()
-
     col_sidebar, col_main = st.columns([1.1, 4.5], gap="large")
-
     with col_sidebar:
         _render_sidebar(recons_planas)
-
     with col_main:
         if not recons_planas:
             st.subheader("Reformaciones")
             total_existentes = _contar_reconstrucciones_totales()
             if total_existentes == 0:
-                st.info(
-                    "Para crear reformaciones, primero debes programar "
-                    "al menos una reconstrucción en la pestaña "
-                    "**🧩 Reconstrucción**."
-                )
+                st.info("Para crear reformaciones, primero debes programar al menos una reconstrucción en la pestaña **🧩 Reconstrucción**.")
             else:
                 st.warning(
-                    f"Tienes {total_existentes} reconstrucción(es) en la "
-                    "pestaña **🧩 Reconstrucción**, pero ninguna está lista "
-                    "para reformar. Para que una reconstrucción aparezca "
-                    "aquí, debe tener:\n\n"
+                    f"Tienes {total_existentes} reconstrucción(es) en la pestaña **🧩 Reconstrucción**, pero ninguna está lista para reformar. Para que una reconstrucción aparezca aquí, debe tener:\n\n"
                     "- Una **imagen de referencia** cargada.\n"
-                    "- Todos sus **parámetros principales** definidos "
-                    "(fase, tipo, kernel, grosor, incremento, ventana y DFOV)."
+                    "- Todos sus **parámetros principales** definidos (fase, tipo, kernel, grosor, incremento, ventana y DFOV)."
                 )
             return
-
         activa = st.session_state["ref_activa"]
-
-        # Auto-seleccionar la primera reconstrucción si no hay nada activo
         if activa is None:
             activa = {"kind": "rec", "rec_id": recons_planas[0]["id"]}
             st.session_state["ref_activa"] = activa
-
         if isinstance(activa, dict) and activa.get("kind") == "rec":
             _render_panel_rec(activa["rec_id"], recons_planas)
         elif isinstance(activa, str):
