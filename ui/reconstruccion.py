@@ -4,6 +4,7 @@ import json
 import base64
 
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 
@@ -881,10 +882,11 @@ def _render_panel_central(adquisiciones_validas):
                         canvas_height=760,
                     )
                     if html_canvas:
-                        st.components.v1.html(html_canvas, height=430)
+                        components.html(html_canvas, height=430, scrolling=False)
                     else:
                         st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
-                except Exception:
+                except Exception as e:
+                    st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
 
     with col_img_param[1]:
