@@ -364,9 +364,9 @@ def _default_overlay_settings(ref_id: str, img_idx: int):
         "range_count": 3,
         "angle_deg": 0,
         "refs": [
-            {"text": ""},
-            {"text": ""},
-            {"text": ""},
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
+            {"enabled": False, "text": ""},
         ],
     }
 
@@ -654,19 +654,44 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
 
   function renderInputs() {{
     labelsLayer.innerHTML = '';
+
+    var tools = document.createElement('div');
+    tools.style.cssText = 'position:absolute; left:' + (imgRect.x + 8) + 'px; top:' + (imgRect.y + 8) + 'px; display:flex; gap:6px; pointer-events:auto; z-index:5;';
+    for (var j = 0; j < 3; j++) {{
+      (function(idx) {{
+        var enabled = !!(refsCfg[idx] && refsCfg[idx].enabled);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = 'R' + (idx + 1);
+        btn.style.cssText = 'height:22px; min-width:30px; border-radius:999px; border:1px solid ' + recColor + '; background:' + (enabled ? recColor : 'rgba(0,0,0,0.68)') + '; color:#fff; font:700 11px Arial; cursor:pointer;';
+        btn.addEventListener('click', function(e) {{
+          e.preventDefault();
+          e.stopPropagation();
+          if (!refsCfg[idx]) refsCfg[idx] = {{enabled:false, text:''}};
+          refsCfg[idx].enabled = !refsCfg[idx].enabled;
+          saveState();
+          drawImage();
+        }});
+        tools.appendChild(btn);
+      }})(j);
+    }}
+    labelsLayer.appendChild(tools);
+
     for (var i = 0; i < state.refs.length; i++) {{
       (function(idx) {{
+        if (!(refsCfg[idx] && refsCfg[idx].enabled)) return;
         var r = state.refs[idx];
-        var left = clamp(normToCanvasX(r.tx), imgRect.x + 12, imgRect.x1 - 128);
-        var top = clamp(normToCanvasY(r.ty) - 14, imgRect.y + 6, imgRect.y1 - 30);
+        var left = clamp(normToCanvasX(r.tx), imgRect.x + 12, imgRect.x1 - 134);
+        var top = clamp(normToCanvasY(r.ty) - 14, imgRect.y + 36, imgRect.y1 - 30);
         var box = document.createElement('div');
-        box.style.cssText = 'position:absolute; left:' + left + 'px; top:' + top + 'px; width:116px; height:24px; display:flex; align-items:center; gap:4px; pointer-events:auto;';
+        box.style.cssText = 'position:absolute; left:' + left + 'px; top:' + top + 'px; width:122px; height:24px; display:flex; align-items:center; gap:4px; pointer-events:auto; z-index:6;';
 
         var handle = document.createElement('div');
         handle.textContent = String(idx + 1);
         handle.style.cssText = 'width:18px; height:18px; border-radius:50%; background:' + recColor + '; color:#fff; font:700 11px Arial; display:flex; align-items:center; justify-content:center; cursor:grab; flex:0 0 auto;';
         handle.addEventListener('mousedown', function(e) {{
           e.preventDefault();
+          e.stopPropagation();
           state.drag = {{type:'ref_label', i:idx}};
         }});
 
@@ -674,9 +699,22 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
         input.type = 'text';
         input.value = r.text || '';
         input.placeholder = 'Anatomía';
-        input.style.cssText = 'width:94px; height:24px; border:1px solid ' + recColor + '; border-radius:6px; background:rgba(0,0,0,0.72); color:#fff; padding:0 6px; font:12px Arial; outline:none;';
-        input.addEventListener('input', function() {{
+        input.style.cssText = 'width:100px; height:24px; border:1px solid ' + recColor + '; border-radius:6px; background:rgba(0,0,0,0.72); color:#fff; padding:0 6px; font:12px Arial; outline:none;';
+        input.addEventListener('mousedown', function(e) {{ e.stopPropagation(); }});
+        input.addEventListener('click', function(e) {{ e.stopPropagation(); }});
+        input.addEventListener('keydown', function(e) {{ e.stopPropagation(); }});
+        input.addEventListener('input', function(e) {{
+          e.stopPropagation();
           state.refs[idx].text = input.value;
+          if (!refsCfg[idx]) refsCfg[idx] = {{enabled:true, text:''}};
+          refsCfg[idx].text = input.value;
+          saveState();
+        }});
+        input.addEventListener('change', function(e) {{
+          e.stopPropagation();
+          state.refs[idx].text = input.value;
+          if (!refsCfg[idx]) refsCfg[idx] = {{enabled:true, text:''}};
+          refsCfg[idx].text = input.value;
           saveState();
           drawImage();
         }});
@@ -695,6 +733,7 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
     ctx.rect(imgRect.x, imgRect.y, imgRect.w, imgRect.h);
     ctx.clip();
     for (var i=0; i<state.refs.length; i++) {{
+      if (!(refsCfg[i] && refsCfg[i].enabled)) continue;
       var r = state.refs[i];
       var ax = normToCanvasX(r.ax), ay = normToCanvasY(r.ay);
       var tx = normToCanvasX(r.tx), ty = normToCanvasY(r.ty);
@@ -727,6 +766,7 @@ def _overlay_canvas_html(img_b64, storage_key, acq_color, rec_color, settings, t
 
   function hitRef(pos) {{
     for (var i=0; i<state.refs.length; i++) {{
+      if (!(refsCfg[i] && refsCfg[i].enabled)) continue;
       var r = state.refs[i];
       var ax = normToCanvasX(r.ax), ay = normToCanvasY(r.ay);
       if (Math.hypot(pos.x-ax, pos.y-ay) < 18) return {{i:i, p:'a'}};
@@ -868,7 +908,6 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
 
     col_btn1, col_btn2 = st.columns([1, 1], gap="small")
     with col_btn1:
-        st.caption("3 referencias anatómicas dentro de la imagen")
     with col_btn2:
         if st.button("🗑️ Borrar imagen", key=f"del_{ref['id']}_{img_idx}", use_container_width=True):
             img_state[f"img{img_idx}"] = None
