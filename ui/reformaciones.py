@@ -436,7 +436,7 @@ def _overlay_canvas_html(
     <button id="btn_{storage_key}_r2" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R2</button>
     <button id="btn_{storage_key}_r3" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R3</button>
     <div style="width:14px;"></div>
-    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">Cortes</button>
+    <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">Rangos paralelos</button>
   </div>
   <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
     <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
@@ -1028,7 +1028,7 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
             css_width=css_width,
             css_height=css_height,
         )
-        components.html(html, height=css_height + 14, scrolling=False)
+        components.html(html, height=css_height + 90, scrolling=False)
     except Exception as e:
         st.error(f"No se pudo mostrar la imagen: {e}")
         return
@@ -1129,13 +1129,13 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
     # Layout solicitado
     top_left, top_right = st.columns(2, gap="large")
     with top_left:
-        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=340, css_height=250)
+        _render_single_image_block(ref, rec, 1, "Imagen 1", css_width=520, css_height=380)
     with top_right:
-        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=340, css_height=250)
+        _render_single_image_block(ref, rec, 2, "Imagen 2", css_width=520, css_height=380)
 
     bottom_left, bottom_right = st.columns([1.15, 1.0], gap="large")
     with bottom_left:
-        _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=340, css_height=250)
+        _render_single_image_block(ref, rec, 3, "Imagen 3", css_width=520, css_height=380)
     with bottom_right:
         st.markdown("<div style='height:0.2rem;'></div>", unsafe_allow_html=True)
         _panel_header("🎛️", "Parámetros de la reformación")
