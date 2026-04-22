@@ -1169,7 +1169,7 @@ def _render_sidebar_reconstruccion(adquisiciones_validas):
             else f"EXPLORACIÓN {exp.get('orden', i + 1)}"
         )
         region = _get_region_label_for_exp(exp)
-        nombre_visible = f"{nombre_base} · {region}".strip(" ·")
+        nombre_visible = f"{region} · {nombre_base}".strip(" ·")
 
         # Chip de color (igual al original)
         _mini_chip(color, nombre_visible, "")
