@@ -279,7 +279,7 @@ def render_canvas_recon_cuadrado(
   var dragOffsetY = 0;
   var cornerSize = 16;
   var minS = 0.10;
-  var maxS = 0.78;
+  var maxS = 0.96;
 
   function rgbaFromHex(hex, alpha) {{
     if (!hex || typeof hex !== 'string') return 'rgba(0,210,255,' + alpha + ')';
