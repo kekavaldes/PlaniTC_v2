@@ -4,4 +4,3 @@ openpyxl
 Pillow
 numpy
 reportlab
-svglib
