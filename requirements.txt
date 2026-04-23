@@ -4,3 +4,4 @@ openpyxl
 Pillow
 numpy
 reportlab
+streamlit-javascript
