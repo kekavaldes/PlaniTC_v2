@@ -1519,7 +1519,7 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=430, scrolling=False)
-                    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo el canvas.")
+                    st.caption("La captura para el PDF se guarda automáticamente con el último movimiento del canvas. Si lo necesitas para evaluación, también puedes usar **Descargar PNG**.")
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
