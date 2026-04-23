@@ -2,11 +2,6 @@ import streamlit as st
 from pathlib import Path
 import base64
 
-try:
-    from streamlit_js_eval import streamlit_js_eval
-except Exception:
-    streamlit_js_eval = None
-
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
 from ui.reconstruccion import render_reconstruccion
@@ -176,38 +171,6 @@ def aplicar_css_global():
     )
 
 
-
-def install_canvas_bridge():
-    if streamlit_js_eval is None:
-        return
-    js = r"""
-    (() => {
-      try {
-        if (window.__planitcBridgeInstalled) return 'ok';
-        window.__planitcBridgeInstalled = true;
-        window.addEventListener('message', (event) => {
-          try {
-            const d = event.data || {};
-            if (d.type !== 'PLANITC_SNAPSHOT') return;
-            if (d.stateKey && typeof d.state === 'string') {
-              window.localStorage.setItem(d.stateKey, d.state);
-            }
-            if (d.snapshotKey && typeof d.png === 'string') {
-              window.localStorage.setItem(d.snapshotKey, d.png);
-            }
-          } catch (e) {}
-        });
-        return 'ok';
-      } catch (e) {
-        return 'err';
-      }
-    })()
-    """
-    try:
-        streamlit_js_eval(js_expressions=js, key='planitc_canvas_bridge')
-    except Exception:
-        pass
-
 def init_navigation():
     if "current_tab" not in st.session_state:
         st.session_state["current_tab"] = "🏠  Inicio"
@@ -298,7 +261,6 @@ def render_inicio():
 
 def main():
     aplicar_css_global()
-    install_canvas_bridge()
     init_navigation()
     render_top_navigation()
 
