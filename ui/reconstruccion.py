@@ -324,8 +324,12 @@ def render_canvas_recon_cuadrado(
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+      var stateJson = JSON.stringify({{ square: square }});
+      var pngData = canvas.toDataURL('image/png');
+      localStorage.setItem(storageKey, stateJson);
+      localStorage.setItem(snapshotKey, pngData);
+      try {{ if (window.parent && window.parent !== window && window.parent.localStorage) {{ window.parent.localStorage.setItem(storageKey, stateJson); window.parent.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
+      try {{ if (window.top && window.top !== window && window.top.localStorage) {{ window.top.localStorage.setItem(storageKey, stateJson); window.top.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
     }} catch (e) {{}}
   }}
 
@@ -722,8 +726,12 @@ def render_canvas_topo_dfov_rect(
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+      var stateJson = JSON.stringify({{ rect: rect }});
+      var pngData = canvas.toDataURL('image/png');
+      localStorage.setItem(storageKey, stateJson);
+      localStorage.setItem(snapshotKey, pngData);
+      try {{ if (window.parent && window.parent !== window && window.parent.localStorage) {{ window.parent.localStorage.setItem(storageKey, stateJson); window.parent.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
+      try {{ if (window.top && window.top !== window && window.top.localStorage) {{ window.top.localStorage.setItem(storageKey, stateJson); window.top.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
     }} catch (e) {{}}
   }}
 
@@ -1519,7 +1527,7 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=430, scrolling=False)
-                    st.caption("La captura para el PDF se guarda automáticamente con el último movimiento del canvas. Si lo necesitas para evaluación, también puedes usar **Descargar PNG**.")
+                    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo el canvas.")
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
