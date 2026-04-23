@@ -503,14 +503,20 @@ def render_topogramas_independientes_interactivos(
     function saveState() {{
       try {{
         if (storageKey) {{
-          localStorage.setItem(storageKey, JSON.stringify({{
+          var stateJson = JSON.stringify({{
             rectState: rectState,
             lineState: lineState,
             circleState: circleState
-          }}));
+          }});
+          localStorage.setItem(storageKey, stateJson);
+          try {{ if (window.parent && window.parent !== window && window.parent.localStorage) window.parent.localStorage.setItem(storageKey, stateJson); }} catch (e) {{}}
+          try {{ if (window.top && window.top !== window && window.top.localStorage) window.top.localStorage.setItem(storageKey, stateJson); }} catch (e) {{}}
         }}
         if (snapshotKey) {{
-          localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+          var pngData = canvas.toDataURL('image/png');
+          localStorage.setItem(snapshotKey, pngData);
+          try {{ if (window.parent && window.parent !== window && window.parent.localStorage) window.parent.localStorage.setItem(snapshotKey, pngData); }} catch (e) {{}}
+          try {{ if (window.top && window.top !== window && window.top.localStorage) window.top.localStorage.setItem(snapshotKey, pngData); }} catch (e) {{}}
         }}
       }} catch (e) {{}}
     }}
@@ -1489,7 +1495,7 @@ def _guardar_snapshot_adquisicion(exp, group_keys):
 
 
 def _render_boton_snapshot_adquisicion(exp, group_keys):
-    st.caption("La captura para el PDF se guarda automáticamente con el último movimiento del canvas. Si lo necesitas para evaluación, también puedes usar **Descargar PNG**.")
+    st.caption("La captura visual se descarga directamente desde cada canvas con el botón **Descargar PNG**.")
 
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
@@ -1613,11 +1619,11 @@ def _render_topogramas_adq(exp, es_bolus):
         if len(topos) >= 2 and html_topo1 and html_topo2 and html_roi_corte:
             c1, c2, c3 = st.columns([0.86, 0.86, 2.08], gap="medium")
             with c1:
-                st.components.v1.html(html_topo1, height=470)
+                st.components.v1.html(html_topo1, height=405)
             with c2:
-                st.components.v1.html(html_topo2, height=470)
+                st.components.v1.html(html_topo2, height=405)
             with c3:
-                st.components.v1.html(html_roi_corte, height=490)
+                st.components.v1.html(html_roi_corte, height=430)
             _render_boton_snapshot_adquisicion(exp, [f"{exp['id']}_topo1", f"{exp['id']}_topo2", f"{exp['id']}_roi_corte"])
         elif html_roi_corte:
             c1, c2 = st.columns([1.0, 2.0], gap="medium")
@@ -1632,9 +1638,9 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=290 if len(topos) > 1 else 340,
                 )
                 if html_topos:
-                    st.components.v1.html(html_topos, height=500 if len(topos) > 1 else 540)
+                    st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
             with c2:
-                st.components.v1.html(html_roi_corte, height=490 if len(topos) > 1 else 560)
+                st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
             _render_boton_snapshot_adquisicion(exp, [exp['id'], f"{exp['id']}_roi_corte"])
         else:
             html = render_topogramas_independientes_interactivos(
@@ -1647,7 +1653,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 canvas_css_height=290 if len(topos) > 1 else None,
             )
             if html:
-                st.components.v1.html(html, height=500 if len(topos) > 1 else 540)
+                st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
                 _render_boton_snapshot_adquisicion(exp, [exp['id']])
         return
 
@@ -1659,7 +1665,7 @@ def _render_topogramas_adq(exp, es_bolus):
         show_labels=False,
     )
     if html:
-        alto = 500 if len(topos) > 1 else 540
+        alto = 430 if len(topos) > 1 else 470
         st.components.v1.html(html, height=alto)
         _render_boton_snapshot_adquisicion(exp, [exp['id']])
 
