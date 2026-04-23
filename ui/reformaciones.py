@@ -3,12 +3,18 @@ import io
 import json
 import base64
 import hashlib
+import time
 
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
-from ui.canvas_snapshot import capture_canvas_group, set_snapshot
+from ui.canvas_snapshot import (
+    capture_canvas_group,
+    capture_all_snapshots_raw,
+    items_for_group,
+    set_snapshot,
+)
 
 TIPOS_REFORMACION = ["MPR", "MIP", "MinIP", "VR"]
 SUBTIPOS = {
@@ -143,6 +149,20 @@ def _inject_sidebar_css():
     )
 
 
+def _pil_fingerprint(img):
+    if img is None:
+        return None
+    try:
+        return (img.size, img.mode, hashlib.md5(img.tobytes()).hexdigest())
+    except Exception:
+        return id(img)
+
+
+@st.cache_data(
+    hash_funcs={Image.Image: _pil_fingerprint},
+    show_spinner=False,
+    max_entries=64,
+)
 def _pil_to_b64_jpeg(img, max_width=1200):
     if img is None:
         return None
@@ -1136,7 +1156,60 @@ def _render_resumen(ref: dict):
 
 
 
+def _guardar_snapshots_reformacion_desde_bulk(ref_id: str, all_snaps) -> bool:
+    """Extrae del bulk los snapshots de las 3 imágenes de esta reformación."""
+    img_state = _ensure_image_state(ref_id)
+    snaps = {}
+    for img_idx in (1, 2, 3):
+        image_data = img_state.get(f"img{img_idx}")
+        if not image_data:
+            continue
+        img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
+        group_key = f"{ref_id}_img{img_idx}_{img_sig}"
+        items = items_for_group(all_snaps, group_key)
+        if items:
+            snaps[f"img{img_idx}"] = {"bytes": items[0]["bytes"]}
+    if not snaps:
+        return False
+    store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
+    store[ref_id] = snaps
+    return True
+
+
+def _render_boton_snapshot_reformacion(ref_id: str):
+    """Botón manual para capturar los canvas de las imágenes de la reformación.
+    Es opcional: el PDF también auto-captura al generar."""
+    pending_key = f"_pending_snap_ref_{ref_id}"
+
+    if st.button(
+        "💾 Guardar canvas para PDF",
+        key=f"btn_snap_ref_{ref_id}",
+        use_container_width=True,
+        help="Guarda los canvas actuales de esta reformación en el reporte (opcional).",
+    ):
+        st.session_state[pending_key] = int(time.time() * 1000)
+        st.rerun()
+
+    nonce = st.session_state.get(pending_key)
+    if nonce:
+        all_snaps = capture_all_snapshots_raw(
+            js_key=f"manual_snap_ref_{ref_id}_{nonce}"
+        )
+        if all_snaps is None:
+            st.info("Capturando canvas…")
+        else:
+            if _guardar_snapshots_reformacion_desde_bulk(ref_id, all_snaps):
+                st.success("Snapshots guardados para el PDF.")
+            else:
+                st.warning(
+                    "No se pudieron capturar los canvas. Ajusta algo en las "
+                    "imágenes y vuelve a intentarlo."
+                )
+            st.session_state.pop(pending_key, None)
+
+
 def _guardar_snapshots_reformacion(ref_id: str):
+    """Compatibilidad: versión antigua por-grupo."""
     img_state = _ensure_image_state(ref_id)
     snaps = {}
     for img_idx in (1, 2, 3):
@@ -1197,6 +1270,15 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         ref["subtipo"] = None
 
     st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo cada canvas.")
+
+    col_snap_info, col_snap_btn = st.columns([2.6, 1], gap="small")
+    with col_snap_info:
+        st.caption(
+            "Al generar el PDF, los canvas se incluyen automáticamente. "
+            "Si quieres forzar una captura intermedia, usa el botón → "
+        )
+    with col_snap_btn:
+        _render_boton_snapshot_reformacion(ref["id"])
 
     is_vr = ref["tipo"] == "VR"
     overlay_mode = "radial" if is_vr else "parallel"
