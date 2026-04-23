@@ -22,9 +22,12 @@ Entrypoint: render_export_pdf()
 
 import io
 import re
+import json
+import base64
 from datetime import datetime
 
 import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 from PIL import Image as PILImage
 
 from reportlab.lib.pagesizes import A4
@@ -212,6 +215,127 @@ def _snapshot_bytes(snapshot):
     if isinstance(snapshot, dict):
         return snapshot.get("bytes")
     return None
+
+
+def _data_url_to_bytes(data_url):
+    if not data_url or not isinstance(data_url, str) or "," not in data_url:
+        return None
+    try:
+        return base64.b64decode(data_url.split(",", 1)[1])
+    except Exception:
+        return None
+
+
+def _combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
+    valid = []
+    for data in items or []:
+        if not data:
+            continue
+        try:
+            im = PILImage.open(io.BytesIO(data)).convert("RGBA")
+            valid.append(im)
+        except Exception:
+            continue
+    if not valid:
+        return None
+    if len(valid) == 1:
+        out = io.BytesIO()
+        valid[0].save(out, format="PNG")
+        return out.getvalue()
+    total_w = sum(im.width for im in valid) + gap * (len(valid) - 1) + padding * 2
+    max_h = max(im.height for im in valid) + padding * 2
+    canvas = PILImage.new("RGBA", (total_w, max_h), bg)
+    x = padding
+    for im in valid:
+        y = padding + (max_h - padding * 2 - im.height) // 2
+        canvas.alpha_composite(im, (x, y))
+        x += im.width + gap
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _sync_canvas_snapshots_from_browser():
+    js = """(() => {
+      try {
+        const out = {};
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k && k.startsWith('planitc_snapshot_')) {
+            out[k] = window.localStorage.getItem(k);
+          }
+        }
+        return JSON.stringify(out);
+      } catch (e) {
+        return '{}';
+      }
+    })()"""
+    raw = streamlit_js_eval(js_expressions=js, key=f"sync_canvas_{st.session_state.get('_canvas_sync_counter', 0)}")
+    try:
+        snap_map = json.loads(raw) if isinstance(raw, str) else (raw or {})
+    except Exception:
+        snap_map = {}
+
+    exps = st.session_state.get("exploraciones", []) or []
+    recs_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
+    refs_map = st.session_state.get("reformaciones_por_rec", {}) or {}
+
+    adq_store = {}
+    for exp in exps:
+        exp_id = exp.get("id")
+        if not exp_id:
+            continue
+        prefix = f"planitc_snapshot_{exp_id}"
+        matching = []
+        for k in sorted(snap_map.keys()):
+            if k == prefix or k.startswith(prefix + "_"):
+                b = _data_url_to_bytes(snap_map.get(k))
+                if b:
+                    matching.append(b)
+        combined = _combine_png_bytes(matching)
+        if combined:
+            adq_store[exp_id] = {"bytes": combined}
+    st.session_state["canvas_snapshots_adq_por_exp"] = adq_store
+
+    recon_store = {}
+    for lista in recs_map.values():
+        for rec in (lista or []):
+            rec_id = rec.get("id")
+            if not rec_id:
+                continue
+            k = f"planitc_snapshot_recon_square_{rec_id}"
+            b = _data_url_to_bytes(snap_map.get(k))
+            if b:
+                recon_store[rec_id] = {"bytes": b}
+    st.session_state["canvas_snapshots_recon_por_id"] = recon_store
+
+    ref_store = {}
+    for lista in refs_map.values():
+        for ref in (lista or []):
+            ref_id = ref.get("id")
+            if not ref_id:
+                continue
+            imgs = {}
+            prefix = f"planitc_snapshot_{ref_id}_img"
+            for k in sorted(snap_map.keys()):
+                if not k.startswith(prefix):
+                    continue
+                m = re.match(rf"^planitc_snapshot_{re.escape(ref_id)}_(img\d+)_", k)
+                if not m:
+                    continue
+                img_key = m.group(1)
+                b = _data_url_to_bytes(snap_map.get(k))
+                if b:
+                    imgs[img_key] = {"bytes": b}
+            if imgs:
+                ref_store[ref_id] = imgs
+    st.session_state["canvas_snapshots_ref_por_id"] = ref_store
+
+    return {
+        "adq": len(adq_store),
+        "recon": len(recon_store),
+        "ref": len(ref_store),
+    }
 
 def _extraer_svg(svg_str):
     """Extrae solo el tag <svg>...</svg> si viene envuelto en HTML."""
@@ -836,7 +960,7 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
-    st.caption("Para que el PDF incluya exactamente los recuadros, líneas y anotaciones del canvas, primero guarda los snapshots desde Adquisición, Reconstrucción y Reformaciones.")
+    st.caption("El PDF incluirá automáticamente el último estado guardado de cada canvas interactivo. No necesitas guardar snapshots manualmente: se toma el último movimiento realizado por el usuario.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -850,10 +974,13 @@ def render_export_pdf():
 
     # Regenerar solo si se cumplen los requisitos mínimos
     if generar and exportacion_habilitada:
-        with st.spinner("Generando PDF…"):
+        with st.spinner("Sincronizando capturas y generando PDF…"):
             try:
+                st.session_state["_canvas_sync_counter"] = int(st.session_state.get("_canvas_sync_counter", 0)) + 1
+                resumen_sync = _sync_canvas_snapshots_from_browser()
                 st.session_state["_pdf_bytes"] = construir_pdf()
                 st.session_state["_pdf_generado_en"] = datetime.now()
+                st.session_state["_pdf_sync_resumen"] = resumen_sync
             except Exception as e:
                 st.session_state["_pdf_bytes"] = None
                 st.error(f"No se pudo generar el PDF: {e}")
@@ -879,6 +1006,12 @@ def render_export_pdf():
             st.caption(
                 f"Última generación: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
                 f"tamaño: {len(pdf_bytes) / 1024:.1f} KB"
+            )
+        sync_resumen = st.session_state.get("_pdf_sync_resumen") or {}
+        if sync_resumen:
+            st.caption(
+                f"Capturas sincronizadas automáticamente — Adquisiciones: {sync_resumen.get('adq', 0)}, "
+                f"Reconstrucciones: {sync_resumen.get('recon', 0)}, Reformaciones: {sync_resumen.get('ref', 0)}"
             )
 
     elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
