@@ -503,20 +503,14 @@ def render_topogramas_independientes_interactivos(
     function saveState() {{
       try {{
         if (storageKey) {{
-          var stateJson = JSON.stringify({{
+          localStorage.setItem(storageKey, JSON.stringify({{
             rectState: rectState,
             lineState: lineState,
             circleState: circleState
-          }});
-          localStorage.setItem(storageKey, stateJson);
-          try {{ if (window.parent && window.parent !== window && window.parent.localStorage) window.parent.localStorage.setItem(storageKey, stateJson); }} catch (e) {{}}
-          try {{ if (window.top && window.top !== window && window.top.localStorage) window.top.localStorage.setItem(storageKey, stateJson); }} catch (e) {{}}
+          }}));
         }}
         if (snapshotKey) {{
-          var pngData = canvas.toDataURL('image/png');
-          localStorage.setItem(snapshotKey, pngData);
-          try {{ if (window.parent && window.parent !== window && window.parent.localStorage) window.parent.localStorage.setItem(snapshotKey, pngData); }} catch (e) {{}}
-          try {{ if (window.top && window.top !== window && window.top.localStorage) window.top.localStorage.setItem(snapshotKey, pngData); }} catch (e) {{}}
+          localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
         }}
       }} catch (e) {{}}
     }}
