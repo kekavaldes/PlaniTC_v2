@@ -1196,7 +1196,7 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
     else:
         ref["subtipo"] = None
 
-    st.caption("La captura para el PDF se guarda automáticamente con el último movimiento de cada canvas. Si lo necesitas para evaluación, también puedes usar **Descargar PNG**.")
+    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo cada canvas.")
 
     is_vr = ref["tipo"] == "VR"
     overlay_mode = "radial" if is_vr else "parallel"
