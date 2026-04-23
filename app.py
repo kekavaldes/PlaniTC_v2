@@ -221,20 +221,30 @@ def obtener_ruta_portada():
     return None
 
 
-def image_to_base64(image_path: Path) -> str:
+@st.cache_data(show_spinner=False)
+def _cached_image_to_base64(path_str: str, mtime: float) -> str:
+    """Lee y codifica la portada. Cachea por (path, mtime) para que un
+    cambio en disco invalide la caché automáticamente."""
     mime_map = {
         ".png": "image/png",
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".webp": "image/webp",
     }
-    suffix = image_path.suffix.lower()
+    p = Path(path_str)
+    suffix = p.suffix.lower()
     mime_type = mime_map.get(suffix, "image/png")
-
-    with open(image_path, "rb") as f:
+    with open(p, "rb") as f:
         encoded = base64.b64encode(f.read()).decode("utf-8")
-
     return f"data:{mime_type};base64,{encoded}"
+
+
+def image_to_base64(image_path: Path) -> str:
+    try:
+        mtime = image_path.stat().st_mtime
+    except Exception:
+        mtime = 0.0
+    return _cached_image_to_base64(str(image_path), mtime)
 
 
 def render_inicio():
