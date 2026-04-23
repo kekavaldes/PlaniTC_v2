@@ -1474,22 +1474,74 @@ def obtener_imagen_posicion_corte(nombre_posicion):
 
 
 def _guardar_snapshot_adquisicion(exp, group_keys):
+    exp_id = exp.get("id")
+    if not exp_id:
+        st.error("No se encontró el ID de la exploración.")
+        return False
+
+    st.session_state.setdefault("canvas_group_keys_adq_por_exp", {})
+    st.session_state["canvas_group_keys_adq_por_exp"][exp_id] = list(group_keys or [])
+
     items = []
-    for idx, group_key in enumerate(group_keys):
-        items.extend(capture_canvas_group(group_key, js_key=f"cap_adq_{exp['id']}_{idx}"))
+    for idx, group_key in enumerate(group_keys or []):
+        if not group_key:
+            continue
+        try:
+            capturados = capture_canvas_group(group_key, js_key=f"cap_adq_{exp_id}_{idx}")
+            if capturados:
+                items.extend(capturados)
+        except Exception:
+            pass
+
     combinado = combine_png_bytes(items)
     if not combinado:
-        st.warning("No se pudo capturar el canvas. Mueve un poco la imagen y vuelve a intentarlo.")
-        return
-    set_snapshot("canvas_snapshots_adq_por_exp", exp["id"], combinado)
+        st.warning(
+            "No se pudo capturar el canvas visual de esta adquisición. "
+            "Ajusta nuevamente los rangos, ROI o DFOV y vuelve a presionar el botón."
+        )
+        return False
+
+    set_snapshot("canvas_snapshots_adq_por_exp", exp_id, combinado)
+
     topo_idx = exp.get("topo_set_idx")
     if topo_idx is not None:
-        set_snapshot("canvas_snapshots_topo_por_set", topo_idx, combinado, extra={"exp_id": exp.get("id")})
-    st.success("Snapshot guardado para el PDF.")
+        set_snapshot(
+            "canvas_snapshots_topo_por_set",
+            topo_idx,
+            combinado,
+            extra={"exp_id": exp_id},
+        )
+
+    st.success("Snapshot de adquisición guardado para el PDF.")
+    return True
 
 
 def _render_boton_snapshot_adquisicion(exp, group_keys):
-    st.caption("La captura visual se descarga directamente desde cada canvas con el botón **Descargar PNG**.")
+    exp_id = exp.get("id")
+    if not exp_id:
+        return
+
+    st.session_state.setdefault("canvas_group_keys_adq_por_exp", {})
+    st.session_state["canvas_group_keys_adq_por_exp"][exp_id] = list(group_keys or [])
+
+    c1, c2 = st.columns([1.35, 2.15], gap="small")
+
+    with c1:
+        if st.button(
+            "📸 Guardar adquisición para PDF",
+            key=f"btn_guardar_snapshot_adq_{exp_id}",
+            use_container_width=True,
+            type="secondary",
+        ):
+            _guardar_snapshot_adquisicion(exp, group_keys)
+            st.rerun()
+
+    with c2:
+        ya_guardado = exp_id in (st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {})
+        if ya_guardado:
+            st.caption("✅ Esta adquisición ya tiene snapshot guardado para el PDF.")
+        else:
+            st.caption("Guarda aquí los rangos, ROI, colores y recuadros visibles de esta adquisición.")
 
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
