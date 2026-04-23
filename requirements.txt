@@ -4,5 +4,5 @@ openpyxl
 Pillow
 numpy
 reportlab
-
-streamlit-javascript
+svglib
+streamlit-js-eval
