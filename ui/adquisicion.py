@@ -452,7 +452,6 @@ def render_topogramas_independientes_interactivos(
     var ctx = canvas.getContext('2d');
     var W = canvas.width, H = canvas.height;
     var storageKey = baseStorageKey ? ('planitc_' + baseStorageKey + '_' + modo + '_' + idx) : '';
-    var snapshotKey = baseStorageKey ? ('planitc_snapshot_' + baseStorageKey + '_' + modo + '_' + idx) : '';
 
     var rectState = {{ x: data.rect_x, y: data.rect_y, w: data.rect_w, h: data.rect_h }};
     var lineState = {{ y: data.line_y }};
@@ -491,13 +490,6 @@ def render_topogramas_independientes_interactivos(
           lineState: lineState,
           circleState: circleState
         }}));
-      }} catch (e) {{}}
-    }}
-
-    function saveSnapshot() {{
-      try {{
-        if (!snapshotKey) return;
-        localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
       }} catch (e) {{}}
     }}
 
@@ -673,7 +665,6 @@ def render_topogramas_independientes_interactivos(
       else drawRect();
       updateLabels();
       saveState();
-      saveSnapshot();
     }}
 
     function getMousePos(e) {{
