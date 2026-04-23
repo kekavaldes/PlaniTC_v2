@@ -159,33 +159,6 @@ def _alumnos_participantes_str():
     return str(st.session_state.get("alumnos_participantes", "") or "").strip()
 
 
-def _resolved_patient_name():
-    """Obtiene el nombre del paciente con fallback al widget activo de Ingreso."""
-    ingreso = st.session_state.get("ingreso_store", {}) or {}
-    nombre = str(ingreso.get("nombre") or "").strip()
-    if nombre:
-        return nombre
-
-    # Fallback al widget usado en ui/ingreso.py
-    nombre_widget = str(st.session_state.get("nombre_paciente_widget") or "").strip()
-    if nombre_widget:
-        ingreso = dict(ingreso)
-        ingreso["nombre"] = nombre_widget
-        st.session_state["ingreso_store"] = ingreso
-        return nombre_widget
-
-    # Fallback adicional por si en alguna versión quedó otro nombre de key
-    for k in ("nombre_paciente", "nombre_widget", "paciente_nombre"):
-        val = str(st.session_state.get(k) or "").strip()
-        if val:
-            ingreso = dict(ingreso)
-            ingreso["nombre"] = val
-            st.session_state["ingreso_store"] = ingreso
-            return val
-
-    return ""
-
-
 def _kv_table(rows, col_widths=(45 * mm, 120 * mm), sty=None):
     sty = sty or _styles()
     data = [
@@ -827,11 +800,6 @@ def render_export_pdf():
 
     # Resumen rápido de lo que se va a exportar
     ingreso = st.session_state.get("ingreso_store", {}) or {}
-    patient_name = _resolved_patient_name()
-    if patient_name and not ingreso.get("nombre"):
-        ingreso = dict(ingreso)
-        ingreso["nombre"] = patient_name
-        st.session_state["ingreso_store"] = ingreso
     sets_topo = st.session_state.get("topograma_sets", []) or []
     exps = st.session_state.get("exploraciones", []) or []
     recs_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
@@ -844,7 +812,7 @@ def render_export_pdf():
 
     col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns(6)
     with col_r1:
-        st.metric("Paciente", _v(patient_name, "—"))
+        st.metric("Paciente", _v(ingreso.get("nombre"), "—"))
     with col_r2:
         st.metric("Topogramas", len(sets_topo))
     with col_r3:
@@ -859,7 +827,7 @@ def render_export_pdf():
     faltan = []
     if not str(alumnos_participantes or "").strip():
         faltan.append("Nombre del alumno o de los alumnos participantes")
-    if not patient_name:
+    if not ingreso.get("nombre"):
         faltan.append("Nombre del paciente")
     if not exps:
         faltan.append("Al menos una adquisición")
@@ -868,7 +836,7 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
-    st.caption("El PDF incluye de forma estable los parámetros seleccionados. Si las imágenes del canvas no aparecen, el problema no es el nombre del paciente sino la sincronización de snapshots del navegador.")
+    st.caption("Para que el PDF incluya exactamente los recuadros, líneas y anotaciones del canvas, primero guarda los snapshots desde Adquisición, Reconstrucción y Reformaciones.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -892,7 +860,7 @@ def render_export_pdf():
 
     pdf_bytes = st.session_state.get("_pdf_bytes")
     if pdf_bytes and exportacion_habilitada:
-        nombre = patient_name or ingreso.get("nombre") or "paciente"
+        nombre = ingreso.get("nombre") or "paciente"
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", nombre).strip("_") or "paciente"
         ts = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"planiTC_{safe}_{ts}.pdf"
@@ -914,4 +882,4 @@ def render_export_pdf():
             )
 
     elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
-        st.info("Completa los datos mínimos faltantes para habilitar la descarga del PDF.")
+        st.info("Completa primero el nombre del alumno o de los alumnos participantes para habilitar la descarga del PDF.")
