@@ -2,12 +2,20 @@ import copy
 import io
 import json
 import base64
+import hashlib
+import time
 
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
-from ui.canvas_snapshot import capture_canvas_group, combine_png_bytes, set_snapshot
+from ui.canvas_snapshot import (
+    capture_canvas_group,
+    capture_all_snapshots_raw,
+    items_for_group,
+    combine_png_bytes,
+    set_snapshot,
+)
 
 
 def _inject_recon_css():
@@ -221,6 +229,20 @@ def _mini_chip(color: str, titulo: str = "", subtitulo: str = ""):
 
 
 
+def _pil_fingerprint(img):
+    if img is None:
+        return None
+    try:
+        return (img.size, img.mode, hashlib.md5(img.tobytes()).hexdigest())
+    except Exception:
+        return id(img)
+
+
+@st.cache_data(
+    hash_funcs={Image.Image: _pil_fingerprint},
+    show_spinner=False,
+    max_entries=64,
+)
 def _pil_to_b64_jpeg(img, max_width=900):
     if img is None:
         return None
@@ -1403,7 +1425,52 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
 
 
 
+def _guardar_snapshot_reconstruccion_desde_bulk(rec_id: str, all_snaps) -> bool:
+    """Extrae del bulk los snapshots del canvas de esta reconstrucción y los guarda."""
+    items = items_for_group(all_snaps, f"recon_square_{rec_id}")
+    if not items:
+        return False
+    combinado = combine_png_bytes(items)
+    if not combinado:
+        return False
+    set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
+    return True
+
+
+def _render_boton_snapshot_reconstruccion(rec_id: str):
+    """Botón manual para capturar el canvas de reconstrucción y guardarlo en el PDF.
+    Es opcional: el PDF también auto-captura al generar."""
+    pending_key = f"_pending_snap_rec_{rec_id}"
+
+    if st.button(
+        "💾 Guardar canvas para PDF",
+        key=f"btn_snap_rec_{rec_id}",
+        use_container_width=True,
+        help="Guarda el canvas actual en el reporte (opcional).",
+    ):
+        st.session_state[pending_key] = int(time.time() * 1000)
+        st.rerun()
+
+    nonce = st.session_state.get(pending_key)
+    if nonce:
+        all_snaps = capture_all_snapshots_raw(
+            js_key=f"manual_snap_rec_{rec_id}_{nonce}"
+        )
+        if all_snaps is None:
+            st.info("Capturando canvas…")
+        else:
+            if _guardar_snapshot_reconstruccion_desde_bulk(rec_id, all_snaps):
+                st.success("Snapshot guardado para el PDF.")
+            else:
+                st.warning(
+                    "No se pudo capturar el canvas. Ajusta algo en la imagen "
+                    "y vuelve a intentarlo."
+                )
+            st.session_state.pop(pending_key, None)
+
+
 def _guardar_snapshot_reconstruccion(rec_id: str):
+    """Compatibilidad: versión antigua por-grupo."""
     items = capture_canvas_group(f"recon_square_{rec_id}", js_key=f"cap_recon_{rec_id}")
     combinado = combine_png_bytes(items)
     if not combinado:
@@ -1520,6 +1587,7 @@ def _render_panel_central(adquisiciones_validas):
                 if html_canvas:
                     components.html(html_canvas, height=430, scrolling=False)
                     st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo el canvas.")
+                    _render_boton_snapshot_reconstruccion(rec_actual["id"])
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
