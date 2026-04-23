@@ -8,6 +8,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
+from ui.canvas_snapshot import capture_canvas_group, set_snapshot
+
 TIPOS_REFORMACION = ["MPR", "MIP", "MinIP", "VR"]
 SUBTIPOS = {
     "MPR": None,
@@ -468,7 +470,7 @@ def _overlay_canvas_html(
     while len(refs_cfg) < 3:
         refs_cfg.append({"enabled": False, "text": ""})
     html = f"""
-<div style="text-align:center; margin:0;">
+<div data-planitc-snapshot-group="{storage_key}" style="text-align:center; margin:0;">
   <div id="toolbar_{storage_key}" style="width:{css_width}px; margin:0 auto 10px auto; display:flex; gap:8px; justify-content:flex-start; align-items:center; flex-wrap:wrap;">
     <div style="color:#d7d7d7; font-size:13px; font-weight:700; margin-right:4px;">Referencia anatómica</div>
     <button id="btn_{storage_key}_r1" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {rec_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">R1</button>
@@ -478,7 +480,7 @@ def _overlay_canvas_html(
     <button id="btn_{storage_key}_cuts" type="button" style="background:rgba(0,0,0,0.65); color:#fff; border:1px solid {acq_color}; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;">{ranges_label}</button>
   </div>
   <div style="position:relative; width:{css_width}px; height:{css_height}px; margin:0 auto;">
-    <canvas id="canvas_{storage_key}" width="{internal_w}" height="{internal_h}"
+    <canvas id="canvas_{storage_key}" data-planitc-snapshot-item="0" width="{internal_w}" height="{internal_h}"
       style="width:{css_width}px;height:{css_height}px;cursor:crosshair;border:1px solid #444;border-radius:8px;background:#000;display:block;touch-action:none;"></canvas>
 
     <div id="label_wrap_{storage_key}_0" style="position:absolute; display:none; z-index:7; align-items:center; gap:6px;">
@@ -1116,6 +1118,27 @@ def _render_resumen(ref: dict):
     st.markdown("  \n".join(lines))
 
 
+
+
+def _guardar_snapshots_reformacion(ref_id: str):
+    img_state = _ensure_image_state(ref_id)
+    snaps = {{}}
+    for img_idx in (1, 2, 3):
+        image_data = img_state.get(f"img{img_idx}")
+        if not image_data:
+            continue
+        img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
+        group_key = f"{ref_id}_img{img_idx}_{img_sig}"
+        items = capture_canvas_group(group_key, js_key=f"cap_ref_{ref_id}_{img_idx}")
+        if items:
+            snaps[f"img{img_idx}"] = {{"bytes": items[0]["bytes"]}}
+    if not snaps:
+        st.warning("No se pudieron capturar los canvas de reformación.")
+        return
+    store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {{}})
+    store[ref_id] = snaps
+    st.success("Snapshots de reformación guardados para el PDF.")
+
 def _render_panel_reformacion(ref_id: str, recons_planas):
     ref = None
     for lista in st.session_state["reformaciones_por_rec"].values():
@@ -1156,6 +1179,9 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
             return
     else:
         ref["subtipo"] = None
+
+    if st.button("📸 Guardar snapshots reformación", key=f"btn_snap_ref_{ref['id']}", use_container_width=True):
+        _guardar_snapshots_reformacion(ref['id'])
 
     is_vr = ref["tipo"] == "VR"
     overlay_mode = "radial" if is_vr else "parallel"
