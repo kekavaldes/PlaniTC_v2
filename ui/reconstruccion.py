@@ -260,6 +260,8 @@ def render_canvas_recon_cuadrado(
   </div>
   <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+  <button type="button" onclick="downloadReconCanvas()"
+    style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -299,6 +301,18 @@ def render_canvas_recon_cuadrado(
     var b = parseInt(h.substring(4,6), 16);
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
+
+  function downloadReconCanvas() {{
+    try {{
+      var a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'reconstruccion.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }} catch (e) {{}}
+  }}
+  window.downloadReconCanvas = downloadReconCanvas;
 
   try {{
     var saved = localStorage.getItem(storageKey);
@@ -685,6 +699,18 @@ def render_canvas_topo_dfov_rect(
     var b = parseInt(h.substring(4,6), 16);
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
+
+  function downloadReconCanvas() {{
+    try {{
+      var a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'reconstruccion.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }} catch (e) {{}}
+  }}
+  window.downloadReconCanvas = downloadReconCanvas;
 
   try {{
     var saved = localStorage.getItem(storageKey);
@@ -1493,8 +1519,7 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=430, scrolling=False)
-                    if st.button("📸 Guardar snapshot reconstrucción", key=f"btn_snap_recon_{rec_actual['id']}", use_container_width=True):
-                        _guardar_snapshot_reconstruccion(rec_actual['id'])
+                    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo el canvas.")
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
