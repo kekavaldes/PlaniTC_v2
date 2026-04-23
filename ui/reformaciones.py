@@ -510,7 +510,6 @@ def _overlay_canvas_html(
   var img = new Image();
   img.src = 'data:image/jpeg;base64,' + {json.dumps(img_b64)};
   var storageKey = {json.dumps('planitc_ref_' + storage_key)};
-  var snapshotKey = {json.dumps('planitc_snapshot_' + storage_key)};
   var acqColor = {json.dumps(acq_color)};
   var recColor = {json.dumps(rec_color)};
   var showRanges = {json.dumps(bool(settings.get('show_ranges', False)))};
@@ -819,7 +818,6 @@ def _overlay_canvas_html(
     drawRefs();
     syncLabelOverlays();
     saveState();
-    saveSnapshot();
   }}
 
   function getPos(evt) {{
@@ -1124,7 +1122,7 @@ def _render_resumen(ref: dict):
 
 def _guardar_snapshots_reformacion(ref_id: str):
     img_state = _ensure_image_state(ref_id)
-    snaps = {{}}
+    snaps = {}
     for img_idx in (1, 2, 3):
         image_data = img_state.get(f"img{img_idx}")
         if not image_data:
@@ -1133,11 +1131,11 @@ def _guardar_snapshots_reformacion(ref_id: str):
         group_key = f"{ref_id}_img{img_idx}_{img_sig}"
         items = capture_canvas_group(group_key, js_key=f"cap_ref_{ref_id}_{img_idx}")
         if items:
-            snaps[f"img{img_idx}"] = {{"bytes": items[0]["bytes"]}}
+            snaps[f"img{img_idx}"] = {"bytes": items[0]["bytes"]}
     if not snaps:
         st.warning("No se pudieron capturar los canvas de reformación.")
         return
-    store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {{}})
+    store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
     store[ref_id] = snaps
     st.success("Snapshots de reformación guardados para el PDF.")
 
