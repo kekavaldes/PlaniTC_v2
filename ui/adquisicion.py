@@ -390,6 +390,8 @@ def render_topogramas_independientes_interactivos(
           <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
           <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+          <button type="button" onclick="downloadCanvasInd({i}, {json.dumps(titulo)})"
+            style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
           <div style="margin-top:6px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
         </div>
@@ -444,6 +446,21 @@ def render_topogramas_independientes_interactivos(
     var b = parseInt(h.substring(4,6), 16);
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
+
+  function downloadCanvasInd(idx, title) {{
+    try {{
+      var canvas = document.getElementById('topoCanvasInd' + idx);
+      if (!canvas) return;
+      var a = document.createElement('a');
+      var safe = String(title || ('topograma_' + (idx + 1))).replace(/[^a-zA-Z0-9_-]+/g, '_');
+      a.href = canvas.toDataURL('image/png');
+      a.download = safe + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }} catch (e) {{}}
+  }}
+  window.downloadCanvasInd = downloadCanvasInd;
 
   topoData.forEach(function(data, idx) {{
     var canvas = document.getElementById('topoCanvasInd' + idx);
@@ -1472,8 +1489,7 @@ def _guardar_snapshot_adquisicion(exp, group_keys):
 
 
 def _render_boton_snapshot_adquisicion(exp, group_keys):
-    if st.button("📸 Guardar snapshot topogramas", key=f"btn_snap_adq_{exp['id']}", use_container_width=True):
-        _guardar_snapshot_adquisicion(exp, group_keys)
+    st.caption("La captura visual se descarga directamente desde cada canvas con el botón **Descargar PNG**.")
 
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
