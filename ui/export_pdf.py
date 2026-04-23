@@ -22,12 +22,9 @@ Entrypoint: render_export_pdf()
 
 import io
 import re
-import json
-import base64
 from datetime import datetime
 
 import streamlit as st
-from streamlit_js_eval import streamlit_js_eval
 from PIL import Image as PILImage
 
 from reportlab.lib.pagesizes import A4
@@ -45,6 +42,8 @@ from reportlab.platypus import (
     PageBreak,
     KeepTogether,
 )
+
+from ui.canvas_snapshot import capture_canvas_group, combine_png_bytes, set_snapshot
 
 # Motor SVG→PDF. Preferimos svglib (Python puro, funciona en Streamlit Cloud
 # sin libs del sistema). cairosvg queda como fallback opcional.
@@ -215,127 +214,6 @@ def _snapshot_bytes(snapshot):
     if isinstance(snapshot, dict):
         return snapshot.get("bytes")
     return None
-
-
-def _data_url_to_bytes(data_url):
-    if not data_url or not isinstance(data_url, str) or "," not in data_url:
-        return None
-    try:
-        return base64.b64decode(data_url.split(",", 1)[1])
-    except Exception:
-        return None
-
-
-def _combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
-    valid = []
-    for data in items or []:
-        if not data:
-            continue
-        try:
-            im = PILImage.open(io.BytesIO(data)).convert("RGBA")
-            valid.append(im)
-        except Exception:
-            continue
-    if not valid:
-        return None
-    if len(valid) == 1:
-        out = io.BytesIO()
-        valid[0].save(out, format="PNG")
-        return out.getvalue()
-    total_w = sum(im.width for im in valid) + gap * (len(valid) - 1) + padding * 2
-    max_h = max(im.height for im in valid) + padding * 2
-    canvas = PILImage.new("RGBA", (total_w, max_h), bg)
-    x = padding
-    for im in valid:
-        y = padding + (max_h - padding * 2 - im.height) // 2
-        canvas.alpha_composite(im, (x, y))
-        x += im.width + gap
-    out = io.BytesIO()
-    canvas.save(out, format="PNG")
-    return out.getvalue()
-
-
-def _sync_canvas_snapshots_from_browser():
-    js = """(() => {
-      try {
-        const out = {};
-        for (let i = 0; i < window.localStorage.length; i++) {
-          const k = window.localStorage.key(i);
-          if (k && k.startsWith('planitc_snapshot_')) {
-            out[k] = window.localStorage.getItem(k);
-          }
-        }
-        return JSON.stringify(out);
-      } catch (e) {
-        return '{}';
-      }
-    })()"""
-    raw = streamlit_js_eval(js_expressions=js, key=f"sync_canvas_{st.session_state.get('_canvas_sync_counter', 0)}")
-    try:
-        snap_map = json.loads(raw) if isinstance(raw, str) else (raw or {})
-    except Exception:
-        snap_map = {}
-
-    exps = st.session_state.get("exploraciones", []) or []
-    recs_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
-    refs_map = st.session_state.get("reformaciones_por_rec", {}) or {}
-
-    adq_store = {}
-    for exp in exps:
-        exp_id = exp.get("id")
-        if not exp_id:
-            continue
-        prefix = f"planitc_snapshot_{exp_id}"
-        matching = []
-        for k in sorted(snap_map.keys()):
-            if k == prefix or k.startswith(prefix + "_"):
-                b = _data_url_to_bytes(snap_map.get(k))
-                if b:
-                    matching.append(b)
-        combined = _combine_png_bytes(matching)
-        if combined:
-            adq_store[exp_id] = {"bytes": combined}
-    st.session_state["canvas_snapshots_adq_por_exp"] = adq_store
-
-    recon_store = {}
-    for lista in recs_map.values():
-        for rec in (lista or []):
-            rec_id = rec.get("id")
-            if not rec_id:
-                continue
-            k = f"planitc_snapshot_recon_square_{rec_id}"
-            b = _data_url_to_bytes(snap_map.get(k))
-            if b:
-                recon_store[rec_id] = {"bytes": b}
-    st.session_state["canvas_snapshots_recon_por_id"] = recon_store
-
-    ref_store = {}
-    for lista in refs_map.values():
-        for ref in (lista or []):
-            ref_id = ref.get("id")
-            if not ref_id:
-                continue
-            imgs = {}
-            prefix = f"planitc_snapshot_{ref_id}_img"
-            for k in sorted(snap_map.keys()):
-                if not k.startswith(prefix):
-                    continue
-                m = re.match(rf"^planitc_snapshot_{re.escape(ref_id)}_(img\d+)_", k)
-                if not m:
-                    continue
-                img_key = m.group(1)
-                b = _data_url_to_bytes(snap_map.get(k))
-                if b:
-                    imgs[img_key] = {"bytes": b}
-            if imgs:
-                ref_store[ref_id] = imgs
-    st.session_state["canvas_snapshots_ref_por_id"] = ref_store
-
-    return {
-        "adq": len(adq_store),
-        "recon": len(recon_store),
-        "ref": len(ref_store),
-    }
 
 def _extraer_svg(svg_str):
     """Extrae solo el tag <svg>...</svg> si viene envuelto en HTML."""
@@ -797,6 +675,93 @@ def _seccion_inyectora(story, plan, sty):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Sincronización automática de snapshots desde localStorage
+# ──────────────────────────────────────────────────────────────────────────
+def _sync_adquisicion_snapshots():
+    exps = st.session_state.get("exploraciones", []) or []
+    for exp in exps:
+        if not isinstance(exp, dict) or not exp.get("id"):
+            continue
+        exp_id = exp["id"]
+        group_keys = []
+        nombre = str(exp.get("nombre") or "").upper()
+        es_bolus = nombre in ("BOLUS TEST", "BOLUS TRACKING")
+        if es_bolus:
+            tstore = None
+            try:
+                sets = st.session_state.get("topograma_sets", []) or []
+                tsi = int(exp.get("topo_set_idx", 0) or 0)
+                if 0 <= tsi < len(sets):
+                    tstore = sets[tsi]
+            except Exception:
+                tstore = None
+            hay_topo2 = bool((tstore or {}).get("aplica_topo2") and (tstore or {}).get("topograma2_iniciado"))
+            if hay_topo2:
+                group_keys.extend([f"{exp_id}_topo1", f"{exp_id}_topo2"])
+            else:
+                group_keys.append(exp_id)
+            if nombre == "BOLUS TEST":
+                group_keys.append(f"{exp_id}_roi_corte")
+            elif nombre == "BOLUS TRACKING":
+                group_keys.append(f"{exp_id}_roi_corte")
+        else:
+            group_keys.append(exp_id)
+
+        items = []
+        for idx, gk in enumerate(group_keys):
+            items.extend(capture_canvas_group(gk, js_key=f"auto_cap_adq_{exp_id}_{idx}"))
+        combinado = combine_png_bytes(items)
+        if combinado:
+            set_snapshot("canvas_snapshots_adq_por_exp", exp_id, combinado)
+            topo_idx = exp.get("topo_set_idx")
+            if topo_idx is not None:
+                set_snapshot("canvas_snapshots_topo_por_set", topo_idx, combinado, extra={"exp_id": exp_id})
+
+
+def _sync_recon_snapshots():
+    recs_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
+    for _exp_id, recs in recs_map.items():
+        for rec in recs or []:
+            if not isinstance(rec, dict) or not rec.get("id"):
+                continue
+            rec_id = rec["id"]
+            items = capture_canvas_group(f"recon_square_{rec_id}", js_key=f"auto_cap_recon_{rec_id}")
+            combinado = combine_png_bytes(items)
+            if combinado:
+                set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
+
+
+def _sync_ref_snapshots():
+    refs_map = st.session_state.get("reformaciones_por_rec", {}) or {}
+    imgs_map = st.session_state.get("imagenes_ref_por_id", {}) or {}
+    store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
+    for _rec_id, refs in refs_map.items():
+        for ref in refs or []:
+            if not isinstance(ref, dict) or not ref.get("id"):
+                continue
+            ref_id = ref["id"]
+            img_state = imgs_map.get(ref_id) or {}
+            snaps = {}
+            for img_idx in (1, 2, 3):
+                image_data = img_state.get(f"img{img_idx}")
+                if not image_data:
+                    continue
+                import hashlib
+                img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
+                group_key = f"{ref_id}_img{img_idx}_{img_sig}"
+                items = capture_canvas_group(group_key, js_key=f"auto_cap_ref_{ref_id}_{img_idx}")
+                if items:
+                    snaps[f"img{img_idx}"] = {"bytes": items[0]["bytes"]}
+            if snaps:
+                store[ref_id] = snaps
+
+
+def _sync_all_canvas_snapshots():
+    _sync_adquisicion_snapshots()
+    _sync_recon_snapshots()
+    _sync_ref_snapshots()
+
+# ──────────────────────────────────────────────────────────────────────────
 # Snapshot del plan y generación del PDF
 # ──────────────────────────────────────────────────────────────────────────
 def _recopilar_plan():
@@ -960,7 +925,7 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
-    st.caption("El PDF incluirá automáticamente el último estado guardado de cada canvas interactivo. No necesitas guardar snapshots manualmente: se toma el último movimiento realizado por el usuario.")
+    st.caption("El PDF intentará sincronizar automáticamente el último estado visible de los canvas antes de generarse.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -976,11 +941,9 @@ def render_export_pdf():
     if generar and exportacion_habilitada:
         with st.spinner("Sincronizando capturas y generando PDF…"):
             try:
-                st.session_state["_canvas_sync_counter"] = int(st.session_state.get("_canvas_sync_counter", 0)) + 1
-                resumen_sync = _sync_canvas_snapshots_from_browser()
+                _sync_all_canvas_snapshots()
                 st.session_state["_pdf_bytes"] = construir_pdf()
                 st.session_state["_pdf_generado_en"] = datetime.now()
-                st.session_state["_pdf_sync_resumen"] = resumen_sync
             except Exception as e:
                 st.session_state["_pdf_bytes"] = None
                 st.error(f"No se pudo generar el PDF: {e}")
@@ -1006,12 +969,6 @@ def render_export_pdf():
             st.caption(
                 f"Última generación: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
                 f"tamaño: {len(pdf_bytes) / 1024:.1f} KB"
-            )
-        sync_resumen = st.session_state.get("_pdf_sync_resumen") or {}
-        if sync_resumen:
-            st.caption(
-                f"Capturas sincronizadas automáticamente — Adquisiciones: {sync_resumen.get('adq', 0)}, "
-                f"Reconstrucciones: {sync_resumen.get('recon', 0)}, Reformaciones: {sync_resumen.get('ref', 0)}"
             )
 
     elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
