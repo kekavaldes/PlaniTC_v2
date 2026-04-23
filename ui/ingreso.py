@@ -3,7 +3,6 @@ ui/ingreso.py
 Módulo de Ingreso del paciente para PlaniTC_v2.
 """
 
-from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -20,26 +19,6 @@ def selectbox_con_placeholder(label, options, key, value=None, label_visibility=
         idx = 0
     val = st.selectbox(label, opciones, key=key, index=idx, label_visibility=label_visibility)
     return None if val == "Seleccionar" else val
-
-
-def calcular_edad(fecha_nacimiento, fecha_referencia=None):
-    try:
-        if fecha_nacimiento in (None, ""):
-            return None
-
-        if isinstance(fecha_nacimiento, str):
-            fecha_nacimiento = date.fromisoformat(fecha_nacimiento)
-
-        if fecha_referencia is None:
-            fecha_referencia = date.today()
-
-        edad = fecha_referencia.year - fecha_nacimiento.year
-        if (fecha_referencia.month, fecha_referencia.day) < (fecha_nacimiento.month, fecha_nacimiento.day):
-            edad -= 1
-
-        return max(0, int(edad))
-    except Exception:
-        return None
 
 
 def _safe_float(value, default=1.0):
@@ -117,10 +96,7 @@ def _init_session_state():
     store = st.session_state.get("ingreso_store", {})
 
     _restore_widget_value("nombre_paciente_widget", store.get("nombre", ""))
-    _restore_widget_value(
-        "fecha_nacimiento",
-        date.fromisoformat(store["fecha_nacimiento"]) if store.get("fecha_nacimiento") else date.today(),
-    )
+    _restore_widget_value("edad_widget", _safe_int(store.get("edad", 0), 0))
     _restore_widget_value("diagnostico_widget", store.get("diagnostico", ""))
     _restore_widget_value("peso_widget", _safe_int(store.get("peso", 70), 70))
     _restore_widget_value("embarazo_widget", store.get("embarazo"))
@@ -152,44 +128,13 @@ def render_ingreso():
             key="nombre_paciente_widget",
         )
 
-        col_fn, col_edad = st.columns([1, 1])
-
-        with col_fn:
-            fecha_nacimiento = st.date_input(
-                "Fecha de nacimiento",
-                min_value=date(1900, 1, 1),
-                max_value=date.today(),
-                format="DD/MM/YYYY",
-                key="fecha_nacimiento",
-            )
-
-        edad = calcular_edad(fecha_nacimiento, date.today())
-
-        with col_edad:
-            st.markdown(
-                f"""
-                <div style="margin-bottom:0.35rem;">
-                    <label style="font-size:0.875rem; font-weight:400; color:white;">Edad</label>
-                </div>
-                <div style="
-                    background-color:#111111;
-                    color:white;
-                    border:1px solid #444;
-                    border-radius:10px;
-                    padding:0.72rem 0.9rem;
-                    min-height:24px;
-                    display:flex;
-                    align-items:center;
-                    font-size:1.05rem;
-                    font-weight:500;
-                    height:42px;
-                    box-sizing:border-box;
-                ">
-                    {f"{edad} años" if edad is not None else ""}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        edad = st.number_input(
+            "Edad",
+            min_value=0,
+            max_value=120,
+            step=1,
+            key="edad_widget",
+        )
 
         diagnostico = st.text_area(
             "Diagnóstico",
@@ -336,7 +281,7 @@ def render_ingreso():
 
     _build_store(
         nombre=nombre,
-        fecha_nacimiento=fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+        fecha_nacimiento=None,
         edad=edad,
         diagnostico=diagnostico,
         peso=peso,
