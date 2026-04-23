@@ -42,52 +42,30 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
     script = f"""(() => {{
       try {{
         const groupKey = {json.dumps(group_key)};
+        const keys = [];
         const results = [];
-        const seen = new Set();
 
-        function pushCanvas(canvas, item) {{
-          try {{
-            if (!canvas || !canvas.width || !canvas.height) return;
-            const dataUrl = canvas.toDataURL('image/png');
-            if (!dataUrl) return;
-            const key = `${{item}}::${{dataUrl.length}}`;
-            if (seen.has(key)) return;
-            seen.add(key);
-            results.push({{ item: String(item), data_url: dataUrl }});
-          }} catch (e) {{}}
+        function addKey(k) {{
+          if (k && !keys.includes(k)) keys.push(k);
         }}
 
-        function inspectDoc(doc) {{
-          try {{
-            if (!doc) return;
-
-            const groups = Array.from(doc.querySelectorAll('[data-planitc-snapshot-group]'));
-            groups.forEach((groupNode) => {{
-              try {{
-                if ((groupNode.getAttribute('data-planitc-snapshot-group') || '') !== groupKey) return;
-                const canvases = Array.from(groupNode.querySelectorAll('canvas[data-planitc-snapshot-item], canvas'));
-                canvases.forEach((canvas, idx) => {{
-                  const item = canvas.getAttribute('data-planitc-snapshot-item') || String(idx);
-                  pushCanvas(canvas, item);
-                }});
-              }} catch (e) {{}}
-            }});
-
-            const iframes = Array.from(doc.querySelectorAll('iframe'));
-            iframes.forEach((frame) => {{
-              try {{
-                const childDoc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
-                if (childDoc && childDoc !== doc) inspectDoc(childDoc);
-              }} catch (e) {{}}
-            }});
-          }} catch (e) {{}}
+        addKey('planitc_snapshot_' + groupKey);
+        for (let i = 0; i < 12; i++) {{
+          addKey('planitc_snapshot_' + groupKey + '_' + i);
+          addKey('planitc_snapshot_' + groupKey + '_rect_' + i);
+          addKey('planitc_snapshot_' + groupKey + '_line_' + i);
+          addKey('planitc_snapshot_' + groupKey + '_roi_' + i);
         }}
 
-        try {{ inspectDoc(document); }} catch (e) {{}}
-        try {{ if (window.parent && window.parent.document && window.parent.document !== document) inspectDoc(window.parent.document); }} catch (e) {{}}
-        try {{ if (window.top && window.top.document && window.top.document !== document) inspectDoc(window.top.document); }} catch (e) {{}}
+        keys.forEach((k, idx) => {{
+          try {{
+            const dataUrl = window.localStorage.getItem(k);
+            if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {{
+              results.push({{ item: String(idx), data_url: dataUrl, storage_key: k }});
+            }}
+          }} catch (e) {{}}
+        }});
 
-        results.sort((a, b) => String(a.item).localeCompare(String(b.item), undefined, {{ numeric: true, sensitivity: 'base' }}));
         return JSON.stringify(results);
       }} catch (err) {{
         return JSON.stringify([]);
@@ -104,7 +82,7 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
             continue
         data = _data_url_to_bytes(entry.get("data_url"))
         if data:
-            items.append({"item": str(entry.get("item", len(items))), "bytes": data})
+            items.append({"item": str(entry.get("item", len(items))), "bytes": data, "storage_key": entry.get("storage_key")})
     return items
 
 
