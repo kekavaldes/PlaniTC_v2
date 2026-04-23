@@ -22,6 +22,8 @@ Entrypoint: render_export_pdf()
 
 import io
 import re
+import time
+import hashlib
 from datetime import datetime
 
 import streamlit as st
@@ -41,6 +43,13 @@ from reportlab.platypus import (
     TableStyle,
     PageBreak,
     KeepTogether,
+)
+
+from ui.canvas_snapshot import (
+    capture_all_snapshots_raw,
+    items_for_group,
+    combine_png_bytes,
+    set_snapshot,
 )
 
 # Motor SVG→PDF. Preferimos svglib (Python puro, funciona en Streamlit Cloud
@@ -751,6 +760,96 @@ def construir_pdf(plan=None) -> bytes:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Auto-captura de canvas al generar el PDF
+# ──────────────────────────────────────────────────────────────────────────
+def _ingest_canvas_snapshots(all_snaps: dict) -> dict:
+    """A partir del dict masivo {planitc_snapshot_xxx: bytes}, distribuye
+    los snapshots en los 4 stores de session_state que consume el PDF:
+      - canvas_snapshots_adq_por_exp  → por exp_id
+      - canvas_snapshots_topo_por_set → por índice de set de topograma
+      - canvas_snapshots_recon_por_id → por rec_id
+      - canvas_snapshots_ref_por_id   → por ref_id (dict {img1, img2, img3})
+
+    Devuelve un diccionario con el conteo de snapshots distribuidos por
+    sección (para feedback al usuario).
+    """
+    conteo = {"adq": 0, "topo": 0, "recon": 0, "ref": 0}
+    if not all_snaps:
+        return conteo
+
+    # ADQUISICIÓN + TOPOGRAMAS (comparten snapshot por exploración)
+    exps = st.session_state.get("exploraciones", []) or []
+    for exp in exps:
+        exp_id = exp.get("id")
+        if not exp_id:
+            continue
+        # Probamos todos los patrones conocidos de group_key usados en adquisicion.py
+        candidate_groups = [
+            exp_id,
+            f"{exp_id}_topo1",
+            f"{exp_id}_topo2",
+            f"{exp_id}_roi_corte",
+        ]
+        items = []
+        for gk in candidate_groups:
+            items.extend(items_for_group(all_snaps, gk))
+        if items:
+            combinado = combine_png_bytes(items)
+            if combinado:
+                set_snapshot("canvas_snapshots_adq_por_exp", exp_id, combinado)
+                conteo["adq"] += 1
+                topo_idx = exp.get("topo_set_idx")
+                if topo_idx is not None:
+                    set_snapshot(
+                        "canvas_snapshots_topo_por_set",
+                        topo_idx,
+                        combinado,
+                        extra={"exp_id": exp_id},
+                    )
+                    conteo["topo"] += 1
+
+    # RECONSTRUCCIONES
+    recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
+    for recs in recons_map.values():
+        for rec in (recs or []):
+            rec_id = rec.get("id")
+            if not rec_id:
+                continue
+            items = items_for_group(all_snaps, f"recon_square_{rec_id}")
+            if items:
+                combinado = combine_png_bytes(items)
+                if combinado:
+                    set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
+                    conteo["recon"] += 1
+
+    # REFORMACIONES (3 imágenes por reformación, con sig dentro del group_key)
+    refs_map = st.session_state.get("reformaciones_por_rec", {}) or {}
+    imagenes_ref = st.session_state.get("imagenes_ref_por_id", {}) or {}
+    for refs in refs_map.values():
+        for ref in (refs or []):
+            ref_id = ref.get("id")
+            if not ref_id:
+                continue
+            img_state = imagenes_ref.get(ref_id, {}) if isinstance(imagenes_ref, dict) else {}
+            snaps = {}
+            for img_idx in (1, 2, 3):
+                img_data = img_state.get(f"img{img_idx}") if isinstance(img_state, dict) else None
+                if not img_data or not img_data.get("bytes"):
+                    continue
+                sig = img_data.get("sig") or hashlib.md5(img_data["bytes"]).hexdigest()[:10]
+                group_key = f"{ref_id}_img{img_idx}_{sig}"
+                items = items_for_group(all_snaps, group_key)
+                if items:
+                    snaps[f"img{img_idx}"] = {"bytes": items[0]["bytes"]}
+            if snaps:
+                store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
+                store[ref_id] = snaps
+                conteo["ref"] += 1
+
+    return conteo
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # UI
 # ──────────────────────────────────────────────────────────────────────────
 def _panel_header(emoji: str, titulo: str):
@@ -836,7 +935,7 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
-    st.caption("Para que el PDF incluya exactamente los recuadros, líneas y anotaciones del canvas, primero guarda los snapshots desde Adquisición, Reconstrucción y Reformaciones.")
+    st.caption("Al generar el PDF, los recuadros, líneas y anotaciones dibujados sobre los canvas se capturan automáticamente y se incluyen en el reporte. El botón **Guardar para PDF** de cada pestaña es opcional (útil para forzar una captura intermedia).")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -848,15 +947,42 @@ def render_export_pdf():
             disabled=not exportacion_habilitada,
         )
 
-    # Regenerar solo si se cumplen los requisitos mínimos
+    # ── Flujo de auto-captura + generación del PDF ─────────────────────────
+    # Paso 1: al hacer clic, marcamos "pendiente" con un nonce único. Esto
+    # fuerza que la siguiente llamada a streamlit_js_eval use una key nueva
+    # y lea localStorage al instante (no devuelve el cacheado anterior).
     if generar and exportacion_habilitada:
-        with st.spinner("Generando PDF…"):
-            try:
-                st.session_state["_pdf_bytes"] = construir_pdf()
-                st.session_state["_pdf_generado_en"] = datetime.now()
-            except Exception as e:
-                st.session_state["_pdf_bytes"] = None
-                st.error(f"No se pudo generar el PDF: {e}")
+        st.session_state["_pdf_capture_nonce"] = int(time.time() * 1000)
+        st.session_state["_pdf_capture_pending"] = True
+        st.session_state["_pdf_bytes"] = None  # Invalida el PDF viejo
+        st.rerun()
+
+    # Paso 2: si hay captura pendiente, pedimos el bulk de snapshots. Si aún
+    # no llegaron del navegador, mostramos un mensaje y esperamos el próximo
+    # rerun (que dispara streamlit_js_eval cuando el JS termina).
+    if st.session_state.get("_pdf_capture_pending") and exportacion_habilitada:
+        nonce = st.session_state.get("_pdf_capture_nonce", 0)
+        all_snaps = capture_all_snapshots_raw(js_key=f"pdf_snaps_{nonce}")
+
+        if all_snaps is None:
+            st.info("📸 Capturando canvas de las imágenes… un momento.")
+        else:
+            # Paso 3: snapshots listos. Los distribuimos en los stores y
+            # construimos el PDF.
+            conteo = _ingest_canvas_snapshots(all_snaps)
+            total = sum(conteo.values())
+            with st.spinner(
+                f"Generando PDF… ({total} snapshots de canvas capturados)"
+            ):
+                try:
+                    st.session_state["_pdf_bytes"] = construir_pdf()
+                    st.session_state["_pdf_generado_en"] = datetime.now()
+                    st.session_state["_pdf_capture_conteo"] = conteo
+                except Exception as e:
+                    st.session_state["_pdf_bytes"] = None
+                    st.error(f"No se pudo generar el PDF: {e}")
+            st.session_state["_pdf_capture_pending"] = False
+            st.rerun()
 
     pdf_bytes = st.session_state.get("_pdf_bytes")
     if pdf_bytes and exportacion_habilitada:
@@ -876,9 +1002,21 @@ def render_export_pdf():
 
         generado_en = st.session_state.get("_pdf_generado_en")
         if generado_en:
+            conteo = st.session_state.get("_pdf_capture_conteo", {})
+            detalle = ""
+            if conteo:
+                partes = []
+                if conteo.get("adq"):
+                    partes.append(f"{conteo['adq']} adquisición(es)")
+                if conteo.get("recon"):
+                    partes.append(f"{conteo['recon']} reconstrucción(es)")
+                if conteo.get("ref"):
+                    partes.append(f"{conteo['ref']} reformación(es)")
+                if partes:
+                    detalle = f" — canvas incluidos: {', '.join(partes)}"
             st.caption(
                 f"Última generación: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
-                f"tamaño: {len(pdf_bytes) / 1024:.1f} KB"
+                f"tamaño: {len(pdf_bytes) / 1024:.1f} KB{detalle}"
             )
 
     elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
