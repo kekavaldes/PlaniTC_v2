@@ -604,14 +604,25 @@ def _overlay_canvas_html(
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{
+      const stateJson = JSON.stringify({{
         refs: state.refs,
         linesOffset: state.linesOffset,
         rangeCount: state.rangeCount,
         angleDeg: state.angleDeg,
         lineLen: state.lineLen
-      }}));
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+      }});
+      localStorage.setItem(storageKey, stateJson);
+      const pngData = canvas.toDataURL('image/png');
+      localStorage.setItem(snapshotKey, pngData);
+      try {{
+        window.parent.postMessage({{
+          type: 'PLANITC_SNAPSHOT',
+          stateKey: storageKey,
+          snapshotKey: snapshotKey,
+          state: stateJson,
+          png: pngData
+        }}, '*');
+      }} catch (e) {{}}
     }} catch(e) {{}}
   }}
 
