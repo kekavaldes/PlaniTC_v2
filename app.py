@@ -1,5 +1,6 @@
 import streamlit as st
 from pathlib import Path
+import base64
 
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
@@ -140,8 +141,8 @@ def aplicar_css_global():
         }
 
         .block-container {
-            padding-top: 1.2rem !important;
-            padding-bottom: 1rem !important;
+            padding-top: 0.8rem !important;
+            padding-bottom: 0.5rem !important;
         }
 
         .stApp a.anchor-link,
@@ -149,12 +150,20 @@ def aplicar_css_global():
             display: none !important;
         }
 
-        /* Portada de inicio: mantener ancho y reducir un poco la altura */
-        .portada-container img {
-            max-height: 70vh !important;
-            width: 100% !important;
-            object-fit: contain !important;
-            border-radius: 12px !important;
+        .portada-wrapper {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            margin-top: 0.15rem;
+        }
+
+        .portada-wrapper img {
+            width: 100%;
+            max-height: calc(100vh - 165px);
+            object-fit: contain;
+            border-radius: 14px;
+            display: block;
         }
         </style>
         """,
@@ -212,15 +221,36 @@ def obtener_ruta_portada():
     return None
 
 
+def image_to_base64(image_path: Path) -> str:
+    mime_map = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }
+    suffix = image_path.suffix.lower()
+    mime_type = mime_map.get(suffix, "image/png")
+
+    with open(image_path, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode("utf-8")
+
+    return f"data:{mime_type};base64,{encoded}"
+
+
 def render_inicio():
     ruta_portada = obtener_ruta_portada()
 
-    st.markdown("<div style='height: 0.3rem;'></div>", unsafe_allow_html=True)
-
     if ruta_portada is not None:
-        st.markdown('<div class="portada-container">', unsafe_allow_html=True)
-        st.image(str(ruta_portada), use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        portada_src = image_to_base64(ruta_portada)
+
+        st.markdown(
+            f"""
+            <div class="portada-wrapper">
+                <img src="{portada_src}" alt="Portada PlaniTC">
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         st.warning(
             "No se encontró la imagen de portada. "
