@@ -787,7 +787,7 @@ def render_export_pdf():
         value=alumnos_default,
         key="alumnos_participantes",
         height=90,
-        placeholder="Ej.: Evelyn Oyarzun\nJuan Pérez\nMaría González",
+        placeholder="",
         help="Completa aquí el nombre de todos los estudiantes que participaron en la actividad. Este dato se incluirá en la portada del PDF.",
     )
 
