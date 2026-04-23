@@ -7,6 +7,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 
+from ui.canvas_snapshot import capture_canvas_group, combine_png_bytes, set_snapshot
+
 
 def _inject_recon_css():
     st.markdown(
@@ -252,11 +254,11 @@ def render_canvas_recon_cuadrado(
         return None
 
     html = f"""
-<div style="text-align:center; margin:0;">
+<div data-planitc-snapshot-group="{storage_key}" style="text-align:center; margin:0;">
   <div style="display:inline-block; font-size:16px; font-weight:600; color:#ddd; margin-bottom:6px;">
     {titulo}
   </div>
-  <canvas id="reconSquareCanvas" width="{canvas_width}" height="{canvas_height}"
+  <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
 </div>
 <script>
@@ -1369,6 +1371,17 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         st.image(img_pil, width=260)
 
 
+
+
+def _guardar_snapshot_reconstruccion(rec_id: str):
+    items = capture_canvas_group(f"recon_square_{rec_id}", js_key=f"cap_recon_{rec_id}")
+    combinado = combine_png_bytes(items)
+    if not combinado:
+        st.warning("No se pudo capturar el canvas de reconstrucción.")
+        return
+    set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
+    st.success("Snapshot de reconstrucción guardado para el PDF.")
+
 def _render_panel_central(adquisiciones_validas):
     """Panel central: si hay reconstrucción seleccionada muestra sus parámetros;
     si no, muestra un resumen de la adquisición activa."""
@@ -1476,6 +1489,8 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=430, scrolling=False)
+                    if st.button("📸 Guardar snapshot reconstrucción", key=f"btn_snap_recon_{rec_actual['id']}", use_container_width=True):
+                        _guardar_snapshot_reconstruccion(rec_actual['id'])
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
