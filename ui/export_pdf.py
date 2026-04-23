@@ -554,17 +554,21 @@ def _seccion_reformaciones(story, plan, sty):
                 ]
 
                 # Hasta 3 imágenes por reformación (img1..img3)
+                snap_ref = (plan.get("canvas_snapshots_ref_por_id") or {}).get(ref.get("id"))
                 ref_imgs = imagenes_ref.get(ref.get("id"))
                 flows = []
-                if isinstance(ref_imgs, dict):
-                    for key_img in ("img1", "img2", "img3"):
+                for key_img in ("img1", "img2", "img3"):
+                    sub = None
+                    if isinstance(snap_ref, dict):
+                        sub = snap_ref.get(key_img)
+                    if not (isinstance(sub, dict) and sub.get("bytes")) and isinstance(ref_imgs, dict):
                         sub = ref_imgs.get(key_img)
-                        if isinstance(sub, dict) and sub.get("bytes"):
-                            flow = _pil_bytes_to_flowable(
-                                sub["bytes"], max_w_mm=55, max_h_mm=55
-                            )
-                            if flow is not None:
-                                flows.append(flow)
+                    if isinstance(sub, dict) and sub.get("bytes"):
+                        flow = _pil_bytes_to_flowable(
+                            sub["bytes"], max_w_mm=55, max_h_mm=55
+                        )
+                        if flow is not None:
+                            flows.append(flow)
 
                 if flows:
                     # Grid horizontal de hasta 3 imágenes
@@ -781,15 +785,7 @@ def render_export_pdf():
 
     n_recons = sum(len(v or []) for v in recs_map.values())
     n_refs = sum(len(v or []) for v in refs_map.values())
-    n_snaps = sum(
-        len(v or {})
-        for v in [
-            st.session_state.get("canvas_snapshots_topo_por_set", {}),
-            st.session_state.get("canvas_snapshots_adq_por_exp", {}),
-            st.session_state.get("canvas_snapshots_recon_por_id", {}),
-            st.session_state.get("canvas_snapshots_ref_por_id", {}),
-        ]
-    )
+    n_snaps = sum(len(v or {}) for v in [st.session_state.get("canvas_snapshots_topo_por_set", {}), st.session_state.get("canvas_snapshots_adq_por_exp", {}), st.session_state.get("canvas_snapshots_recon_por_id", {}), st.session_state.get("canvas_snapshots_ref_por_id", {})])
 
     col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns(6)
     with col_r1:
