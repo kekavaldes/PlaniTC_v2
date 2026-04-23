@@ -140,7 +140,8 @@ def aplicar_css_global():
         }
 
         .block-container {
-            padding-top: 2rem !important;
+            padding-top: 1.2rem !important;
+            padding-bottom: 1rem !important;
         }
 
         .stApp a.anchor-link,
@@ -190,10 +191,10 @@ def obtener_ruta_portada():
         Path("data/images/PORTADA.jpg"),
         Path("data/images/PORTADA.jpeg"),
         Path("data/images/PORTADA.webp"),
-        Path("data/imagenes/PORTADA.png"),
-        Path("data/imagenes/PORTADA.jpg"),
-        Path("data/imagenes/PORTADA.jpeg"),
-        Path("data/imagenes/PORTADA.webp"),
+        Path("data/images/PORTADA.PNG"),
+        Path("data/images/PORTADA.JPG"),
+        Path("data/images/PORTADA.JPEG"),
+        Path("data/images/PORTADA.WEBP"),
     ]
 
     for ruta in posibles_rutas:
@@ -206,10 +207,14 @@ def obtener_ruta_portada():
 def render_inicio():
     ruta_portada = obtener_ruta_portada()
 
-    st.markdown("###")
+    # pequeño espacio bajo la barra de navegación
+    st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
 
     if ruta_portada is not None:
-        st.image(str(ruta_portada), use_container_width=True)
+        # columnas para que la imagen no ocupe todo el ancho
+        col1, col2, col3 = st.columns([0.45, 8.1, 0.45])
+        with col2:
+            st.image(str(ruta_portada), use_container_width=True)
     else:
         st.warning(
             "No se encontró la imagen de portada. "
