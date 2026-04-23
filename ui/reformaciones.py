@@ -149,23 +149,12 @@ def _inject_sidebar_css():
     )
 
 
-def _pil_fingerprint(img):
-    if img is None:
-        return None
-    try:
-        return (img.size, img.mode, hashlib.md5(img.tobytes()).hexdigest())
-    except Exception:
-        return id(img)
+# Caché manual para _pil_to_b64_jpeg. Ver comentarios en adquisicion.py.
+_B64_JPEG_CACHE: dict = {}
+_B64_JPEG_CACHE_MAX = 128
 
 
-@st.cache_data(
-    hash_funcs={Image.Image: _pil_fingerprint},
-    show_spinner=False,
-    max_entries=64,
-)
-def _pil_to_b64_jpeg(img, max_width=1200):
-    if img is None:
-        return None
+def _render_b64_jpeg(img, max_width):
     im = img.copy()
     if im.mode not in ("RGB", "L"):
         im = im.convert("RGB")
@@ -177,6 +166,33 @@ def _pil_to_b64_jpeg(img, max_width=1200):
     buf = io.BytesIO()
     im.save(buf, format="JPEG", quality=92)
     return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
+def _pil_to_b64_jpeg(img, max_width=1200):
+    if img is None:
+        return None
+    try:
+        fp = (
+            hashlib.md5(img.tobytes()).hexdigest(),
+            img.size,
+            img.mode,
+            max_width,
+        )
+    except Exception:
+        return _render_b64_jpeg(img, max_width)
+
+    cached = _B64_JPEG_CACHE.get(fp)
+    if cached is not None:
+        return cached
+
+    result = _render_b64_jpeg(img, max_width)
+    if result is not None:
+        _B64_JPEG_CACHE[fp] = result
+        if len(_B64_JPEG_CACHE) > _B64_JPEG_CACHE_MAX:
+            keys = list(_B64_JPEG_CACHE.keys())
+            for k in keys[: len(keys) // 2]:
+                _B64_JPEG_CACHE.pop(k, None)
+    return result
 
 
 def _new_id() -> str:
