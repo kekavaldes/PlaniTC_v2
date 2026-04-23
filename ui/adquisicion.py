@@ -32,6 +32,8 @@ from pathlib import Path
 import streamlit as st
 from PIL import Image
 
+from ui.canvas_snapshot import capture_canvas_group, combine_png_bytes, set_snapshot
+
 from ui.topograma import (
     obtener_imagen_topograma_adquirido,
     render_topograma_panel,
@@ -386,7 +388,7 @@ def render_topogramas_independientes_interactivos(
         cols_html.append(f'''
         <div style="flex:0 0 {canvas_css_width}px; width:{canvas_css_width}px; min-width:{min_col_width}px; max-width:{canvas_css_width}px;">
           <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
-          <canvas id="topoCanvasInd{i}" width="{canvas_width}" height="{canvas_height}"
+          <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
           <div style="margin-top:6px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
@@ -415,7 +417,7 @@ def render_topogramas_independientes_interactivos(
     }.get(modo, "")
 
     html = f'''
-<div style="text-align:center; margin:0 0 0 0;">
+<div data-planitc-snapshot-group="{storage_key or ''}" style="text-align:center; margin:0 0 0 0;">
   <div style="display:inline-block; font-size:11px; color:#aaa; margin-bottom:2px;">
     {help_text}
   </div>
@@ -1447,6 +1449,27 @@ def obtener_imagen_posicion_corte(nombre_posicion):
 # ═══════════════════════════════════════════════════════════════════════════
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _guardar_snapshot_adquisicion(exp, group_keys):
+    items = []
+    for idx, group_key in enumerate(group_keys):
+        items.extend(capture_canvas_group(group_key, js_key=f"cap_adq_{exp['id']}_{idx}"))
+    combinado = combine_png_bytes(items)
+    if not combinado:
+        st.warning("No se pudo capturar el canvas. Mueve un poco la imagen y vuelve a intentarlo.")
+        return
+    set_snapshot("canvas_snapshots_adq_por_exp", exp["id"], combinado)
+    topo_idx = exp.get("topo_set_idx")
+    if topo_idx is not None:
+        set_snapshot("canvas_snapshots_topo_por_set", topo_idx, combinado, extra={"exp_id": exp.get("id")})
+    st.success("Snapshot guardado para el PDF.")
+
+
+def _render_boton_snapshot_adquisicion(exp, group_keys):
+    if st.button("📸 Guardar snapshot topogramas", key=f"btn_snap_adq_{exp['id']}", use_container_width=True):
+        _guardar_snapshot_adquisicion(exp, group_keys)
+
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
     Lee del set de topograma asociado a la exploración."""
@@ -1574,6 +1597,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 st.components.v1.html(html_topo2, height=405)
             with c3:
                 st.components.v1.html(html_roi_corte, height=430)
+            _render_boton_snapshot_adquisicion(exp, [f"{exp['id']}_topo1", f"{exp['id']}_topo2", f"{exp['id']}_roi_corte"])
         elif html_roi_corte:
             c1, c2 = st.columns([1.0, 2.0], gap="medium")
             with c1:
@@ -1590,6 +1614,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
             with c2:
                 st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
+            _render_boton_snapshot_adquisicion(exp, [exp['id'], f"{exp['id']}_roi_corte"])
         else:
             html = render_topogramas_independientes_interactivos(
                 topos,
@@ -1602,6 +1627,7 @@ def _render_topogramas_adq(exp, es_bolus):
             )
             if html:
                 st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
+                _render_boton_snapshot_adquisicion(exp, [exp['id']])
         return
 
     html = render_topogramas_independientes_interactivos(
@@ -1614,6 +1640,7 @@ def _render_topogramas_adq(exp, es_bolus):
     if html:
         alto = 430 if len(topos) > 1 else 470
         st.components.v1.html(html, height=alto)
+        _render_boton_snapshot_adquisicion(exp, [exp['id']])
 
 
 # ═══════════════════════════════════════════════════════════════════════════
