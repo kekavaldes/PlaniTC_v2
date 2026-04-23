@@ -201,6 +201,13 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
     return RLImage(buf, width=draw_w, height=draw_h)
 
 
+
+
+def _snapshot_bytes(snapshot):
+    if isinstance(snapshot, dict):
+        return snapshot.get("bytes")
+    return None
+
 def _extraer_svg(svg_str):
     """Extrae solo el tag <svg>...</svg> si viene envuelto en HTML."""
     if not svg_str:
@@ -319,6 +326,12 @@ def _seccion_topogramas(story, plan, sty):
             ("Posición tubo", s.get("t1pt") or s.get("t1_posicion_tubo")),
             ("Posición extremidades", s.get("extremidades")),
         ], sty=sty))
+        snap_topo = _snapshot_bytes((plan.get("canvas_snapshots_topo_por_set") or {}).get(idx))
+        if snap_topo:
+            img_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=165, max_h_mm=85)
+            if img_flow is not None:
+                story.append(Spacer(1, 5))
+                story.append(img_flow)
         story.append(Spacer(1, 6))
 
         story.append(Paragraph("Topograma 1", sty["h3"]))
@@ -403,7 +416,19 @@ def _seccion_adquisiciones(story, plan, sty):
         if obs:
             rows.append(("Observaciones", obs))
 
-        story.append(_kv_table(rows, sty=sty))
+        params_table = _kv_table(rows, sty=sty)
+        snap_adq = _snapshot_bytes((plan.get("canvas_snapshots_adq_por_exp") or {}).get(exp.get("id")))
+        img_flow = _pil_bytes_to_flowable(snap_adq, max_w_mm=75, max_h_mm=75) if snap_adq else None
+        if img_flow is not None:
+            fila = Table([[params_table, img_flow]], colWidths=(110 * mm, 60 * mm))
+            fila.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            story.append(fila)
+        else:
+            story.append(params_table)
         story.append(Spacer(1, 10))
 
 
@@ -449,9 +474,12 @@ def _seccion_reconstrucciones(story, plan, sty):
                 ("Fin reconstrucción", rec.get("fin_recons")),
             ], col_widths=(40 * mm, 65 * mm), sty=sty)
 
+            snap_rec = _snapshot_bytes((plan.get("canvas_snapshots_recon_por_id") or {}).get(rec.get("id")))
             img_data = imagenes_rec.get(rec.get("id"))
             img_flow = None
-            if img_data and img_data.get("bytes"):
+            if snap_rec:
+                img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=55, max_h_mm=55)
+            elif img_data and img_data.get("bytes"):
                 img_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=55, max_h_mm=55)
 
             if img_flow is not None:
@@ -658,6 +686,10 @@ def _recopilar_plan():
         "imagenes_recon_por_id": dict(st.session_state.get("imagenes_recon_por_id", {}) or {}),
         "reformaciones_por_rec": dict(st.session_state.get("reformaciones_por_rec", {}) or {}),
         "imagenes_ref_por_id": dict(st.session_state.get("imagenes_ref_por_id", {}) or {}),
+        "canvas_snapshots_topo_por_set": dict(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {}),
+        "canvas_snapshots_adq_por_exp": dict(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {}),
+        "canvas_snapshots_recon_por_id": dict(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {}),
+        "canvas_snapshots_ref_por_id": dict(st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}),
         "inyectora_store": iny_store,
     }
 
@@ -749,8 +781,9 @@ def render_export_pdf():
 
     n_recons = sum(len(v or []) for v in recs_map.values())
     n_refs = sum(len(v or []) for v in refs_map.values())
+    n_snaps = sum(len(v or {{}}) for v in [st.session_state.get("canvas_snapshots_topo_por_set", {{}}), st.session_state.get("canvas_snapshots_adq_por_exp", {{}}), st.session_state.get("canvas_snapshots_recon_por_id", {{}}), st.session_state.get("canvas_snapshots_ref_por_id", {{}})])
 
-    col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+    col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns(6)
     with col_r1:
         st.metric("Paciente", _v(ingreso.get("nombre"), "—"))
     with col_r2:
@@ -761,6 +794,8 @@ def render_export_pdf():
         st.metric("Reconstrucciones", n_recons)
     with col_r5:
         st.metric("Reformaciones", n_refs)
+    with col_r6:
+        st.metric("Snapshots", n_snaps)
 
     faltan = []
     if not ingreso.get("nombre"):
@@ -770,6 +805,7 @@ def render_export_pdf():
     if faltan:
         st.warning("⚠️ Antes de exportar, completa: " + ", ".join(faltan))
 
+    st.caption("Para que el PDF incluya exactamente los recuadros, líneas y anotaciones del canvas, primero guarda los snapshots desde Adquisición, Reconstrucción y Reformaciones.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
