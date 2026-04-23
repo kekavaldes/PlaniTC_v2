@@ -324,12 +324,8 @@ def render_canvas_recon_cuadrado(
 
   function saveState() {{
     try {{
-      var stateJson = JSON.stringify({{ square: square }});
-      var pngData = canvas.toDataURL('image/png');
-      localStorage.setItem(storageKey, stateJson);
-      localStorage.setItem(snapshotKey, pngData);
-      try {{ if (window.parent && window.parent !== window && window.parent.localStorage) {{ window.parent.localStorage.setItem(storageKey, stateJson); window.parent.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
-      try {{ if (window.top && window.top !== window && window.top.localStorage) {{ window.top.localStorage.setItem(storageKey, stateJson); window.top.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
+      localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
+      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
@@ -726,12 +722,8 @@ def render_canvas_topo_dfov_rect(
 
   function saveState() {{
     try {{
-      var stateJson = JSON.stringify({{ rect: rect }});
-      var pngData = canvas.toDataURL('image/png');
-      localStorage.setItem(storageKey, stateJson);
-      localStorage.setItem(snapshotKey, pngData);
-      try {{ if (window.parent && window.parent !== window && window.parent.localStorage) {{ window.parent.localStorage.setItem(storageKey, stateJson); window.parent.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
-      try {{ if (window.top && window.top !== window && window.top.localStorage) {{ window.top.localStorage.setItem(storageKey, stateJson); window.top.localStorage.setItem(snapshotKey, pngData); }} }} catch (e) {{}}
+      localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
+      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
