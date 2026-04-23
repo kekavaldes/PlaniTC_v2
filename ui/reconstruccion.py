@@ -265,7 +265,6 @@ def render_canvas_recon_cuadrado(
 (function() {{
   var imgB64 = {json.dumps(img_b64)};
   var storageKey = {json.dumps('planitc_' + storage_key)};
-  var snapshotKey = {json.dumps('planitc_snapshot_' + storage_key)};
   var strokeColor = {json.dumps(color)};
   var canvas = document.getElementById('reconSquareCanvas');
   if (!canvas) return;
@@ -311,12 +310,6 @@ def render_canvas_recon_cuadrado(
   function saveState() {{
     try {{
       localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
-    }} catch (e) {{}}
-  }}
-
-  function saveSnapshot() {{
-    try {{
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
@@ -515,7 +508,6 @@ def render_canvas_recon_cuadrado(
     drawBaseImage();
     drawSquare();
     saveState();
-    saveSnapshot();
   }}
 
   function getMousePos(e) {{
@@ -660,7 +652,6 @@ def render_canvas_topo_dfov_rect(
 (function() {{
   var imgB64 = {json.dumps(img_b64)};
   var storageKey = {json.dumps('planitc_' + storage_key)};
-  var snapshotKey = {json.dumps('planitc_snapshot_' + storage_key)};
   var strokeColor = {json.dumps(color)};
   var canvas = document.getElementById({json.dumps(canvas_id)});
   if (!canvas) return;
@@ -703,12 +694,6 @@ def render_canvas_topo_dfov_rect(
   function saveState() {{
     try {{
       localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
-    }} catch (e) {{}}
-  }}
-
-  function saveSnapshot() {{
-    try {{
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
@@ -863,7 +848,6 @@ def render_canvas_topo_dfov_rect(
     drawBaseImage();
     drawRect();
     saveState();
-    saveSnapshot();
   }}
 
   function getMousePos(e) {{
