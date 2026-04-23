@@ -1,5 +1,4 @@
 """
-ui/ingreso.py
 Módulo de Ingreso del paciente para PlaniTC_v2.
 """
 
@@ -97,6 +96,7 @@ def _init_session_state():
 
     _restore_widget_value("nombre_paciente_widget", store.get("nombre", ""))
     _restore_widget_value("edad_widget", _safe_int(store.get("edad", 0), 0))
+    _restore_widget_value("edad_unidad_widget", store.get("edad_unidad", "Años"))
     _restore_widget_value("diagnostico_widget", store.get("diagnostico", ""))
     _restore_widget_value("peso_widget", _safe_int(store.get("peso", 70), 70))
     _restore_widget_value("embarazo_widget", store.get("embarazo"))
@@ -128,13 +128,23 @@ def render_ingreso():
             key="nombre_paciente_widget",
         )
 
-        edad = st.number_input(
-            "Edad",
-            min_value=0,
-            max_value=120,
-            step=1,
-            key="edad_widget",
-        )
+        col_edad_num, col_edad_unidad, col_espacio = st.columns([1, 1, 2])
+
+        with col_edad_num:
+            edad = st.number_input(
+                "Edad",
+                min_value=0,
+                max_value=130,
+                step=1,
+                key="edad_widget",
+            )
+
+        with col_edad_unidad:
+            edad_unidad = st.selectbox(
+                "Unidad",
+                ["Años", "Meses"],
+                key="edad_unidad_widget",
+            )
 
         diagnostico = st.text_area(
             "Diagnóstico",
@@ -190,9 +200,18 @@ def render_ingreso():
                     key="creatinina_serica_widget",
                 )
 
-                if sexo_clearance is not None and edad is not None:
+                edad_para_clearance = None
+                try:
+                    if edad_unidad == "Años":
+                        edad_para_clearance = float(edad)
+                    elif edad_unidad == "Meses":
+                        edad_para_clearance = float(edad) / 12.0
+                except Exception:
+                    edad_para_clearance = None
+
+                if sexo_clearance is not None and edad_para_clearance is not None:
                     try:
-                        clearance = ((140 - float(edad)) * float(peso)) / (72 * float(creatinina_serica))
+                        clearance = ((140 - float(edad_para_clearance)) * float(peso)) / (72 * float(creatinina_serica))
                         if sexo_clearance == "Femenino":
                             clearance *= 0.85
                         clearance = round(clearance, 1)
@@ -283,6 +302,7 @@ def render_ingreso():
         nombre=nombre,
         fecha_nacimiento=None,
         edad=edad,
+        edad_unidad=edad_unidad,
         diagnostico=diagnostico,
         peso=peso,
         embarazo=embarazo,
