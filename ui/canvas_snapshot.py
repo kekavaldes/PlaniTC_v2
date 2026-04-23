@@ -7,9 +7,9 @@ import streamlit as st
 from PIL import Image
 
 try:
-    from streamlit_javascript import st_javascript
+    from streamlit_js_eval import streamlit_js_eval
 except Exception:
-    st_javascript = None
+    streamlit_js_eval = None
 
 
 def _normalize_js_result(value: Any):
@@ -36,10 +36,11 @@ def _data_url_to_bytes(data_url: str):
 
 
 def capture_canvas_group(group_key: str, js_key: str | None = None):
-    if not group_key or st_javascript is None:
+    if not group_key or streamlit_js_eval is None:
         return []
 
-    script = f"""(() => {{
+    script = f"""
+    (function() {{
       try {{
         const groupKey = {json.dumps(group_key)};
         const prefix = 'planitc_snapshot_' + groupKey;
@@ -52,41 +53,15 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
           }} catch (e) {{}}
         }}
 
-        try {{
-          for (let i = 0; i < window.localStorage.length; i++) {{
-            const key = window.localStorage.key(i);
-            if (!key || (key !== prefix && !key.startsWith(prefix + '_'))) continue;
-            const raw = window.localStorage.getItem(key);
-            if (!raw) continue;
-            const suffix = key === prefix ? '0' : key.slice(prefix.length + 1);
-            const match = String(suffix).match(/(\d+)$/);
-            const item = match ? match[1] : suffix || '0';
-            pushEntry(item, raw);
-          }}
-        }} catch (e) {{}}
-
-        if (!out.length) {{
-          try {{
-            const frames = Array.from(window.parent.document.querySelectorAll('iframe'));
-            frames.forEach((frame) => {{
-              try {{
-                const doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
-                if (!doc) return;
-                const groups = Array.from(doc.querySelectorAll('[data-planitc-snapshot-group]'));
-                groups.forEach((groupNode) => {{
-                  if ((groupNode.getAttribute('data-planitc-snapshot-group') || '') !== groupKey) return;
-                  const canvases = Array.from(groupNode.querySelectorAll('canvas[data-planitc-snapshot-item], canvas'));
-                  canvases.forEach((canvas, idx) => {{
-                    try {{
-                      if (!canvas || !canvas.width || !canvas.height) return;
-                      const item = canvas.getAttribute('data-planitc-snapshot-item') || String(idx);
-                      pushEntry(item, canvas.toDataURL('image/png'));
-                    }} catch (e) {{}}
-                  }});
-                }});
-              }} catch (e) {{}}
-            }});
-          }} catch (e) {{}}
+        for (let i = 0; i < window.localStorage.length; i++) {{
+          const key = window.localStorage.key(i);
+          if (!key || (key !== prefix && !key.startsWith(prefix + '_'))) continue;
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+          const suffix = key === prefix ? '0' : key.slice(prefix.length + 1);
+          const match = String(suffix).match(/(\d+)$/);
+          const item = match ? match[1] : suffix || '0';
+          pushEntry(item, raw);
         }}
 
         out.sort((a, b) => String(a.item).localeCompare(String(b.item), undefined, {{ numeric: true, sensitivity: 'base' }}));
@@ -94,9 +69,10 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
       }} catch (err) {{
         return JSON.stringify([]);
       }}
-    }})()"""
+    }})()
+    """
 
-    result = _normalize_js_result(st_javascript(script, key=js_key or f"js_{group_key}"))
+    result = _normalize_js_result(streamlit_js_eval(js_expressions=script, key=js_key or f"js_{group_key}"))
     if not isinstance(result, list):
         return []
 
@@ -109,14 +85,15 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
             items.append({"item": str(entry.get("item", len(items))), "bytes": data})
     return items
 
+
 def combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
     valid = []
     for item in items or []:
-        data = item.get('bytes') if isinstance(item, dict) else item
+        data = item.get("bytes") if isinstance(item, dict) else item
         if not data:
             continue
         try:
-            im = Image.open(io.BytesIO(data)).convert('RGBA')
+            im = Image.open(io.BytesIO(data)).convert("RGBA")
             valid.append(im)
         except Exception:
             continue
@@ -124,14 +101,14 @@ def combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
         return None
     total_w = sum(im.width for im in valid) + gap * (len(valid) - 1) + padding * 2
     max_h = max(im.height for im in valid) + padding * 2
-    canvas = Image.new('RGBA', (total_w, max_h), bg)
+    canvas = Image.new("RGBA", (total_w, max_h), bg)
     x = padding
     for im in valid:
         y = padding + (max_h - padding * 2 - im.height) // 2
         canvas.alpha_composite(im, (x, y))
         x += im.width + gap
     out = io.BytesIO()
-    canvas.save(out, format='PNG')
+    canvas.save(out, format="PNG")
     return out.getvalue()
 
 
@@ -139,7 +116,7 @@ def set_snapshot(store_name: str, obj_key, png_bytes: bytes, extra: dict | None 
     if not png_bytes:
         return
     store = st.session_state.setdefault(store_name, {})
-    payload = {'bytes': png_bytes}
+    payload = {"bytes": png_bytes}
     if extra:
         payload.update(extra)
     store[obj_key] = payload
