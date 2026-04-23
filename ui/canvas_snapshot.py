@@ -1,6 +1,30 @@
+"""
+ui/canvas_snapshot.py
+Captura de snapshots (PNG) de los canvas HTML interactivos del simulador.
+
+El JS de cada canvas persiste su imagen actual en localStorage con la clave
+    planitc_snapshot_{storage_key}_{idx}
+en cada evento de arrastre (endDrag). Este módulo expone funciones para leer
+esos snapshots desde Python vía streamlit_js_eval.
+
+API pública:
+- capture_all_snapshots_raw(js_key): UNA llamada JS que trae TODOS los
+  snapshots del localStorage como {full_key: bytes}. Es la vía preferida y
+  la usada al generar el PDF (minimiza reruns).
+- items_for_group(all_snaps, group_key): filtra/ordena los items
+  correspondientes a un group_key específico desde el dict masivo.
+- capture_canvas_group(group_key, js_key): API por-grupo (compatibilidad).
+  Cada llamada monta un componente JS y dispara un rerun, por eso se
+  recomienda usar capture_all_snapshots_raw en su lugar.
+- combine_png_bytes(items, ...): combina varias PNG en una sola (horizontal).
+- set_snapshot(store_name, obj_key, png_bytes, extra): guarda bytes en
+  st.session_state[store_name][obj_key].
+"""
+
 import base64
 import io
 import json
+import re
 from typing import Any
 
 import streamlit as st
@@ -12,17 +36,28 @@ except Exception:
     streamlit_js_eval = None
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Helpers internos
+# ────────────────────────────────────────────────────────────────────────
 def _normalize_js_result(value: Any):
-    if value in (None, "", [], {}):
-        return []
+    """Normaliza lo que devuelve streamlit_js_eval.
+
+    Distingue:
+    - None  → JS aún no retornó (estamos en el primer render post-click).
+    - dict/list → resultado válido (posiblemente vacío).
+    """
+    if value is None:
+        return None
+    if isinstance(value, (list, dict)):
+        return value
     if isinstance(value, str):
         txt = value.strip()
         if not txt:
-            return []
+            return None
         try:
             return json.loads(txt)
         except Exception:
-            return []
+            return None
     return value
 
 
@@ -35,7 +70,91 @@ def _data_url_to_bytes(data_url: str):
         return None
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Captura MASIVA (preferida): una sola llamada JS para todos los snapshots
+# ────────────────────────────────────────────────────────────────────────
+def capture_all_snapshots_raw(js_key: str):
+    """Lee en UNA sola ronda JS todos los keys de localStorage que comienzan
+    con 'planitc_snapshot_' y los devuelve decodificados como:
+
+        {full_key: png_bytes, ...}
+
+    El parámetro js_key es usado por streamlit_js_eval para cachear el
+    resultado; cambia el valor de js_key para forzar una lectura nueva
+    (ej. `f"pdf_snaps_{nonce}"`).
+
+    Retornos:
+    - None  → el JS todavía no respondió (primer render). El caller debe
+              mostrar un mensaje de "capturando…" y esperar al próximo rerun.
+    - {}    → JS respondió pero no hay snapshots en localStorage.
+    - dict  → {planitc_snapshot_xxx_N: bytes, ...}
+    """
+    if streamlit_js_eval is None:
+        return {}
+
+    script = """
+    (function() {
+      try {
+        const out = {};
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i);
+          if (!key || !key.startsWith('planitc_snapshot_')) continue;
+          const raw = window.localStorage.getItem(key);
+          if (!raw || typeof raw !== 'string' || !raw.startsWith('data:image/')) continue;
+          out[key] = raw;
+        }
+        return JSON.stringify(out);
+      } catch (err) {
+        return JSON.stringify({});
+      }
+    })()
+    """
+
+    result = _normalize_js_result(
+        streamlit_js_eval(js_expressions=script, key=js_key)
+    )
+    if result is None:
+        return None  # aún esperando al navegador
+    if not isinstance(result, dict):
+        return {}
+
+    decoded = {}
+    for key, data_url in result.items():
+        data = _data_url_to_bytes(data_url)
+        if data:
+            decoded[key] = data
+    return decoded
+
+
+def items_for_group(all_snaps_bytes: dict, group_key: str):
+    """Desde el dict devuelto por capture_all_snapshots_raw, extrae los
+    items que pertenecen a `group_key`, ordenados por índice numérico
+    (el sufijo después del group_key).
+
+    Devuelve: [{"item": "0", "bytes": b"..."}, ...]
+    """
+    if not all_snaps_bytes or not group_key:
+        return []
+    prefix = "planitc_snapshot_" + group_key
+    items = []
+    for key, data_bytes in all_snaps_bytes.items():
+        if key != prefix and not key.startswith(prefix + "_"):
+            continue
+        suffix = "0" if key == prefix else key[len(prefix) + 1:]
+        m = re.search(r"(\d+)$", str(suffix))
+        item_id = m.group(1) if m else (suffix or "0")
+        items.append({"item": item_id, "bytes": data_bytes})
+    items.sort(key=lambda x: (len(str(x["item"])), str(x["item"])))
+    return items
+
+
+# ────────────────────────────────────────────────────────────────────────
+# API por-grupo (compatibilidad con el código que ya existía)
+# ────────────────────────────────────────────────────────────────────────
 def capture_canvas_group(group_key: str, js_key: str | None = None):
+    """Captura por grupo. Hace una llamada JS por cada group_key.
+    Preferir capture_all_snapshots_raw + items_for_group cuando se capture
+    más de un grupo a la vez (ej. al generar el PDF)."""
     if not group_key or streamlit_js_eval is None:
         return []
 
@@ -59,7 +178,7 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
           const raw = window.localStorage.getItem(key);
           if (!raw) continue;
           const suffix = key === prefix ? '0' : key.slice(prefix.length + 1);
-          const match = String(suffix).match(/(\d+)$/);
+          const match = String(suffix).match(/(\\d+)$/);
           const item = match ? match[1] : suffix || '0';
           pushEntry(item, raw);
         }}
@@ -72,7 +191,9 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
     }})()
     """
 
-    result = _normalize_js_result(streamlit_js_eval(js_expressions=script, key=js_key or f"js_{group_key}"))
+    result = _normalize_js_result(
+        streamlit_js_eval(js_expressions=script, key=js_key or f"js_{group_key}")
+    )
     if not isinstance(result, list):
         return []
 
@@ -86,7 +207,11 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
     return items
 
 
+# ────────────────────────────────────────────────────────────────────────
+# Composición y guardado
+# ────────────────────────────────────────────────────────────────────────
 def combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
+    """Combina una lista de PNGs en un único PNG horizontal."""
     valid = []
     for item in items or []:
         data = item.get("bytes") if isinstance(item, dict) else item
@@ -113,6 +238,7 @@ def combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
 
 
 def set_snapshot(store_name: str, obj_key, png_bytes: bytes, extra: dict | None = None):
+    """Guarda png_bytes en st.session_state[store_name][obj_key]."""
     if not png_bytes:
         return
     store = st.session_state.setdefault(store_name, {})
