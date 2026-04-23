@@ -25,14 +25,22 @@ interactivo (~570 líneas). Cuando tengas `core/canvas.py`, mover allí:
 import io
 import json
 import math
+import time
 import uuid
 import base64
+import hashlib
 from pathlib import Path
 
 import streamlit as st
 from PIL import Image
 
-from ui.canvas_snapshot import capture_canvas_group, combine_png_bytes, set_snapshot
+from ui.canvas_snapshot import (
+    capture_canvas_group,
+    capture_all_snapshots_raw,
+    items_for_group,
+    combine_png_bytes,
+    set_snapshot,
+)
 
 from ui.topograma import (
     obtener_imagen_topograma_adquirido,
@@ -280,6 +288,23 @@ def get_y_position_with_offset(ref, offset_mm=0, total_mm=600):
 # ═══════════════════════════════════════════════════════════════════════════
 # CONVERSIÓN DE IMAGEN PIL A BASE64 (para canvas HTML)
 # ═══════════════════════════════════════════════════════════════════════════
+def _pil_fingerprint(img):
+    """Hash ligero para identificar una imagen PIL por contenido.
+    Se usa como hash_func para @st.cache_data y soporta el caso de imágenes
+    recién abiertas desde bytes (mismo contenido → mismo id de caché)."""
+    if img is None:
+        return None
+    try:
+        return (img.size, img.mode, hashlib.md5(img.tobytes()).hexdigest())
+    except Exception:
+        return id(img)
+
+
+@st.cache_data(
+    hash_funcs={Image.Image: _pil_fingerprint},
+    show_spinner=False,
+    max_entries=64,
+)
 def _pil_to_b64_jpeg(img, max_width=900):
     """Convierte una imagen PIL a base64 JPEG para usarla en canvas HTML."""
     if img is None:
@@ -1473,7 +1498,76 @@ def obtener_imagen_posicion_corte(nombre_posicion):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _guardar_snapshot_adquisicion_desde_bulk(exp, group_keys, all_snaps):
+    """Toma el dict masivo de snapshots y guarda lo de esta exploración."""
+    items = []
+    for gk in group_keys:
+        items.extend(items_for_group(all_snaps, gk))
+    if not items:
+        return False
+    combinado = combine_png_bytes(items)
+    if not combinado:
+        return False
+    set_snapshot("canvas_snapshots_adq_por_exp", exp["id"], combinado)
+    topo_idx = exp.get("topo_set_idx")
+    if topo_idx is not None:
+        set_snapshot(
+            "canvas_snapshots_topo_por_set",
+            topo_idx,
+            combinado,
+            extra={"exp_id": exp.get("id")},
+        )
+    return True
+
+
+def _render_boton_snapshot_adquisicion(exp, group_keys):
+    """Muestra un botón manual para capturar el snapshot de esta adquisición
+    y guardarlo en session_state para el PDF.
+
+    Este botón es OPCIONAL: al momento de generar el PDF también se hace
+    auto-captura de todos los canvas. Se mantiene aquí por si el estudiante
+    quiere forzar una captura intermedia."""
+    pending_key = f"_pending_snap_adq_{exp['id']}"
+
+    col_info, col_btn = st.columns([2.6, 1], gap="small")
+    with col_info:
+        st.caption(
+            "La captura visual se descarga directamente desde cada canvas con el "
+            "botón **Descargar PNG**. Al generar el PDF, el snapshot se incluye "
+            "automáticamente."
+        )
+    with col_btn:
+        if st.button(
+            "💾 Guardar para PDF",
+            key=f"btn_snap_adq_{exp['id']}",
+            use_container_width=True,
+            help="Guarda el canvas actual en el reporte (opcional).",
+        ):
+            st.session_state[pending_key] = int(time.time() * 1000)
+            st.rerun()
+
+    nonce = st.session_state.get(pending_key)
+    if nonce:
+        all_snaps = capture_all_snapshots_raw(
+            js_key=f"manual_snap_adq_{exp['id']}_{nonce}"
+        )
+        if all_snaps is None:
+            st.info("Capturando canvas… un momento.")
+        else:
+            ok = _guardar_snapshot_adquisicion_desde_bulk(exp, group_keys, all_snaps)
+            if ok:
+                st.success("Snapshot guardado para el PDF.")
+            else:
+                st.warning(
+                    "No se pudo capturar el canvas. Mueve un poco la imagen "
+                    "y vuelve a intentarlo."
+                )
+            st.session_state.pop(pending_key, None)
+
+
 def _guardar_snapshot_adquisicion(exp, group_keys):
+    """Compatibilidad: captura por-grupo (versión antigua).
+    Se mantiene por si algún código externo la invoca directamente."""
     items = []
     for idx, group_key in enumerate(group_keys):
         items.extend(capture_canvas_group(group_key, js_key=f"cap_adq_{exp['id']}_{idx}"))
@@ -1486,10 +1580,6 @@ def _guardar_snapshot_adquisicion(exp, group_keys):
     if topo_idx is not None:
         set_snapshot("canvas_snapshots_topo_por_set", topo_idx, combinado, extra={"exp_id": exp.get("id")})
     st.success("Snapshot guardado para el PDF.")
-
-
-def _render_boton_snapshot_adquisicion(exp, group_keys):
-    st.caption("La captura visual se descarga directamente desde cada canvas con el botón **Descargar PNG**.")
 
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
