@@ -1,4 +1,5 @@
 import streamlit as st
+from pathlib import Path
 
 from ui.ingreso import render_ingreso
 from ui.adquisicion import render_adquisicion
@@ -139,7 +140,7 @@ def aplicar_css_global():
         }
 
         .block-container {
-            padding-top: 3rem !important;
+            padding-top: 2rem !important;
         }
 
         .stApp a.anchor-link,
@@ -183,6 +184,40 @@ def render_top_navigation():
                 st.rerun()
 
 
+def obtener_ruta_portada():
+    posibles_rutas = [
+        Path("data/images/PORTADA.png"),
+        Path("data/images/PORTADA.jpg"),
+        Path("data/images/PORTADA.jpeg"),
+        Path("data/images/PORTADA.webp"),
+        Path("data/imagenes/PORTADA.png"),
+        Path("data/imagenes/PORTADA.jpg"),
+        Path("data/imagenes/PORTADA.jpeg"),
+        Path("data/imagenes/PORTADA.webp"),
+    ]
+
+    for ruta in posibles_rutas:
+        if ruta.exists():
+            return ruta
+
+    return None
+
+
+def render_inicio():
+    ruta_portada = obtener_ruta_portada()
+
+    st.markdown("###")
+
+    if ruta_portada is not None:
+        st.image(str(ruta_portada), use_container_width=True)
+    else:
+        st.warning(
+            "No se encontró la imagen de portada. "
+            "Verifica que esté en data/images y que se llame PORTADA "
+            "(.png, .jpg, .jpeg o .webp)."
+        )
+
+
 def main():
     aplicar_css_global()
     init_navigation()
@@ -191,8 +226,7 @@ def main():
     current_tab = st.session_state.get("current_tab", "🏠  Inicio")
 
     if current_tab == "🏠  Inicio":
-        st.subheader("Inicio")
-        st.info("Pendiente de modularizar")
+        render_inicio()
 
     elif current_tab == "📋  Ingreso":
         render_ingreso()
