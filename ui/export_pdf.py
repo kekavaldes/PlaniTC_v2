@@ -781,7 +781,15 @@ def render_export_pdf():
 
     n_recons = sum(len(v or []) for v in recs_map.values())
     n_refs = sum(len(v or []) for v in refs_map.values())
-    n_snaps = sum(len(v or {{}}) for v in [st.session_state.get("canvas_snapshots_topo_por_set", {{}}), st.session_state.get("canvas_snapshots_adq_por_exp", {{}}), st.session_state.get("canvas_snapshots_recon_por_id", {{}}), st.session_state.get("canvas_snapshots_ref_por_id", {{}})])
+    n_snaps = sum(
+        len(v or {})
+        for v in [
+            st.session_state.get("canvas_snapshots_topo_por_set", {}),
+            st.session_state.get("canvas_snapshots_adq_por_exp", {}),
+            st.session_state.get("canvas_snapshots_recon_por_id", {}),
+            st.session_state.get("canvas_snapshots_ref_por_id", {}),
+        ]
+    )
 
     col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns(6)
     with col_r1:
