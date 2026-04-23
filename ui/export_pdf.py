@@ -154,6 +154,11 @@ def _v(val, placeholder="—"):
     return s
 
 
+def _alumnos_participantes_str():
+    """Obtiene los nombres de alumnos participantes desde session_state."""
+    return str(st.session_state.get("alumnos_participantes", "") or "").strip()
+
+
 def _kv_table(rows, col_widths=(45 * mm, 120 * mm), sty=None):
     sty = sty or _styles()
     data = [
@@ -258,12 +263,19 @@ def _scale_drawing(drawing, max_w_pt, max_h_pt):
 # ──────────────────────────────────────────────────────────────────────────
 def _seccion_portada(story, plan, sty):
     ingreso = plan.get("ingreso_store", {}) or {}
+    alumnos = (plan.get("alumnos_participantes") or "").strip()
 
     story.append(Paragraph("Planificación de Examen TC", sty["title"]))
     story.append(Paragraph(
         f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         sty["small"],
     ))
+    story.append(Spacer(1, 6))
+
+    story.append(Paragraph("Participantes de la actividad", sty["h2"]))
+    story.append(_kv_table([
+        ("Alumno(s)", alumnos),
+    ], sty=sty))
     story.append(Spacer(1, 10))
 
     story.append(Paragraph("Datos del paciente", sty["h2"]))
@@ -682,6 +694,7 @@ def _recopilar_plan():
         iny_store["svg_snapshot"] = None
 
     return {
+        "alumnos_participantes": _alumnos_participantes_str(),
         "ingreso_store": dict(st.session_state.get("ingreso_store", {}) or {}),
         "topograma_sets": list(st.session_state.get("topograma_sets", []) or []),
         "topograma_store": dict(st.session_state.get("topograma_store", {}) or {}),
@@ -768,6 +781,16 @@ def render_export_pdf():
     """Entrypoint de la pestaña de exportación a PDF."""
     _panel_header("📄", "Exportar planificación a PDF")
 
+    alumnos_default = _alumnos_participantes_str()
+    alumnos_participantes = st.text_area(
+        "Nombre del alumno o de los alumnos participantes",
+        value=alumnos_default,
+        key="alumnos_participantes",
+        height=90,
+        placeholder="Ej.: Evelyn Oyarzun\nJuan Pérez\nMaría González",
+        help="Completa aquí el nombre de todos los estudiantes que participaron en la actividad. Este dato se incluirá en la portada del PDF.",
+    )
+
     if not HAS_SVG_ENGINE:
         st.info(
             "Para incluir la visualización gráfica de la inyectora en el PDF, "
@@ -802,12 +825,16 @@ def render_export_pdf():
         st.metric("Snapshots", n_snaps)
 
     faltan = []
+    if not str(alumnos_participantes or "").strip():
+        faltan.append("Nombre del alumno o de los alumnos participantes")
     if not ingreso.get("nombre"):
         faltan.append("Nombre del paciente")
     if not exps:
         faltan.append("Al menos una adquisición")
     if faltan:
         st.warning("⚠️ Antes de exportar, completa: " + ", ".join(faltan))
+
+    exportacion_habilitada = len(faltan) == 0
 
     st.caption("Para que el PDF incluya exactamente los recuadros, líneas y anotaciones del canvas, primero guarda los snapshots desde Adquisición, Reconstrucción y Reformaciones.")
     st.markdown("---")
@@ -818,10 +845,11 @@ def render_export_pdf():
             "🔨 Generar PDF",
             use_container_width=True,
             type="primary",
+            disabled=not exportacion_habilitada,
         )
 
-    # Regenerar si el usuario clickea o si no hay cache previa
-    if generar:
+    # Regenerar solo si se cumplen los requisitos mínimos
+    if generar and exportacion_habilitada:
         with st.spinner("Generando PDF…"):
             try:
                 st.session_state["_pdf_bytes"] = construir_pdf()
@@ -831,7 +859,7 @@ def render_export_pdf():
                 st.error(f"No se pudo generar el PDF: {e}")
 
     pdf_bytes = st.session_state.get("_pdf_bytes")
-    if pdf_bytes:
+    if pdf_bytes and exportacion_habilitada:
         nombre = ingreso.get("nombre") or "paciente"
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", nombre).strip("_") or "paciente"
         ts = datetime.now().strftime("%Y%m%d_%H%M")
@@ -852,3 +880,6 @@ def render_export_pdf():
                 f"Última generación: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
                 f"tamaño: {len(pdf_bytes) / 1024:.1f} KB"
             )
+
+    elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
+        st.info("Completa primero el nombre del alumno o de los alumnos participantes para habilitar la descarga del PDF.")
