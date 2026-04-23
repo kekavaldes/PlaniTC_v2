@@ -510,6 +510,7 @@ def _overlay_canvas_html(
   var img = new Image();
   img.src = 'data:image/jpeg;base64,' + {json.dumps(img_b64)};
   var storageKey = {json.dumps('planitc_ref_' + storage_key)};
+  var snapshotKey = {json.dumps('planitc_snapshot_' + storage_key)};
   var acqColor = {json.dumps(acq_color)};
   var recColor = {json.dumps(rec_color)};
   var showRanges = {json.dumps(bool(settings.get('show_ranges', False)))};
@@ -818,6 +819,7 @@ def _overlay_canvas_html(
     drawRefs();
     syncLabelOverlays();
     saveState();
+    saveSnapshot();
   }}
 
   function getPos(evt) {{
