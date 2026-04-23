@@ -1542,8 +1542,11 @@ def _render_boton_snapshot_adquisicion(exp, group_keys):
             use_container_width=True,
             type="secondary",
         ):
-            _guardar_snapshot_adquisicion(exp, group_keys)
-            st.rerun()
+            ok = _guardar_snapshot_adquisicion(exp, group_keys)
+            st.session_state["_ultimo_snapshot_adq"] = {
+                "exp_id": exp_id,
+                "ok": bool(ok),
+            }
 
     with c2:
         ya_guardado = exp_id in (st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {})
@@ -1551,6 +1554,13 @@ def _render_boton_snapshot_adquisicion(exp, group_keys):
             st.caption("✅ Esta adquisición ya tiene snapshot guardado para el PDF.")
         else:
             st.caption("Guarda aquí los rangos, ROI, colores y recuadros visibles de esta adquisición.")
+
+    ultimo = st.session_state.get("_ultimo_snapshot_adq")
+    if isinstance(ultimo, dict) and ultimo.get("exp_id") == exp_id:
+        if ultimo.get("ok"):
+            st.success("Snapshot guardado. Ya puedes ir a Exportar.")
+        else:
+            st.error("No se pudo guardar el snapshot de esta adquisición.")
 
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
