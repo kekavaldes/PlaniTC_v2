@@ -148,6 +148,14 @@ def aplicar_css_global():
         [data-testid="stHeaderActionElements"] {
             display: none !important;
         }
+
+        /* Portada de inicio: mantener ancho y reducir un poco la altura */
+        .portada-container img {
+            max-height: 70vh !important;
+            width: 100% !important;
+            object-fit: contain !important;
+            border-radius: 12px !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -207,14 +215,12 @@ def obtener_ruta_portada():
 def render_inicio():
     ruta_portada = obtener_ruta_portada()
 
-    # pequeño espacio bajo la barra de navegación
-    st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 0.3rem;'></div>", unsafe_allow_html=True)
 
     if ruta_portada is not None:
-        # columnas para que la imagen no ocupe todo el ancho
-        col1, col2, col3 = st.columns([0.45, 8.1, 0.45])
-        with col2:
-            st.image(str(ruta_portada), use_container_width=True)
+        st.markdown('<div class="portada-container">', unsafe_allow_html=True)
+        st.image(str(ruta_portada), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.warning(
             "No se encontró la imagen de portada. "
