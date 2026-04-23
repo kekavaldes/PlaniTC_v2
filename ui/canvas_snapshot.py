@@ -36,7 +36,14 @@ def _data_url_to_bytes(data_url: str):
 
 
 def capture_canvas_group(group_key: str, js_key: str | None = None):
-    if not group_key or streamlit_js_eval is None:
+    if not group_key:
+        return []
+
+    if streamlit_js_eval is None:
+        st.error(
+            "No se puede capturar el canvas porque falta la dependencia "
+            "'streamlit-js-eval' en el despliegue."
+        )
         return []
 
     script = f"""
@@ -59,12 +66,16 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
           const raw = window.localStorage.getItem(key);
           if (!raw) continue;
           const suffix = key === prefix ? '0' : key.slice(prefix.length + 1);
-          const match = String(suffix).match(/(\d+)$/);
+          const match = String(suffix).match(/(\\d+)$/);
           const item = match ? match[1] : suffix || '0';
           pushEntry(item, raw);
         }}
 
-        out.sort((a, b) => String(a.item).localeCompare(String(b.item), undefined, {{ numeric: true, sensitivity: 'base' }}));
+        out.sort((a, b) => String(a.item).localeCompare(String(b.item), undefined, {{
+          numeric: true,
+          sensitivity: 'base'
+        }}));
+
         return JSON.stringify(out);
       }} catch (err) {{
         return JSON.stringify([]);
@@ -72,7 +83,13 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
     }})()
     """
 
-    result = _normalize_js_result(streamlit_js_eval(js_expressions=script, key=js_key or f"js_{group_key}"))
+    result = _normalize_js_result(
+        streamlit_js_eval(
+            js_expressions=script,
+            key=js_key or f"js_{group_key}"
+        )
+    )
+
     if not isinstance(result, list):
         return []
 
@@ -82,7 +99,10 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
             continue
         data = _data_url_to_bytes(entry.get("data_url"))
         if data:
-            items.append({"item": str(entry.get("item", len(items))), "bytes": data})
+            items.append({
+                "item": str(entry.get("item", len(items))),
+                "bytes": data
+            })
     return items
 
 
@@ -97,16 +117,20 @@ def combine_png_bytes(items, gap=12, padding=10, bg=(14, 17, 23, 255)):
             valid.append(im)
         except Exception:
             continue
+
     if not valid:
         return None
+
     total_w = sum(im.width for im in valid) + gap * (len(valid) - 1) + padding * 2
     max_h = max(im.height for im in valid) + padding * 2
+
     canvas = Image.new("RGBA", (total_w, max_h), bg)
     x = padding
     for im in valid:
         y = padding + (max_h - padding * 2 - im.height) // 2
         canvas.alpha_composite(im, (x, y))
         x += im.width + gap
+
     out = io.BytesIO()
     canvas.save(out, format="PNG")
     return out.getvalue()
