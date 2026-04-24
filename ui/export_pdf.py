@@ -181,14 +181,14 @@ def _kv_table(rows, col_widths=(45 * mm, 120 * mm), sty=None):
          Paragraph(_v(v), sty["normal"])]
         for k, v in rows
     ]
-    t = Table(data, colWidths=col_widths)
+    t = Table(data, colWidths=col_widths, hAlign="CENTER")
     t.setStyle(_table_style_kv())
     return t
 
 
 def _grid_table(headers, rows, col_widths):
     data = [headers] + rows
-    t = Table(data, colWidths=col_widths)
+    t = Table(data, colWidths=col_widths, hAlign="CENTER")
     t.setStyle(_table_style_grid())
     return t
 
@@ -218,7 +218,9 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
         im = im.convert("RGB")
     im.save(buf, format="PNG")
     buf.seek(0)
-    return RLImage(buf, width=draw_w, height=draw_h)
+    img_flow = RLImage(buf, width=draw_w, height=draw_h)
+    img_flow.hAlign = "CENTER"
+    return img_flow
 
 
 
@@ -541,7 +543,7 @@ def _seccion_adquisiciones(story, plan, sty):
         snap_adq = _snapshot_bytes((plan.get("canvas_snapshots_adq_por_exp") or {}).get(exp.get("id")))
         img_flow = _pil_bytes_to_flowable(snap_adq, max_w_mm=75, max_h_mm=75) if snap_adq else None
         if img_flow is not None:
-            fila = Table([[params_table, img_flow]], colWidths=(110 * mm, 60 * mm))
+            fila = Table([[params_table, img_flow]], colWidths=(110 * mm, 60 * mm), hAlign="CENTER")
             fila.setStyle(TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -635,7 +637,7 @@ def _seccion_reconstrucciones(story, plan, sty):
                 if len(topo_flows) == 1:
                     imagenes_col.append(topo_flows[0])
                 else:
-                    fila_topos = Table([topo_flows], colWidths=[45 * mm] * len(topo_flows))
+                    fila_topos = Table([topo_flows], colWidths=[45 * mm] * len(topo_flows), hAlign="CENTER")
                     fila_topos.setStyle(TableStyle([
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -648,6 +650,7 @@ def _seccion_reconstrucciones(story, plan, sty):
                 fila = Table(
                     [[params_table, imagenes_col]],
                     colWidths=(92 * mm, 78 * mm),
+                    hAlign="CENTER",
                 )
                 fila.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -726,8 +729,22 @@ def _seccion_reformaciones(story, plan, sty):
                     if not (isinstance(sub, dict) and sub.get("bytes")) and isinstance(ref_imgs, dict):
                         sub = ref_imgs.get(key_img)
                     if isinstance(sub, dict) and sub.get("bytes"):
+                        img_bytes = sub["bytes"]
+                        captured = isinstance(snap_ref, dict) and isinstance(snap_ref.get(key_img), dict) and bool(snap_ref.get(key_img).get("bytes"))
+                        if not captured and isinstance(ref_imgs, dict):
+                            try:
+                                idx_num = int(key_img.replace("img", ""))
+                            except Exception:
+                                idx_num = 1
+                            overlay = ref_imgs.get(f"overlay{idx_num}") or {}
+                            img_bytes = _draw_reformacion_overlay_fallback(
+                                img_bytes,
+                                overlay,
+                                acq_color=_color_exploracion_pdf(exp.get("id"), exps),
+                                rec_color=_color_exploracion_pdf(exp.get("id"), exps),
+                            )
                         flow = _pil_bytes_to_flowable(
-                            sub["bytes"], max_w_mm=55, max_h_mm=55
+                            img_bytes, max_w_mm=55, max_h_mm=55
                         )
                         if flow is not None:
                             flows.append(flow)
@@ -736,7 +753,7 @@ def _seccion_reformaciones(story, plan, sty):
                     # Grid horizontal de hasta 3 imágenes
                     while len(flows) < 3:
                         flows.append("")
-                    fila = Table([flows], colWidths=(60 * mm, 60 * mm, 60 * mm))
+                    fila = Table([flows], colWidths=(60 * mm, 60 * mm, 60 * mm), hAlign="CENTER")
                     fila.setStyle(TableStyle([
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -962,6 +979,95 @@ def _overlay_ref_text_on_png(png_bytes, ref_state):
     except Exception:
         return png_bytes
 
+
+
+def _hex_to_rgba(hex_color, alpha=255, default=(0, 210, 255, 255)):
+    try:
+        h = str(hex_color or "").strip().lstrip("#")
+        if len(h) == 3:
+            h = "".join([c * 2 for c in h])
+        if len(h) != 6:
+            return default
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha)
+    except Exception:
+        return default
+
+
+def _color_exploracion_pdf(exp_id: str, exploraciones=None):
+    pal = ["#00D2FF", "#FFB000", "#7CFF6B", "#FF5CA8", "#A78BFA", "#FF7A59", "#5EEAD4", "#FACC15"]
+    exploraciones = exploraciones or []
+    try:
+        idx = next(i for i, e in enumerate(exploraciones) if isinstance(e, dict) and e.get("id") == exp_id)
+    except Exception:
+        idx = 0
+    return pal[idx % len(pal)]
+
+
+def _draw_reformacion_overlay_fallback(img_bytes, overlay, acq_color="#00D2FF", rec_color="#FFFFFF"):
+    if not img_bytes:
+        return img_bytes
+    overlay = overlay or {}
+    try:
+        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGBA")
+        draw = ImageDraw.Draw(im, "RGBA")
+        w, h = im.size
+        cx, cy = w / 2.0, h / 2.0
+        line_color = _hex_to_rgba(acq_color, 255)
+        ref_color = _hex_to_rgba(rec_color, 255, default=(255, 255, 255, 255))
+        if overlay.get("show_ranges"):
+            count = max(1, min(15, int(overlay.get("range_count") or 3)))
+            import math
+            theta = math.radians(float(overlay.get("angle_deg") or 0))
+            dx, dy = math.cos(theta), math.sin(theta)
+            nx, ny = -dy, dx
+            spacing = min(w, h) * 0.075
+            length = max(w, h) * 0.72
+            width_line = max(3, int(min(w, h) * 0.008))
+            for i in range(count):
+                off = (i - (count - 1) / 2.0) * spacing
+                mx, my = cx + nx * off, cy + ny * off
+                draw.line((mx - dx * length / 2, my - dy * length / 2, mx + dx * length / 2, my + dy * length / 2), fill=line_color, width=width_line)
+        if overlay.get("show_refs"):
+            refs = overlay.get("refs") or []
+            try:
+                font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(13, int(min(w, h) * 0.032)))
+                font_num = ImageFont.truetype("DejaVuSans-Bold.ttf", max(12, int(min(w, h) * 0.026)))
+            except Exception:
+                font = ImageFont.load_default()
+                font_num = ImageFont.load_default()
+            for idx, ref in enumerate(refs[:5], start=1):
+                if not isinstance(ref, dict) or not ref.get("enabled"):
+                    continue
+                text = str(ref.get("text") or "").strip()
+                if not text:
+                    continue
+                ax = float(ref.get("ax", 0.5) or 0.5) * w
+                ay = float(ref.get("ay", 0.5) or 0.5) * h
+                tx = float(ref.get("tx", 0.15) or 0.15) * w
+                ty = float(ref.get("ty", 0.15) or 0.15) * h
+                draw.line((ax, ay, tx, ty), fill=ref_color, width=max(2, int(min(w, h) * 0.006)))
+                r = max(10, int(min(w, h) * 0.028))
+                draw.ellipse((ax - r, ay - r, ax + r, ay + r), fill=ref_color)
+                nb = draw.textbbox((0, 0), str(idx), font=font_num)
+                draw.text((ax - (nb[2]-nb[0]) / 2, ay - (nb[3]-nb[1]) / 2 - 1), str(idx), font=font_num, fill=(0, 0, 0, 255))
+                bbox = draw.textbbox((0, 0), text, font=font)
+                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                pad_x, pad_y = max(8, int(w * 0.012)), max(5, int(h * 0.008))
+                box_w = min(tw + 2 * pad_x, max(80, w - 8))
+                box_h = th + 2 * pad_y
+                bx = max(4, min(int(tx), w - box_w - 4))
+                by = max(4, min(int(ty), h - box_h - 4))
+                try:
+                    draw.rounded_rectangle((bx, by, bx + box_w, by + box_h), radius=8, fill=(0, 0, 0, 185), outline=ref_color, width=2)
+                except Exception:
+                    draw.rectangle((bx, by, bx + box_w, by + box_h), fill=(0, 0, 0, 185), outline=ref_color)
+                draw.text((bx + pad_x, by + pad_y - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
+        out = io.BytesIO()
+        im.convert("RGB").save(out, format="PNG")
+        return out.getvalue()
+    except Exception:
+        return img_bytes
+
 # ──────────────────────────────────────────────────────────────────────────
 # Auto-captura de canvas al generar el PDF
 # ──────────────────────────────────────────────────────────────────────────
@@ -1060,10 +1166,20 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
                 if not img_data or not img_data.get("bytes"):
                     continue
                 sig = img_data.get("sig") or hashlib.md5(img_data["bytes"]).hexdigest()[:10]
-                group_key = f"{ref_id}_img{img_idx}_{sig}"
-                items = items_for_group(all_snaps, group_key)
+                # Compatibilidad: versiones de reformaciones.py han usado
+                # storage_key con y sin firma de imagen.
+                candidate_groups = [f"{ref_id}_img{img_idx}_{sig}", f"{ref_id}_img{img_idx}"]
+                items = []
+                used_group_key = None
+                for group_key in candidate_groups:
+                    items = items_for_group(all_snaps, group_key)
+                    if items:
+                        used_group_key = group_key
+                        break
                 if items:
-                    ref_state = all_ref_states.get(f"planitc_ref_{group_key}") if isinstance(all_ref_states, dict) else None
+                    ref_state = None
+                    if isinstance(all_ref_states, dict) and used_group_key:
+                        ref_state = all_ref_states.get(f"planitc_ref_{used_group_key}")
                     png_bytes = _overlay_ref_text_on_png(items[0]["bytes"], ref_state)
                     snaps[f"img{img_idx}"] = {"bytes": png_bytes}
             if snaps:
