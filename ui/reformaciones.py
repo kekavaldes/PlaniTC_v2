@@ -630,6 +630,9 @@ def _overlay_canvas_html(
   var cutsBtn = document.getElementById({json.dumps('btn_' + storage_key + '_cuts')});
 
   function downloadRefCanvas_{storage_key}(expNombre, recNombre, refNombre) {{
+    console.log('Descargando con nombres:', {{expNombre, recNombre, refNombre}});
+    
+    // Construir nombre de archivo
     var parts = [];
     if (expNombre && String(expNombre).trim()) {{
       parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
@@ -641,9 +644,52 @@ def _overlay_canvas_html(
       parts.push(String(refNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
     }}
     var filename = parts.length > 0 ? parts.join('_') : {json.dumps(storage_key)};
+    console.log('Nombre de archivo:', filename);
     
+    // Crear canvas temporal para incluir texto de referencias
+    var tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    var tempCtx = tempCanvas.getContext('2d');
+    
+    // Copiar la imagen actual del canvas principal
+    tempCtx.drawImage(canvas, 0, 0);
+    
+    // Dibujar el texto de las referencias activas
+    tempCtx.font = 'bold 24px Arial';
+    tempCtx.textBaseline = 'middle';
+    
+    for (var i = 0; i < 3; i++) {{
+      var ref = state.refs[i];
+      if (!ref.enabled) continue;
+      
+      var input = refInputs[i];
+      var text = input ? input.value.trim() : '';
+      if (!text) continue;
+      
+      // Posición del ancla en píxeles del canvas
+      var ap = normToPx(ref.ax, ref.ay);
+      
+      // Dibujar fondo semi-transparente para el texto
+      tempCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      var textWidth = tempCtx.measureText(text).width;
+      var padding = 12;
+      tempCtx.fillRect(
+        ap.x - textWidth/2 - padding,
+        ap.y + 30 - 18,
+        textWidth + padding * 2,
+        36
+      );
+      
+      // Dibujar texto
+      tempCtx.fillStyle = recColor;
+      tempCtx.textAlign = 'center';
+      tempCtx.fillText(text, ap.x, ap.y + 30);
+    }}
+    
+    // Descargar
     var a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png');
+    a.href = tempCanvas.toDataURL('image/png');
     a.download = filename + '.png';
     document.body.appendChild(a);
     a.click();
@@ -1117,9 +1163,23 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
         img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
         
         # Calcular nombres limpios para archivo descargado
-        exp_nombre_limpio = rec.get("exp_nombre", "").replace(" ", "_").replace("·", "").replace("__", "_").strip("_") if rec else None
-        rec_nombre_limpio = rec.get("nombre", "").replace(" ", "_") if rec else None
-        ref_nombre_limpio = _nombre_reformacion(ref).replace(" ", "_") if ref else None
+        exp_nombre_limpio = None
+        rec_nombre_limpio = None
+        ref_nombre_limpio = None
+        
+        if rec:
+            exp_nombre_raw = rec.get("exp_nombre", "")
+            if exp_nombre_raw:
+                exp_nombre_limpio = exp_nombre_raw.replace(" ", "_").replace("·", "_").replace("(", "").replace(")", "").replace("__", "_").strip("_")
+            
+            rec_nombre_raw = rec.get("nombre", "")
+            if rec_nombre_raw:
+                rec_nombre_limpio = rec_nombre_raw.replace(" ", "_")
+        
+        if ref:
+            ref_nombre_raw = _nombre_reformacion(ref)
+            if ref_nombre_raw:
+                ref_nombre_limpio = ref_nombre_raw.replace(" ", "_")
         
         html = _overlay_canvas_html(
             img_b64=img_b64,
@@ -1332,15 +1392,6 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
         ref["subtipo"] = None
 
     st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo cada canvas.")
-
-    col_snap_info, col_snap_btn = st.columns([2.6, 1], gap="small")
-    with col_snap_info:
-        st.caption(
-            "Al generar el PDF, los canvas se incluyen automáticamente. "
-            "Si quieres forzar una captura intermedia, usa el botón → "
-        )
-    with col_snap_btn:
-        _render_boton_snapshot_reformacion(ref["id"])
 
     is_vr = ref["tipo"] == "VR"
     overlay_mode = "radial" if is_vr else "parallel"
