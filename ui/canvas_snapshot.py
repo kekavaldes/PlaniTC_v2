@@ -116,19 +116,6 @@ def capture_all_snapshots_raw(js_key: str):
         } catch (e) {}
       }
 
-      function readCookies() {
-        try {
-          const parts = document.cookie ? document.cookie.split(';') : [];
-          for (let i = 0; i < parts.length; i++) {
-            const part = parts[i].trim();
-            const eq = part.indexOf('=');
-            if (eq < 0) continue;
-            const key = decodeURIComponent(part.slice(0, eq));
-            if (!key || !key.startsWith('planitc_snapshot_')) continue;
-            push(key, decodeURIComponent(part.slice(eq + 1)));
-          }
-        } catch (e) {}
-      }
 
       try { readStorage(window.localStorage); } catch (e) {}
       try { readStorage(window.sessionStorage); } catch (e) {}
@@ -136,7 +123,6 @@ def capture_all_snapshots_raw(js_key: str):
       // Igual dejamos estos fallbacks por si cambia el contenedor.
       try { if (window.parent && window.parent !== window) readStorage(window.parent.localStorage); } catch (e) {}
       try { if (window.top && window.top !== window) readStorage(window.top.localStorage); } catch (e) {}
-      readCookies();
 
       return JSON.stringify(out);
     })()
@@ -220,29 +206,11 @@ def capture_canvas_group(group_key: str, js_key: str | None = None):
           }} catch (e) {{}}
         }}
 
-        function readCookies() {{
-          try {{
-            const parts = document.cookie ? document.cookie.split(';') : [];
-            for (let i = 0; i < parts.length; i++) {{
-              const part = parts[i].trim();
-              const eq = part.indexOf('=');
-              if (eq < 0) continue;
-              const key = decodeURIComponent(part.slice(0, eq));
-              if (!key || (key !== prefix && !key.startsWith(prefix + '_'))) continue;
-              const raw = decodeURIComponent(part.slice(eq + 1));
-              const suffix = key === prefix ? '0' : key.slice(prefix.length + 1);
-              const match = String(suffix).match(/(\\d+)$/);
-              const item = match ? match[1] : suffix || '0';
-              pushEntry(item, raw);
-            }}
-          }} catch (e) {{}}
-        }}
 
         readStorage(window.localStorage);
         readStorage(window.sessionStorage);
         try {{ if (window.parent && window.parent !== window) readStorage(window.parent.localStorage); }} catch (e) {{}}
         try {{ if (window.top && window.top !== window) readStorage(window.top.localStorage); }} catch (e) {{}}
-        readCookies();
 
         out.sort((a, b) => String(a.item).localeCompare(String(b.item), undefined, {{ numeric: true, sensitivity: 'base' }}));
         return JSON.stringify(out);
