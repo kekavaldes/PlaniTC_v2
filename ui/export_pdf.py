@@ -181,14 +181,14 @@ def _kv_table(rows, col_widths=(45 * mm, 120 * mm), sty=None):
          Paragraph(_v(v), sty["normal"])]
         for k, v in rows
     ]
-    t = Table(data, colWidths=col_widths, hAlign="CENTER")
+    t = Table(data, colWidths=col_widths)
     t.setStyle(_table_style_kv())
     return t
 
 
 def _grid_table(headers, rows, col_widths):
     data = [headers] + rows
-    t = Table(data, colWidths=col_widths, hAlign="CENTER")
+    t = Table(data, colWidths=col_widths)
     t.setStyle(_table_style_grid())
     return t
 
@@ -218,9 +218,7 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
         im = im.convert("RGB")
     im.save(buf, format="PNG")
     buf.seek(0)
-    img_flow = RLImage(buf, width=draw_w, height=draw_h)
-    img_flow.hAlign = "CENTER"
-    return img_flow
+    return RLImage(buf, width=draw_w, height=draw_h)
 
 
 
@@ -318,24 +316,9 @@ def _topo_set_para_exp(plan, exp):
 
 
 def _snapshot_bytes(snapshot):
-    """Extrae bytes desde stores de snapshot o imagen."""
     if isinstance(snapshot, dict):
-        data = snapshot.get("bytes")
-        if data:
-            return data
-    if isinstance(snapshot, (bytes, bytearray)):
-        return bytes(snapshot)
-    try:
-        if hasattr(snapshot, "getvalue"):
-            return snapshot.getvalue()
-    except Exception:
-        pass
+        return snapshot.get("bytes")
     return None
-
-
-def _image_entry_bytes(entry):
-    """Extrae bytes desde una entrada de imagen guardada en session_state."""
-    return _snapshot_bytes(entry)
 
 def _extraer_svg(svg_str):
     """Extrae solo el tag <svg>...</svg> si viene envuelto en HTML."""
@@ -556,17 +539,9 @@ def _seccion_adquisiciones(story, plan, sty):
 
         params_table = _kv_table(rows, sty=sty)
         snap_adq = _snapshot_bytes((plan.get("canvas_snapshots_adq_por_exp") or {}).get(exp.get("id")))
-        if not snap_adq:
-            limpio_adq = _topogramas_limpios_bytes(_topo_set_para_exp(plan, exp))
-            if limpio_adq:
-                snap_adq = _draw_adquisicion_fallback(
-                    limpio_adq,
-                    exp,
-                    color=_color_exploracion_pdf(exp.get("id"), exps),
-                )
         img_flow = _pil_bytes_to_flowable(snap_adq, max_w_mm=75, max_h_mm=75) if snap_adq else None
         if img_flow is not None:
-            fila = Table([[params_table, img_flow]], colWidths=(110 * mm, 60 * mm), hAlign="CENTER")
+            fila = Table([[params_table, img_flow]], colWidths=(110 * mm, 60 * mm))
             fila.setStyle(TableStyle([
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -628,14 +603,12 @@ def _seccion_reconstrucciones(story, plan, sty):
             img_flow = None
             if snap_rec:
                 img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=52, max_h_mm=52)
-            else:
-                img_bytes = _image_entry_bytes(img_data)
-                if img_bytes:
-                    img_bytes = _draw_recon_dfov_fallback(
-                        img_bytes,
-                        color=_color_exploracion_pdf(exp.get("id"), exps),
-                    )
-                    img_flow = _pil_bytes_to_flowable(img_bytes, max_w_mm=52, max_h_mm=52)
+            elif img_data and img_data.get("bytes"):
+                img_bytes = _draw_recon_dfov_fallback(
+                    img_data["bytes"],
+                    color=_color_exploracion_pdf(exp.get("id"), exps),
+                )
+                img_flow = _pil_bytes_to_flowable(img_bytes, max_w_mm=52, max_h_mm=52)
 
             # Topogramas de reconstrucción con su DFOV.
             topo_store = (plan.get("canvas_snapshots_recon_topos_por_id") or {}).get(rec_id, {})
@@ -671,7 +644,7 @@ def _seccion_reconstrucciones(story, plan, sty):
                 if len(topo_flows) == 1:
                     imagenes_col.append(topo_flows[0])
                 else:
-                    fila_topos = Table([topo_flows], colWidths=[45 * mm] * len(topo_flows), hAlign="CENTER")
+                    fila_topos = Table([topo_flows], colWidths=[45 * mm] * len(topo_flows))
                     fila_topos.setStyle(TableStyle([
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -684,7 +657,6 @@ def _seccion_reconstrucciones(story, plan, sty):
                 fila = Table(
                     [[params_table, imagenes_col]],
                     colWidths=(92 * mm, 78 * mm),
-                    hAlign="CENTER",
                 )
                 fila.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -762,17 +734,16 @@ def _seccion_reformaciones(story, plan, sty):
                         sub = snap_ref.get(key_img)
                     if not (isinstance(sub, dict) and sub.get("bytes")) and isinstance(ref_imgs, dict):
                         sub = ref_imgs.get(key_img)
-                    img_bytes = _image_entry_bytes(sub)
-                    if img_bytes:
-                        captured = isinstance(snap_ref, dict) and bool(_image_entry_bytes(snap_ref.get(key_img)))
+                    if isinstance(sub, dict) and sub.get("bytes"):
+                        img_bytes = sub["bytes"]
+                        captured = isinstance(snap_ref, dict) and isinstance(snap_ref.get(key_img), dict) and bool(snap_ref.get(key_img, {}).get("bytes"))
                         if not captured and isinstance(ref_imgs, dict):
                             try:
                                 idx_num = int(key_img.replace("img", ""))
                             except Exception:
                                 idx_num = 1
-                            overlay = ref_imgs.get(f"overlay{idx_num}") or {}
+                            overlay = dict(ref_imgs.get(f"overlay{idx_num}") or {})
                             if str(ref.get("tipo") or "").upper() == "VR":
-                                overlay = dict(overlay)
                                 overlay["overlay_mode"] = "radial"
                             img_bytes = _draw_reformacion_overlay_fallback(
                                 img_bytes,
@@ -790,7 +761,7 @@ def _seccion_reformaciones(story, plan, sty):
                     # Grid horizontal de hasta 3 imágenes
                     while len(flows) < 3:
                         flows.append("")
-                    fila = Table([flows], colWidths=(60 * mm, 60 * mm, 60 * mm), hAlign="CENTER")
+                    fila = Table([flows], colWidths=(60 * mm, 60 * mm, 60 * mm))
                     fila.setStyle(TableStyle([
                         ("VALIGN", (0, 0), (-1, -1), "TOP"),
                         ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -1018,14 +989,14 @@ def _overlay_ref_text_on_png(png_bytes, ref_state):
 
 
 
-def _hex_to_rgba(hex_color, alpha=255, default=(0, 210, 255, 255)):
+def _hex_to_rgba_pdf(hex_color, alpha=255, default=(0, 210, 255, 255)):
     try:
         h = str(hex_color or "").strip().lstrip("#")
         if len(h) == 3:
-            h = "".join([c * 2 for c in h])
+            h = "".join(c * 2 for c in h)
         if len(h) != 6:
             return default
-        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha)
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), int(alpha))
     except Exception:
         return default
 
@@ -1040,7 +1011,70 @@ def _color_exploracion_pdf(exp_id: str, exploraciones=None):
     return pal[idx % len(pal)]
 
 
+def _rgba_png_to_bytes(im_rgba):
+    if im_rgba.mode != "RGBA":
+        im_rgba = im_rgba.convert("RGBA")
+    # Importante: al convertir RGBA directo a RGB, PIL elimina alpha y deja colores sólidos.
+    # Componemos sobre la propia imagen/fondo para mantener rellenos translúcidos.
+    bg = PILImage.new("RGBA", im_rgba.size, (255, 255, 255, 255))
+    bg.alpha_composite(im_rgba)
+    out = io.BytesIO()
+    bg.convert("RGB").save(out, format="PNG")
+    return out.getvalue()
+
+
+def _draw_rect_alpha(draw, box, fill, outline, width):
+    draw.rectangle(box, fill=fill)
+    for i in range(max(1, int(width))):
+        draw.rectangle((box[0]-i, box[1]-i, box[2]+i, box[3]+i), outline=outline)
+
+
+def _draw_recon_dfov_fallback(img_bytes, color="#00D2FF"):
+    """Respaldo si el navegador no entregó el canvas: DFOV cuadrado translúcido."""
+    if not img_bytes:
+        return img_bytes
+    try:
+        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGBA")
+        draw = ImageDraw.Draw(im, "RGBA")
+        w, h = im.size
+        side = int(min(w, h) * 0.42)
+        x = int((w - side) / 2)
+        y = int((h - side) / 2)
+        line = _hex_to_rgba_pdf(color, 255)
+        fill = _hex_to_rgba_pdf(color, 36)
+        _draw_rect_alpha(draw, (x, y, x + side, y + side), fill, line, max(3, int(min(w, h) * 0.008)))
+        return _rgba_png_to_bytes(im)
+    except Exception:
+        return img_bytes
+
+
+def _draw_topo_dfov_fallback(img_bytes, color="#00D2FF"):
+    """Respaldo si el navegador no entregó los topogramas de reconstrucción: DFOV translúcido."""
+    if not img_bytes:
+        return img_bytes
+    try:
+        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGBA")
+        draw = ImageDraw.Draw(im, "RGBA")
+        w, h = im.size
+        line = _hex_to_rgba_pdf(color, 255)
+        fill = _hex_to_rgba_pdf(color, 28)
+        zonas = [(0, 0, w, h)]
+        if w > h * 1.05:
+            zonas = [(0, 0, w // 2, h), (w // 2, 0, w, h)]
+        for x0, y0, x1, y1 in zonas:
+            zw, zh = x1 - x0, y1 - y0
+            rx0 = x0 + int(zw * 0.20)
+            rx1 = x0 + int(zw * 0.80)
+            ry0 = y0 + int(zh * 0.18)
+            ry1 = y0 + int(zh * 0.78)
+            _draw_rect_alpha(draw, (rx0, ry0, rx1, ry1), fill, line, max(3, int(min(zw, zh) * 0.010)))
+        return _rgba_png_to_bytes(im)
+    except Exception:
+        return img_bytes
+
+
 def _draw_reformacion_overlay_fallback(img_bytes, overlay, acq_color="#00D2FF", rec_color="#FFFFFF"):
+    """Respaldo si no se capturó el canvas de reformación: rangos paralelos/radiales + referencias anatómicas."""
     if not img_bytes:
         return img_bytes
     overlay = overlay or {}
@@ -1049,11 +1083,12 @@ def _draw_reformacion_overlay_fallback(img_bytes, overlay, acq_color="#00D2FF", 
         draw = ImageDraw.Draw(im, "RGBA")
         w, h = im.size
         cx, cy = w / 2.0, h / 2.0
-        line_color = _hex_to_rgba(acq_color, 255)
-        ref_color = _hex_to_rgba(rec_color, 255, default=(255, 255, 255, 255))
+        line_color = _hex_to_rgba_pdf(acq_color, 255)
+        ref_color = _hex_to_rgba_pdf(rec_color, 255, default=(255, 255, 255, 255))
+
         if overlay.get("show_ranges"):
-            count = max(1, min(50, int(overlay.get("range_count") or 3)))
             import math
+            count = max(1, min(50, int(overlay.get("range_count") or 3)))
             theta0 = math.radians(float(overlay.get("angle_deg") or 0))
             width_line = max(3, int(min(w, h) * 0.008))
             mode = str(overlay.get("overlay_mode") or overlay.get("mode") or "parallel").lower()
@@ -1076,6 +1111,7 @@ def _draw_reformacion_overlay_fallback(img_bytes, overlay, acq_color="#00D2FF", 
                     off = (i - (count - 1) / 2.0) * spacing
                     mx, my = cx + nx * off, cy + ny * off
                     draw.line((mx - dx * length / 2, my - dy * length / 2, mx + dx * length / 2, my + dy * length / 2), fill=line_color, width=width_line)
+
         if overlay.get("show_refs"):
             refs = overlay.get("refs") or []
             try:
@@ -1096,80 +1132,52 @@ def _draw_reformacion_overlay_fallback(img_bytes, overlay, acq_color="#00D2FF", 
                 ty = float(ref.get("ty", 0.15) or 0.15) * h
                 draw.line((ax, ay, tx, ty), fill=ref_color, width=max(2, int(min(w, h) * 0.006)))
                 r = max(10, int(min(w, h) * 0.028))
-                draw.ellipse((ax - r, ay - r, ax + r, ay + r), fill=ref_color)
+                draw.ellipse((ax-r, ay-r, ax+r, ay+r), fill=ref_color)
                 nb = draw.textbbox((0, 0), str(idx), font=font_num)
-                draw.text((ax - (nb[2]-nb[0]) / 2, ay - (nb[3]-nb[1]) / 2 - 1), str(idx), font=font_num, fill=(0, 0, 0, 255))
+                draw.text((ax - (nb[2]-nb[0])/2, ay - (nb[3]-nb[1])/2 - 1), str(idx), font=font_num, fill=(0,0,0,255))
                 bbox = draw.textbbox((0, 0), text, font=font)
-                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                pad_x, pad_y = max(8, int(w * 0.012)), max(5, int(h * 0.008))
-                box_w = min(tw + 2 * pad_x, max(80, w - 8))
-                box_h = th + 2 * pad_y
+                tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+                pad_x, pad_y = max(8, int(w*0.012)), max(5, int(h*0.008))
+                box_w = min(tw + 2*pad_x, max(80, w - 8))
+                box_h = th + 2*pad_y
                 bx = max(4, min(int(tx), w - box_w - 4))
                 by = max(4, min(int(ty), h - box_h - 4))
                 try:
-                    draw.rounded_rectangle((bx, by, bx + box_w, by + box_h), radius=8, fill=(0, 0, 0, 185), outline=ref_color, width=2)
+                    draw.rounded_rectangle((bx, by, bx+box_w, by+box_h), radius=8, fill=(0,0,0,185), outline=ref_color, width=2)
                 except Exception:
-                    draw.rectangle((bx, by, bx + box_w, by + box_h), fill=(0, 0, 0, 185), outline=ref_color)
-                draw.text((bx + pad_x, by + pad_y - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
-        out = io.BytesIO()
-        im.convert("RGB").save(out, format="PNG")
-        return out.getvalue()
+                    draw.rectangle((bx, by, bx+box_w, by+box_h), fill=(0,0,0,185), outline=ref_color)
+                draw.text((bx + pad_x, by + pad_y - bbox[1]), text, font=font, fill=(255,255,255,255))
+        return _rgba_png_to_bytes(im)
     except Exception:
         return img_bytes
 
 
-
-def _draw_recon_dfov_fallback(img_bytes, color="#00D2FF"):
-    """Dibuja un DFOV cuadrado sobre la imagen de reconstrucción si no hubo captura del canvas."""
-    if not img_bytes:
-        return img_bytes
-    try:
-        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGBA")
-        draw = ImageDraw.Draw(im, "RGBA")
-        w, h = im.size
-        side = int(min(w, h) * 0.42)
-        x = int((w - side) / 2)
-        y = int((h - side) / 2)
-        line = _hex_to_rgba(color, 255)
-        fill = _hex_to_rgba(color, 36)
-        draw.rectangle((x, y, x + side, y + side), fill=fill, outline=line, width=max(3, int(min(w, h) * 0.008)))
-        out = io.BytesIO()
-        im.convert("RGB").save(out, format="PNG")
-        return out.getvalue()
-    except Exception:
-        return img_bytes
+def _items_for_group_or_prefix(all_snaps: dict, group_key: str):
+    items = items_for_group(all_snaps, group_key)
+    if items:
+        return items, group_key
+    prefix = "planitc_snapshot_" + group_key
+    found = []
+    for key, data_bytes in (all_snaps or {}).items():
+        if str(key).startswith(prefix):
+            suffix = str(key)[len(prefix):].lstrip("_") or "0"
+            found.append({"item": suffix, "bytes": data_bytes})
+    found.sort(key=lambda x: str(x.get("item", "")))
+    return found, group_key if found else None
 
 
-def _draw_topo_dfov_fallback(img_bytes, color="#00D2FF"):
-    """Dibuja un rectángulo DFOV simple sobre topograma(s) si no hubo captura del canvas."""
-    if not img_bytes:
-        return img_bytes
-    try:
-        im = PILImage.open(io.BytesIO(img_bytes)).convert("RGBA")
-        draw = ImageDraw.Draw(im, "RGBA")
-        w, h = im.size
-        line = _hex_to_rgba(color, 255)
-        fill = _hex_to_rgba(color, 32)
-        zonas = [(0, 0, w, h)]
-        if w > h * 1.05:
-            zonas = [(0, 0, w // 2, h), (w // 2, 0, w, h)]
-        for x0, y0, x1, y1 in zonas:
-            zw, zh = x1 - x0, y1 - y0
-            rx0 = x0 + int(zw * 0.18)
-            rx1 = x0 + int(zw * 0.82)
-            ry0 = y0 + int(zh * 0.18)
-            ry1 = y0 + int(zh * 0.78)
-            draw.rectangle((rx0, ry0, rx1, ry1), fill=fill, outline=line, width=max(3, int(min(zw, zh) * 0.010)))
-        out = io.BytesIO()
-        im.convert("RGB").save(out, format="PNG")
-        return out.getvalue()
-    except Exception:
-        return img_bytes
+def _first_ref_state_for_group(all_ref_states: dict, group_key: str):
+    if not isinstance(all_ref_states, dict) or not group_key:
+        return None
+    direct = all_ref_states.get("planitc_ref_" + group_key)
+    if direct:
+        return direct
+    prefix = "planitc_ref_" + group_key
+    for key, val in all_ref_states.items():
+        if str(key).startswith(prefix):
+            return val
+    return None
 
-
-def _draw_adquisicion_fallback(topo_bytes, exp, color="#00D2FF"):
-    """Imagen de respaldo para adquisición cuando no existe snapshot del canvas."""
-    return _draw_topo_dfov_fallback(topo_bytes, color=color)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Auto-captura de canvas al generar el PDF
@@ -1242,16 +1250,7 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
             #   recon_topo_rect_{rec_id}_topo2
             topo_snaps = {}
             for topo_key in ("topo1", "topo2"):
-                candidate_topo_groups = [
-                    f"recon_topo_rect_{rec_id}_{topo_key}",
-                    f"recon_topo_{rec_id}_{topo_key}",
-                    f"{rec_id}_{topo_key}",
-                ]
-                topo_items = []
-                for g in candidate_topo_groups:
-                    topo_items = items_for_group(all_snaps, g)
-                    if topo_items:
-                        break
+                topo_items = items_for_group(all_snaps, f"recon_topo_rect_{rec_id}_{topo_key}")
                 if topo_items:
                     combinado_topo = combine_png_bytes(topo_items)
                     if combinado_topo:
@@ -1278,20 +1277,15 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
                 if not img_data or not img_data.get("bytes"):
                     continue
                 sig = img_data.get("sig") or hashlib.md5(img_data["bytes"]).hexdigest()[:10]
-                # Compatibilidad: versiones de reformaciones.py han usado
-                # storage_key con y sin firma de imagen.
                 candidate_groups = [f"{ref_id}_img{img_idx}_{sig}", f"{ref_id}_img{img_idx}"]
                 items = []
                 used_group_key = None
                 for group_key in candidate_groups:
-                    items = items_for_group(all_snaps, group_key)
+                    items, used_group_key = _items_for_group_or_prefix(all_snaps, group_key)
                     if items:
-                        used_group_key = group_key
                         break
                 if items:
-                    ref_state = None
-                    if isinstance(all_ref_states, dict) and used_group_key:
-                        ref_state = all_ref_states.get(f"planitc_ref_{used_group_key}")
+                    ref_state = _first_ref_state_for_group(all_ref_states, used_group_key)
                     png_bytes = _overlay_ref_text_on_png(items[0]["bytes"], ref_state)
                     snaps[f"img{img_idx}"] = {"bytes": png_bytes}
             if snaps:
