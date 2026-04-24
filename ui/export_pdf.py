@@ -958,14 +958,36 @@ def render_export_pdf():
         st.rerun()
 
     # Paso 2: si hay captura pendiente, pedimos el bulk de snapshots. Si aún
-    # no llegaron del navegador, mostramos un mensaje y esperamos el próximo
-    # rerun (que dispara streamlit_js_eval cuando el JS termina).
+    # no llegaron del navegador, mostramos un mensaje con botón de escape
+    # para que el usuario no quede bloqueado si streamlit_js_eval no responde.
     if st.session_state.get("_pdf_capture_pending") and exportacion_habilitada:
         nonce = st.session_state.get("_pdf_capture_nonce", 0)
         all_snaps = capture_all_snapshots_raw(js_key=f"pdf_snaps_{nonce}")
 
         if all_snaps is None:
-            st.info("📸 Capturando canvas de las imágenes… un momento.")
+            col_wait, col_skip = st.columns([3, 1], gap="small")
+            with col_wait:
+                st.info(
+                    "📸 Capturando canvas de las imágenes… Si no avanza en "
+                    "2-3 segundos, usa **Generar sin canvas** para continuar."
+                )
+            with col_skip:
+                if st.button(
+                    "Generar sin canvas",
+                    key="btn_skip_canvas_capture",
+                    use_container_width=True,
+                    help="Genera el PDF con los parámetros e imágenes base, omitiendo los dibujos sobre los canvas.",
+                ):
+                    with st.spinner("Generando PDF sin canvas…"):
+                        try:
+                            st.session_state["_pdf_bytes"] = construir_pdf()
+                            st.session_state["_pdf_generado_en"] = datetime.now()
+                            st.session_state["_pdf_capture_conteo"] = {}
+                        except Exception as e:
+                            st.session_state["_pdf_bytes"] = None
+                            st.error(f"No se pudo generar el PDF: {e}")
+                    st.session_state["_pdf_capture_pending"] = False
+                    st.rerun()
         else:
             # Paso 3: snapshots listos. Los distribuimos en los stores y
             # construimos el PDF.
