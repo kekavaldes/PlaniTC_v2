@@ -436,8 +436,8 @@ def render_topogramas_independientes_interactivos(
           <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
           <button type="button" onclick="downloadCanvasInd({i}, {json.dumps(titulo)})"
-            style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
-          <div style="margin-top:6px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
+            style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
+          <div style="margin-top:8px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
         </div>
         ''')
@@ -1801,7 +1801,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 st.components.v1.html(html_topo2, height=405)
             with c3:
                 st.components.v1.html(html_roi_corte, height=430)
-            _render_boton_snapshot_adquisicion(exp, [f"{exp['id']}_topo1", f"{exp['id']}_topo2", f"{exp['id']}_roi_corte"])
+            # _render_boton_snapshot_adquisicion ya no es necesario (subida manual en pestaña Exportar)
         elif html_roi_corte:
             c1, c2 = st.columns([1.0, 2.0], gap="medium")
             with c1:
@@ -1818,7 +1818,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
             with c2:
                 st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
-            _render_boton_snapshot_adquisicion(exp, [exp['id'], f"{exp['id']}_roi_corte"])
+            # _render_boton_snapshot_adquisicion ya no necesario
         else:
             html = render_topogramas_independientes_interactivos(
                 topos,
@@ -1831,7 +1831,7 @@ def _render_topogramas_adq(exp, es_bolus):
             )
             if html:
                 st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
-                _render_boton_snapshot_adquisicion(exp, [exp['id']])
+                # _render_boton_snapshot_adquisicion ya no necesario
         return
 
     html = render_topogramas_independientes_interactivos(
@@ -1844,7 +1844,7 @@ def _render_topogramas_adq(exp, es_bolus):
     if html:
         alto = 430 if len(topos) > 1 else 470
         st.components.v1.html(html, height=alto)
-        _render_boton_snapshot_adquisicion(exp, [exp['id']])
+        # _render_boton_snapshot_adquisicion ya no necesario
 
 
 # ═══════════════════════════════════════════════════════════════════════════
