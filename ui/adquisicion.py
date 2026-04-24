@@ -476,6 +476,8 @@ def render_topogramas_independientes_interactivos(
 <script>
 // Función global de descarga - VERSION SIMPLE PARA DEBUG
 function downloadCanvasInd(idx, title, expNombre) {{
+  console.log('downloadCanvasInd llamado con:', {{ idx: idx, title: title, expNombre: expNombre }});
+  
   var canvas = document.getElementById('topoCanvasInd' + idx);
   if (!canvas) {{
     alert('Canvas no encontrado');
@@ -499,6 +501,8 @@ function downloadCanvasInd(idx, title, expNombre) {{
   
   // Fallback si no hay nada
   var filename = parts.length > 0 ? parts.join('_') : 'topograma_' + idx;
+  
+  console.log('Nombre de archivo generado:', filename);
   
   var a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');
