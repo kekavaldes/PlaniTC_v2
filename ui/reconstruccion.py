@@ -362,8 +362,79 @@ def render_canvas_recon_cuadrado(
   }}
   window.downloadReconCanvas = downloadReconCanvas;
 
+
+
+  // Persistencia robusta: en Safari/Streamlit a veces localStorage del iframe
+  // se pierde o queda aislado. Por eso usamos varias capas.
+  function _wnRead() {{
+    try {{
+      if (!window.name || window.name.indexOf('PLANITC_STORE::') !== 0) return {{}};
+      return JSON.parse(window.name.substring('PLANITC_STORE::'.length)) || {{}};
+    }} catch(e) {{ return {{}}; }}
+  }}
+
+  function _wnWrite(obj) {{
+    try {{ window.name = 'PLANITC_STORE::' + JSON.stringify(obj || {{}}); }} catch(e) {{}}
+  }}
+
+  function _cookieGet(key) {{
+    try {{
+      var name = encodeURIComponent(key) + '=';
+      var parts = document.cookie ? document.cookie.split(';') : [];
+      for (var i = 0; i < parts.length; i++) {{
+        var c = parts[i].trim();
+        if (c.indexOf(name) === 0) return decodeURIComponent(c.substring(name.length));
+      }}
+    }} catch(e) {{}}
+    return null;
+  }}
+
+  function _cookieSet(key, value) {{
+    try {{
+      document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; path=/; max-age=86400; SameSite=Lax';
+    }} catch(e) {{}}
+  }}
+
+  function lsGet(key) {{
+    var v = null;
+    try {{ v = window.localStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
+    try {{ v = window.sessionStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        v = window.parent.localStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }}
+    }} catch (e) {{}}
+    try {{
+      if (window.top && window.top !== window && window.top.localStorage) {{
+        v = window.top.localStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }}
+    }} catch (e) {{}}
+    try {{ var store = _wnRead(); if (store && store[key]) return store[key]; }} catch(e) {{}}
+    v = _cookieGet(key);
+    return (v !== null && v !== undefined) ? v : null;
+  }}
+
+  function lsSet(key, value) {{
+    try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+    try {{ window.sessionStorage.setItem(key, value); }} catch (e) {{}}
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        window.parent.localStorage.setItem(key, value);
+      }}
+    }} catch (e) {{}}
+    try {{
+      if (window.top && window.top !== window && window.top.localStorage) {{
+        window.top.localStorage.setItem(key, value);
+      }}
+    }} catch (e) {{}}
+    try {{ var store = _wnRead(); store[key] = value; _wnWrite(store); }} catch(e) {{}}
+    _cookieSet(key, value);
+  }}
+
   try {{
-    var saved = localStorage.getItem(storageKey);
+    var saved = lsGet(storageKey);
     if (saved) {{
       var parsed = JSON.parse(saved);
       if (parsed && parsed.square) square = parsed.square;
@@ -372,8 +443,8 @@ def render_canvas_recon_cuadrado(
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{ square: square }}));
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+      lsSet(storageKey, JSON.stringify({{ square: square }}));
+      lsSet(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
@@ -772,8 +843,79 @@ def render_canvas_topo_dfov_rect(
   }}
   window.downloadReconCanvas = downloadReconCanvas;
 
+
+
+  // Persistencia robusta: en Safari/Streamlit a veces localStorage del iframe
+  // se pierde o queda aislado. Por eso usamos varias capas.
+  function _wnRead() {{
+    try {{
+      if (!window.name || window.name.indexOf('PLANITC_STORE::') !== 0) return {{}};
+      return JSON.parse(window.name.substring('PLANITC_STORE::'.length)) || {{}};
+    }} catch(e) {{ return {{}}; }}
+  }}
+
+  function _wnWrite(obj) {{
+    try {{ window.name = 'PLANITC_STORE::' + JSON.stringify(obj || {{}}); }} catch(e) {{}}
+  }}
+
+  function _cookieGet(key) {{
+    try {{
+      var name = encodeURIComponent(key) + '=';
+      var parts = document.cookie ? document.cookie.split(';') : [];
+      for (var i = 0; i < parts.length; i++) {{
+        var c = parts[i].trim();
+        if (c.indexOf(name) === 0) return decodeURIComponent(c.substring(name.length));
+      }}
+    }} catch(e) {{}}
+    return null;
+  }}
+
+  function _cookieSet(key, value) {{
+    try {{
+      document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; path=/; max-age=86400; SameSite=Lax';
+    }} catch(e) {{}}
+  }}
+
+  function lsGet(key) {{
+    var v = null;
+    try {{ v = window.localStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
+    try {{ v = window.sessionStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        v = window.parent.localStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }}
+    }} catch (e) {{}}
+    try {{
+      if (window.top && window.top !== window && window.top.localStorage) {{
+        v = window.top.localStorage.getItem(key);
+        if (v !== null && v !== undefined) return v;
+      }}
+    }} catch (e) {{}}
+    try {{ var store = _wnRead(); if (store && store[key]) return store[key]; }} catch(e) {{}}
+    v = _cookieGet(key);
+    return (v !== null && v !== undefined) ? v : null;
+  }}
+
+  function lsSet(key, value) {{
+    try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+    try {{ window.sessionStorage.setItem(key, value); }} catch (e) {{}}
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        window.parent.localStorage.setItem(key, value);
+      }}
+    }} catch (e) {{}}
+    try {{
+      if (window.top && window.top !== window && window.top.localStorage) {{
+        window.top.localStorage.setItem(key, value);
+      }}
+    }} catch (e) {{}}
+    try {{ var store = _wnRead(); store[key] = value; _wnWrite(store); }} catch(e) {{}}
+    _cookieSet(key, value);
+  }}
+
   try {{
-    var saved = localStorage.getItem(storageKey);
+    var saved = lsGet(storageKey);
     if (saved) {{
       var parsed = JSON.parse(saved);
       if (parsed && parsed.rect) rect = parsed.rect;
@@ -782,8 +924,8 @@ def render_canvas_topo_dfov_rect(
 
   function saveState() {{
     try {{
-      localStorage.setItem(storageKey, JSON.stringify({{ rect: rect }}));
-      localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+      lsSet(storageKey, JSON.stringify({{ rect: rect }}));
+      lsSet(snapshotKey, canvas.toDataURL('image/png'));
     }} catch (e) {{}}
   }}
 
