@@ -851,6 +851,47 @@ def _ingest_canvas_snapshots(all_snaps: dict) -> dict:
     return conteo
 
 
+def _contar_canvas_snapshots_guardados() -> int:
+    """Cuenta snapshots ya distribuidos en st.session_state."""
+    total = 0
+    total += len(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {})
+    total += len(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {})
+    total += len(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {})
+
+    refs = st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}
+    for value in refs.values():
+        if isinstance(value, dict):
+            total += len(value)
+        elif value:
+            total += 1
+    return total
+
+
+def _finalizar_captura_y_generar_pdf(js_key: str) -> bool:
+    """Lee los snapshots persistidos en el navegador, los guarda en session_state
+    y genera el PDF. Retorna True si terminó; False si el navegador aún no responde.
+    """
+    all_snaps = capture_all_snapshots_raw(js_key=js_key)
+    if all_snaps is None:
+        st.info("Capturando los canvas guardados antes de generar el PDF...")
+        return False
+
+    conteo = _ingest_canvas_snapshots(all_snaps or {})
+    st.session_state["_pdf_ultimo_conteo_snapshots"] = conteo
+    st.session_state["_pdf_ultimo_total_raw_snapshots"] = len(all_snaps or {})
+
+    try:
+        st.session_state["_pdf_bytes"] = construir_pdf()
+        st.session_state["_pdf_generado_en"] = datetime.now()
+        st.session_state["_pdf_error"] = None
+    except Exception as e:
+        st.session_state["_pdf_bytes"] = None
+        st.session_state["_pdf_error"] = str(e)
+
+    st.session_state.pop("_pdf_capture_js_key", None)
+    return True
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # UI
 # ──────────────────────────────────────────────────────────────────────────
@@ -937,15 +978,22 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
+    # ── Captura automática pendiente desde el navegador ───────────────────────
+    pending_js_key = st.session_state.get("_pdf_capture_js_key")
+    if pending_js_key and exportacion_habilitada:
+        terminado = _finalizar_captura_y_generar_pdf(pending_js_key)
+        if not terminado:
+            st.stop()
+        st.rerun()
+
     # ══════════════════════════════════════════════════════════════════════════
     # SUBIDA DE SNAPSHOTS DE CANVAS (OPCIONAL)
     # ══════════════════════════════════════════════════════════════════════════
     st.markdown("---")
     _panel_header("📸", "Snapshots de Canvas (opcional)")
     st.caption(
-        "Sube los PNG que descargaste de cada canvas (usando el botón **Descargar PNG**) "
-        "para incluir tus anotaciones en el PDF. Si no subes nada, el PDF incluirá "
-        "las imágenes base sin dibujos."
+        "El PDF intentará tomar automáticamente los canvas persistidos del navegador. "
+        "Los uploaders quedan como respaldo por si algún navegador bloquea la captura automática."
     )
 
     # Contadores para mostrar resumen
@@ -1068,7 +1116,7 @@ def render_export_pdf():
         else:
             st.caption(f"💡 Puedes subir hasta {total_possible} canvas (los expanders de arriba tienen los uploaders)")
 
-    st.caption("Al generar el PDF, se incluirán los snapshots que hayas subido. El botón **Guardar para PDF** de cada pestaña ya no es necesario.")
+    st.caption("Al generar el PDF, primero se leerán los canvas persistidos automáticamente. Si subiste PNG manualmente, esos también se mantienen como respaldo.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -1082,14 +1130,15 @@ def render_export_pdf():
 
     # ── Generación del PDF ─────────────────────────────────────────────────────
     if generar and exportacion_habilitada:
-        with st.spinner("Generando PDF..."):
-            try:
-                st.session_state["_pdf_bytes"] = construir_pdf()
-                st.session_state["_pdf_generado_en"] = datetime.now()
-            except Exception as e:
-                st.session_state["_pdf_bytes"] = None
-                st.error(f"No se pudo generar el PDF: {e}")
+        # Dos pasos: primero se fuerza una lectura JS del navegador; en el rerun
+        # siguiente se ingieren los snapshots y recién ahí se arma el PDF.
+        st.session_state["_pdf_bytes"] = None
+        st.session_state["_pdf_error"] = None
+        st.session_state["_pdf_capture_js_key"] = f"pdf_snaps_{time.time_ns()}"
         st.rerun()
+
+    if st.session_state.get("_pdf_error"):
+        st.error(f"No se pudo generar el PDF: {st.session_state.get('_pdf_error')}")
 
     pdf_bytes = st.session_state.get("_pdf_bytes")
     if pdf_bytes and exportacion_habilitada:
@@ -1138,15 +1187,15 @@ def render_export_pdf():
 
         generado_en = st.session_state.get("_pdf_generado_en")
         if generado_en:
-            # Contar snapshots subidos manualmente
-            snap_count = 0
-            snap_count += len(st.session_state.get("canvas_snapshots_topo_por_set", {}))
-            snap_count += len(st.session_state.get("canvas_snapshots_recon_por_id", {}))
-            snap_count += len(st.session_state.get("canvas_snapshots_ref_por_id", {}))
-            
+            # Contar snapshots incluidos, tanto automáticos como manuales.
+            snap_count = _contar_canvas_snapshots_guardados()
+            raw_count = st.session_state.get("_pdf_ultimo_total_raw_snapshots", 0)
+
             detalle = ""
             if snap_count > 0:
                 detalle = f" — {snap_count} snapshot(s) de canvas incluidos"
+            elif raw_count == 0:
+                detalle = " — sin snapshots de canvas detectados"
             
             st.caption(
                 f"✅ PDF generado: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
