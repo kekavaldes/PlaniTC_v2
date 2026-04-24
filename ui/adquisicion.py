@@ -1796,9 +1796,9 @@ def _render_topogramas_adq(exp, es_bolus):
         if len(topos) >= 2 and html_topo1 and html_topo2 and html_roi_corte:
             c1, c2, c3 = st.columns([0.86, 0.86, 2.08], gap="medium")
             with c1:
-                st.components.v1.html(html_topo1, height=405)
+                st.components.v1.html(html_topo1, height=470)
             with c2:
-                st.components.v1.html(html_topo2, height=405)
+                st.components.v1.html(html_topo2, height=470)
             with c3:
                 st.components.v1.html(html_roi_corte, height=430)
             # _render_boton_snapshot_adquisicion ya no es necesario (subida manual en pestaña Exportar)
@@ -1815,7 +1815,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=290 if len(topos) > 1 else 340,
                 )
                 if html_topos:
-                    st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
+                    st.components.v1.html(html_topos, height=500 if len(topos) > 1 else 560)
             with c2:
                 st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
             # _render_boton_snapshot_adquisicion ya no necesario
@@ -1830,7 +1830,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 canvas_css_height=290 if len(topos) > 1 else None,
             )
             if html:
-                st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
+                st.components.v1.html(html, height=500 if len(topos) > 1 else 560)
                 # _render_boton_snapshot_adquisicion ya no necesario
         return
 
@@ -1842,7 +1842,8 @@ def _render_topogramas_adq(exp, es_bolus):
         show_labels=False,
     )
     if html:
-        alto = 430 if len(topos) > 1 else 470
+        # Height aumentado para que quepa el botón "Descargar PNG" debajo del canvas
+        alto = 500 if len(topos) > 1 else 560
         st.components.v1.html(html, height=alto)
         # _render_boton_snapshot_adquisicion ya no necesario
 
