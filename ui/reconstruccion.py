@@ -299,7 +299,7 @@ def render_canvas_recon_cuadrado(
   <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
   <button type="button" onclick="downloadReconCanvas()"
-    style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
+    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -701,6 +701,8 @@ def render_canvas_topo_dfov_rect(
   </div>
   <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
+  <button type="button" onclick="downloadReconCanvas()"
+    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -1434,7 +1436,7 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         canvas_height=780,
     )
     if html_topo:
-        components.html(html_topo, height=410, scrolling=False)
+        components.html(html_topo, height=480, scrolling=False)
     else:
         st.image(img_pil, width=260)
 
@@ -1627,9 +1629,9 @@ def _render_panel_central(adquisiciones_validas):
                     canvas_height=760,
                 )
                 if html_canvas:
-                    components.html(html_canvas, height=430, scrolling=False)
-                    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo el canvas.")
-                    _render_boton_snapshot_reconstruccion(rec_actual["id"])
+                    components.html(html_canvas, height=500, scrolling=False)
+                    # Mensaje ya no necesario - botón Descargar PNG está visible bajo cada canvas
+                    # _render_boton_snapshot_reconstruccion ya no necesario (subida manual en Exportar)
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
             except Exception as e:
