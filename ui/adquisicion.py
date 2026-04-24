@@ -436,7 +436,7 @@ def render_topogramas_independientes_interactivos(
           <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
           <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-          <button type="button" onclick="downloadCanvasInd({i}, {json.dumps(titulo)}, {json.dumps(exp_nombre)})"
+          <button type="button" onclick='downloadCanvasInd({i}, {json.dumps(titulo)}, {json.dumps(exp_nombre)})'
             style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
           <div style="margin-top:8px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
