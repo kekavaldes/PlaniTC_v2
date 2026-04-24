@@ -1106,6 +1106,35 @@ def render_export_pdf():
                 mime="application/pdf",
                 use_container_width=True,
             )
+        
+        # Botón para finalizar examen y limpiar todo
+        if st.button(
+            "🏁 Finalizar Examen",
+            use_container_width=True,
+            type="secondary",
+            help="Limpia todos los datos del protocolo actual para comenzar un nuevo examen"
+        ):
+            # Confirmar antes de limpiar
+            st.session_state["_confirmar_finalizar"] = True
+            st.rerun()
+        
+        # Modal de confirmación
+        if st.session_state.get("_confirmar_finalizar"):
+            st.warning("⚠️ **¿Estás seguro?** Esto borrará TODOS los datos del protocolo actual (topogramas, exploraciones, reconstrucciones, reformaciones).")
+            col_si, col_no = st.columns(2)
+            with col_si:
+                if st.button("✅ Sí, finalizar examen", use_container_width=True, type="primary"):
+                    # Limpiar todo el session_state excepto las configuraciones del usuario
+                    keys_to_keep = {"nombre_alumno", "alumnos_participantes"}
+                    keys_to_delete = [k for k in st.session_state.keys() if k not in keys_to_keep]
+                    for key in keys_to_delete:
+                        del st.session_state[key]
+                    st.success("✅ Examen finalizado. Todos los datos han sido eliminados.")
+                    st.rerun()
+            with col_no:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    del st.session_state["_confirmar_finalizar"]
+                    st.rerun()
 
         generado_en = st.session_state.get("_pdf_generado_en")
         if generado_en:
