@@ -675,6 +675,7 @@ def _overlay_canvas_html(
       if (parsed && typeof parsed.rangeCount === 'number') state.rangeCount = clamp(Math.round(parsed.rangeCount), MIN_RANGES, MAX_RANGES);
       if (parsed && typeof parsed.angleDeg === 'number') state.angleDeg = parsed.angleDeg;
       if (parsed && typeof parsed.lineLen === 'number') state.lineLen = clamp(parsed.lineLen, MIN_LINE_LEN, MAX_LINE_LEN);
+      if (parsed && typeof parsed.showRanges === 'boolean') showRanges = parsed.showRanges;
     }}
   }} catch(e) {{}}
 
@@ -783,7 +784,8 @@ def _overlay_canvas_html(
         linesOffset: state.linesOffset,
         rangeCount: state.rangeCount,
         angleDeg: state.angleDeg,
-        lineLen: state.lineLen
+        lineLen: state.lineLen,
+        showRanges: showRanges
       }}));
       lsSet(snapshotKey, canvas.toDataURL('image/png'));
     }} catch(e) {{}}
