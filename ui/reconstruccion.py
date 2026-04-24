@@ -1426,7 +1426,7 @@ def _get_topogramas_de_adquisicion(exp, rec_actual):
 
 
 
-def _render_topograma_en_columna(exp, rec_actual, topo_data):
+def _render_topograma_en_columna(exp, rec_actual, topo_data, exp_nombre=None, rec_nombre=None):
     """Renderiza un topograma individual dentro de una columna."""
     if topo_data.get("error"):
         st.warning(topo_data["error"])
@@ -1454,8 +1454,8 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         canvas_css_height=390,
         canvas_width=560,
         canvas_height=780,
-        exp_nombre=nombre_exp_limpio,
-        rec_nombre=rec_nombre_limpio,
+        exp_nombre=exp_nombre,
+        rec_nombre=rec_nombre,
     )
     if html_topo:
         components.html(html_topo, height=540, scrolling=False)
@@ -1668,7 +1668,7 @@ def _render_panel_central(adquisiciones_validas):
         if next_col_idx >= len(fila_cols):
             break
         with fila_cols[next_col_idx]:
-            _render_topograma_en_columna(exp_activa, rec_actual, topo_data)
+            _render_topograma_en_columna(exp_activa, rec_actual, topo_data, nombre_exp_limpio, rec_nombre_limpio)
         next_col_idx += 1
 
     if not topogramas_data:
