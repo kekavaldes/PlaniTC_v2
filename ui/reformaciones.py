@@ -756,6 +756,50 @@ def _overlay_canvas_html(
   }}
   window.downloadRefCanvas_{storage_key} = downloadRefCanvas_{storage_key};
 
+  function buildSnapshotDataUrl() {{
+    // El canvas principal no incluye los inputs HTML de referencia anatómica.
+    // Para el PDF generamos una imagen temporal que mezcla canvas + textos.
+    try {{
+      var tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      var tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(canvas, 0, 0);
+
+      tempCtx.font = 'bold 24px Arial';
+      tempCtx.textBaseline = 'middle';
+      tempCtx.textAlign = 'left';
+      var padX = 10;
+      var boxH = 34;
+
+      for (var i = 0; i < 3; i++) {{
+        var ref = state.refs[i];
+        if (!ref || !ref.enabled) continue;
+
+        var input = labelInputs && labelInputs[i] ? labelInputs[i] : null;
+        var text = input ? input.value.trim() : String(ref.text || '').trim();
+        ref.text = text;
+        if (!text) continue;
+
+        var tp = normToPx(ref.tx, ref.ty);
+        var textW = tempCtx.measureText(text).width;
+        var x = clamp(tp.x + 34, 4, W - textW - padX * 2 - 4);
+        var y = clamp(tp.y + 15, boxH / 2 + 4, H - boxH / 2 - 4);
+
+        tempCtx.fillStyle = 'rgba(0,0,0,0.72)';
+        tempCtx.fillRect(x - padX, y - boxH / 2, textW + padX * 2, boxH);
+        tempCtx.strokeStyle = recColor;
+        tempCtx.lineWidth = 2;
+        tempCtx.strokeRect(x - padX, y - boxH / 2, textW + padX * 2, boxH);
+        tempCtx.fillStyle = recColor;
+        tempCtx.fillText(text, x, y + 1);
+      }}
+      return tempCanvas.toDataURL('image/png');
+    }} catch(e) {{
+      return canvas.toDataURL('image/png');
+    }}
+  }}
+
   function saveState() {{
     try {{
       lsSet(storageKey, JSON.stringify({{
@@ -766,7 +810,7 @@ def _overlay_canvas_html(
         lineLen: state.lineLen,
         showRanges: showRanges
       }}));
-      lsSet(snapshotKey, canvas.toDataURL('image/png'));
+      lsSet(snapshotKey, buildSnapshotDataUrl());
     }} catch(e) {{}}
   }}
 
