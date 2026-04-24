@@ -543,23 +543,76 @@ function downloadCanvasInd(idx, title, expNombre) {{
     var storageKey = baseStorageKey ? ('planitc_' + baseStorageKey + '_' + modo + '_' + idx) : '';
     var snapshotKey = baseStorageKey ? ('planitc_snapshot_' + baseStorageKey + '_' + idx) : '';
 
+    // Persistencia robusta: en Safari/Streamlit a veces localStorage del iframe
+    // se pierde o queda aislado. Por eso usamos varias capas:
+    // 1) localStorage del iframe, 2) localStorage del padre/top si está permitido,
+    // 3) sessionStorage, 4) window.name como memoria del iframe entre rerenders,
+    // 5) cookies como último respaldo.
+    function _wnRead() {{
+      try {{
+        if (!window.name || window.name.indexOf('PLANITC_STORE::') !== 0) return {{}};
+        return JSON.parse(window.name.substring('PLANITC_STORE::'.length)) || {{}};
+      }} catch(e) {{ return {{}}; }}
+    }}
+
+    function _wnWrite(obj) {{
+      try {{ window.name = 'PLANITC_STORE::' + JSON.stringify(obj || {{}}); }} catch(e) {{}}
+    }}
+
+    function _cookieGet(key) {{
+      try {{
+        var name = encodeURIComponent(key) + '=';
+        var parts = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < parts.length; i++) {{
+          var c = parts[i].trim();
+          if (c.indexOf(name) === 0) return decodeURIComponent(c.substring(name.length));
+        }}
+      }} catch(e) {{}}
+      return null;
+    }}
+
+    function _cookieSet(key, value) {{
+      try {{
+        document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; path=/; max-age=86400; SameSite=Lax';
+      }} catch(e) {{}}
+    }}
+
     function lsGet(key) {{
+      var v = null;
+      try {{ v = window.localStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
+      try {{ v = window.sessionStorage.getItem(key); if (v !== null && v !== undefined) return v; }} catch (e) {{}}
       try {{
         if (window.parent && window.parent !== window && window.parent.localStorage) {{
-          var pv = window.parent.localStorage.getItem(key);
-          if (pv !== null && pv !== undefined) return pv;
+          v = window.parent.localStorage.getItem(key);
+          if (v !== null && v !== undefined) return v;
         }}
       }} catch (e) {{}}
-      try {{ return window.localStorage.getItem(key); }} catch (e) {{ return null; }}
+      try {{
+        if (window.top && window.top !== window && window.top.localStorage) {{
+          v = window.top.localStorage.getItem(key);
+          if (v !== null && v !== undefined) return v;
+        }}
+      }} catch (e) {{}}
+      try {{ var store = _wnRead(); if (store && store[key]) return store[key]; }} catch(e) {{}}
+      v = _cookieGet(key);
+      return (v !== null && v !== undefined) ? v : null;
     }}
 
     function lsSet(key, value) {{
       try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+      try {{ window.sessionStorage.setItem(key, value); }} catch (e) {{}}
       try {{
         if (window.parent && window.parent !== window && window.parent.localStorage) {{
           window.parent.localStorage.setItem(key, value);
         }}
       }} catch (e) {{}}
+      try {{
+        if (window.top && window.top !== window && window.top.localStorage) {{
+          window.top.localStorage.setItem(key, value);
+        }}
+      }} catch (e) {{}}
+      try {{ var store = _wnRead(); store[key] = value; _wnWrite(store); }} catch(e) {{}}
+      _cookieSet(key, value);
     }}
 
     var saveTimer = null;
