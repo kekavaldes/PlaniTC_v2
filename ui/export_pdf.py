@@ -874,13 +874,29 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
                     conteo["topo"] += 1
 
     # RECONSTRUCCIONES
+    # Cada reconstrucción puede tener más de un canvas:
+    #   1) la imagen axial donde se ajusta el DFOV (recon_square_<rec_id>)
+    #   2) uno o dos topogramas donde se definen los límites de reconstrucción
+    #      (recon_topo_rect_<rec_id>_topo1 / topo2)
+    # Antes solo se guardaba el canvas axial, por eso el PDF no mostraba el
+    # topograma con los límites. Ahora combinamos todos los snapshots
+    # disponibles de la reconstrucción en una sola imagen para el informe.
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     for recs in recons_map.values():
         for rec in (recs or []):
             rec_id = rec.get("id")
             if not rec_id:
                 continue
-            items = items_for_group(all_snaps, f"recon_square_{rec_id}")
+
+            candidate_groups = [
+                f"recon_square_{rec_id}",
+                f"recon_topo_rect_{rec_id}_topo1",
+                f"recon_topo_rect_{rec_id}_topo2",
+            ]
+            items = []
+            for group_key in candidate_groups:
+                items.extend(items_for_group(all_snaps, group_key))
+
             if items:
                 combinado = combine_png_bytes(items)
                 if combinado:
