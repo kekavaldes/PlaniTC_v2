@@ -300,8 +300,6 @@ def render_canvas_recon_cuadrado(
   </div>
   <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
-    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -784,8 +782,6 @@ def render_canvas_topo_dfov_rect(
   </div>
   <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
-    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -1796,7 +1792,6 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=460, scrolling=False)
-                    # Mensaje ya no necesario - botón Descargar PNG está visible bajo cada canvas
                     # _render_boton_snapshot_reconstruccion ya no necesario (subida manual en Exportar)
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=310)
