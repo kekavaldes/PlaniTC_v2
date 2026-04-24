@@ -482,19 +482,32 @@ function downloadCanvasInd(idx, title, expNombre) {{
     return;
   }}
   
-  var filename = 'topograma_' + idx + '.png';
-  if (expNombre) {{
-    filename = expNombre + '_' + filename;
+  // Construir nombre de archivo: EXPLORACION_TITULO.png
+  var parts = [];
+  
+  // Limpiar y añadir nombre de exploración
+  if (expNombre && expNombre !== 'null' && String(expNombre).trim()) {{
+    var clean = String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    if (clean) parts.push(clean);
   }}
+  
+  // Limpiar y añadir título
+  if (title && title !== 'null' && String(title).trim()) {{
+    var clean = String(title).replace(/[^a-zA-Z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    if (clean) parts.push(clean);
+  }}
+  
+  // Fallback si no hay nada
+  var filename = parts.length > 0 ? parts.join('_') : 'topograma_' + idx;
   
   var a = document.createElement('a');
   a.href = canvas.toDataURL('image/png');
-  a.download = filename;
+  a.download = filename + '.png';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   
-  console.log('Descargado:', filename);
+  console.log('Descargado:', filename + '.png');
 }}
 
 // Lógica de canvas
