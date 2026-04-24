@@ -1045,7 +1045,58 @@ def _overlay_canvas_html(
     updateRefButtons();
   }}
 
+  function drawLabelBoxOnCanvas(i, ref) {{
+    var text = (ref.text || '').trim();
+    if (!text) return;
+    var tp = normToPx(ref.tx, ref.ty);
+    var scaleLabel = Math.max(1, Math.min(W, H) / 700);
+    var badgeR = 18 * scaleLabel;
+    var gap = 8 * scaleLabel;
+    var padX = 12 * scaleLabel;
+    var padY = 7 * scaleLabel;
+    var fontSize = 20 * scaleLabel;
+
+    ctx.save();
+    ctx.font = 'bold ' + fontSize + 'px Arial, Helvetica, sans-serif';
+    ctx.textBaseline = 'middle';
+    var tw = ctx.measureText(text).width;
+    var boxH = fontSize + padY * 2;
+    var boxW = Math.min(tw + padX * 2, W - tp.x - (badgeR * 2 + gap) - 8);
+    if (boxW < 70 * scaleLabel) boxW = Math.min(tw + padX * 2, 190 * scaleLabel);
+
+    var bx = clamp(tp.x, 0, W - 10);
+    var by = clamp(tp.y, 0, H - boxH - 4);
+    var circleX = clamp(bx + badgeR, badgeR + 2, W - badgeR - 2);
+    var circleY = clamp(by + boxH / 2, badgeR + 2, H - badgeR - 2);
+    var textBoxX = clamp(circleX + badgeR + gap, 2, W - boxW - 2);
+    var textBoxY = clamp(circleY - boxH / 2, 2, H - boxH - 2);
+
+    ctx.fillStyle = acqColor;
+    ctx.beginPath();
+    ctx.arc(circleX, circleY, badgeR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#071018';
+    ctx.font = 'bold ' + (15 * scaleLabel) + 'px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(String(i + 1), circleX, circleY + 1);
+
+    ctx.lineWidth = Math.max(2, 2 * scaleLabel);
+    ctx.strokeStyle = recColor;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    _roundRectPath(ctx, textBoxX, textBoxY, boxW, boxH, 12 * scaleLabel);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold ' + fontSize + 'px Arial, Helvetica, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(text, textBoxX + padX, textBoxY + boxH / 2);
+    ctx.restore();
+  }}
+
   function drawRefs() {{
+    _syncRefTextsFromInputs();
     for (var i = 0; i < 3; i++) {{
       var ref = state.refs[i];
       if (!ref.enabled) continue;
@@ -1059,6 +1110,7 @@ def _overlay_canvas_html(
       ctx.strokeStyle = '#0a0a0a';
       ctx.lineWidth = 1.5;
       ctx.stroke();
+      drawLabelBoxOnCanvas(i, ref);
     }}
   }}
 
@@ -1233,14 +1285,17 @@ def _overlay_canvas_html(
     if (labelInputs[i]) {{
       labelInputs[i].addEventListener('input', function() {{
         state.refs[i].text = this.value;
+        drawImage();
         saveState();
       }});
       labelInputs[i].addEventListener('change', function() {{
         state.refs[i].text = this.value;
+        drawImage();
         saveState();
       }});
       labelInputs[i].addEventListener('blur', function() {{
         state.refs[i].text = this.value;
+        drawImage();
         saveState();
       }});
       labelInputs[i].addEventListener('mousedown', function(e) {{ e.stopPropagation(); }});
