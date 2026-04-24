@@ -1805,14 +1805,11 @@ def _render_topogramas_adq(exp, es_bolus):
         if len(topos) >= 2 and html_topo1 and html_topo2 and html_roi_corte:
             c1, c2, c3 = st.columns([0.86, 0.86, 2.08], gap="medium")
             with c1:
-                snap1 = st.components.v1.html(html_topo1, height=405, key=f"topo1_{exp['id']}")
-                _process_canvas_snapshot(snap1, exp['id'], exp.get("topo_set_idx"))
+                st.components.v1.html(html_topo1, height=405)
             with c2:
-                snap2 = st.components.v1.html(html_topo2, height=405, key=f"topo2_{exp['id']}")
-                _process_canvas_snapshot(snap2, exp['id'], exp.get("topo_set_idx"))
+                st.components.v1.html(html_topo2, height=405)
             with c3:
-                snap3 = st.components.v1.html(html_roi_corte, height=430, key=f"roi_{exp['id']}")
-                _process_canvas_snapshot(snap3, exp['id'], exp.get("topo_set_idx"))
+                st.components.v1.html(html_roi_corte, height=430)
             _render_boton_snapshot_adquisicion(exp, [f"{exp['id']}_topo1", f"{exp['id']}_topo2", f"{exp['id']}_roi_corte"])
         elif html_roi_corte:
             c1, c2 = st.columns([1.0, 2.0], gap="medium")
@@ -1827,17 +1824,9 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=290 if len(topos) > 1 else 340,
                 )
                 if html_topos:
-                    snap_topos = st.components.v1.html(
-                        html_topos, height=430 if len(topos) > 1 else 470,
-                        key=f"topos_{exp['id']}"
-                    )
-                    _process_canvas_snapshot(snap_topos, exp['id'], exp.get("topo_set_idx"))
+                    st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
             with c2:
-                snap_roi = st.components.v1.html(
-                    html_roi_corte, height=430 if len(topos) > 1 else 500,
-                    key=f"roi2_{exp['id']}"
-                )
-                _process_canvas_snapshot(snap_roi, exp['id'], exp.get("topo_set_idx"))
+                st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
             _render_boton_snapshot_adquisicion(exp, [exp['id'], f"{exp['id']}_roi_corte"])
         else:
             html = render_topogramas_independientes_interactivos(
@@ -1850,8 +1839,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 canvas_css_height=290 if len(topos) > 1 else None,
             )
             if html:
-                snap = st.components.v1.html(html, height=430 if len(topos) > 1 else 470, key=f"topo_{exp['id']}")
-                _process_canvas_snapshot(snap, exp['id'], exp.get("topo_set_idx"))
+                st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
                 _render_boton_snapshot_adquisicion(exp, [exp['id']])
         return
 
@@ -1864,8 +1852,7 @@ def _render_topogramas_adq(exp, es_bolus):
     )
     if html:
         alto = 430 if len(topos) > 1 else 470
-        snap = st.components.v1.html(html, height=alto, key=f"topo_norm_{exp['id']}")
-        _process_canvas_snapshot(snap, exp['id'], exp.get("topo_set_idx"))
+        st.components.v1.html(html, height=alto)
         _render_boton_snapshot_adquisicion(exp, [exp['id']])
 
 
