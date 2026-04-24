@@ -474,45 +474,27 @@ def render_topogramas_independientes_interactivos(
   </div>
 </div>
 <script>
-// Función global de descarga (debe estar disponible inmediatamente)
+// Función global de descarga - VERSION SIMPLE PARA DEBUG
 function downloadCanvasInd(idx, title, expNombre) {{
-  try {{
-    var canvas = document.getElementById('topoCanvasInd' + idx);
-    if (!canvas) {{
-      console.error('Canvas no encontrado: topoCanvasInd' + idx);
-      alert('Error: no se pudo acceder al canvas');
-      return;
-    }}
-    
-    var dataUrl = canvas.toDataURL('image/png');
-    
-    // Crear nombre de archivo con exploración + título
-    var parts = [];
-    if (expNombre && String(expNombre).trim()) {{
-      parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
-    }}
-    if (title && String(title).trim()) {{
-      parts.push(String(title).replace(/[^a-zA-Z0-9_-]+/g, '_'));
-    }}
-    if (parts.length === 0) {{
-      parts.push('topograma_' + (idx + 1));
-    }}
-    
-    var filename = parts.join('_').replace(/^_+|_+$/g, '').replace(/_+/g, '_');
-    
-    // Descargar PNG
-    var a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename + '.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    console.log('Descarga iniciada:', filename + '.png');
-  }} catch (e) {{
-    console.error('Error en downloadCanvasInd:', e);
-    alert('Error al descargar: ' + e.message);
+  var canvas = document.getElementById('topoCanvasInd' + idx);
+  if (!canvas) {{
+    alert('Canvas no encontrado');
+    return;
   }}
+  
+  var filename = 'topograma_' + idx + '.png';
+  if (expNombre) {{
+    filename = expNombre + '_' + filename;
+  }}
+  
+  var a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  
+  console.log('Descargado:', filename);
 }}
 
 // Lógica de canvas
