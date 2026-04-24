@@ -488,19 +488,17 @@ function downloadCanvasInd(idx, title, expNombre) {{
     
     // Crear nombre de archivo con exploración + título
     var parts = [];
-    if (expNombre && expNombre.trim()) {{
+    if (expNombre && String(expNombre).trim()) {{
       parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
     }}
-    if (title && title.trim()) {{
+    if (title && String(title).trim()) {{
       parts.push(String(title).replace(/[^a-zA-Z0-9_-]+/g, '_'));
     }}
     if (parts.length === 0) {{
       parts.push('topograma_' + (idx + 1));
     }}
     
-    var filename = parts.join('_')
-      .replace(/^_+|_+$/g, '')  // quitar guiones bajos al inicio/fin
-      .replace(/_+/g, '_');     // normalizar múltiples guiones bajos
+    var filename = parts.join('_').replace(/^_+|_+$/g, '').replace(/_+/g, '_');
     
     // Descargar PNG
     var a = document.createElement('a');
