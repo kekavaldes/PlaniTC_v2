@@ -21,7 +21,20 @@ TAB_OPTIONS = [
     "📄  Exportar",
 ]
 
+TAB_LABELS = [
+    "🏠 Inicio",
+    "📋 Ingreso",
+    "⚡ Adquisición",
+    "🧩 Reconstrucción",
+    "📐 Reformaciones",
+    "💉 Inyectora",
+    "📄 Exportar",
+]
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CSS global
+# ──────────────────────────────────────────────────────────────────────────────
 def aplicar_css_global():
     st.markdown(
         """
@@ -120,6 +133,7 @@ def aplicar_css_global():
             border-radius: 10px !important;
             min-height: 48px !important;
             font-weight: 600 !important;
+            cursor: pointer !important;
         }
 
         .stButton button:hover {
@@ -165,12 +179,95 @@ def aplicar_css_global():
             border-radius: 14px;
             display: block;
         }
+
+        /* ─────────────────────────────────────────────────────────────
+           Barra superior principal
+           Problema corregido: en Reconstrucción/Reformaciones algunos CSS
+           internos de esas pestañas reducen la zona útil de los botones.
+           Estos selectores con keys nav_0...nav_6 tienen más prioridad y
+           dejan toda la tarjeta de cada pestaña como área clickeable.
+        ───────────────────────────────────────────────────────────── */
+        .st-key-nav_0,
+        .st-key-nav_1,
+        .st-key-nav_2,
+        .st-key-nav_3,
+        .st-key-nav_4,
+        .st-key-nav_5,
+        .st-key-nav_6 {
+            width: 100% !important;
+        }
+
+        .st-key-nav_0 button,
+        .st-key-nav_1 button,
+        .st-key-nav_2 button,
+        .st-key-nav_3 button,
+        .st-key-nav_4 button,
+        .st-key-nav_5 button,
+        .st-key-nav_6 button {
+            width: 100% !important;
+            min-height: 3.05rem !important;
+            height: 3.05rem !important;
+            padding: 0.55rem 0.65rem !important;
+            border-radius: 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1.15 !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            box-sizing: border-box !important;
+            pointer-events: auto !important;
+            z-index: 50 !important;
+            position: relative !important;
+        }
+
+        .st-key-nav_0 button p,
+        .st-key-nav_1 button p,
+        .st-key-nav_2 button p,
+        .st-key-nav_3 button p,
+        .st-key-nav_4 button p,
+        .st-key-nav_5 button p,
+        .st-key-nav_6 button p {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            font-size: 0.92rem !important;
+            line-height: 1.15 !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            color: #ffffff !important;
+            pointer-events: none !important;
+        }
+
+        /* Separación fija entre la barra principal y el contenido de cada pestaña */
+        div[data-testid="stHorizontalBlock"]:has(.st-key-nav_0) {
+            margin-bottom: 1rem !important;
+            position: relative !important;
+            z-index: 40 !important;
+        }
+
+        @media (max-width: 1100px) {
+            .st-key-nav_0 button p,
+            .st-key-nav_1 button p,
+            .st-key-nav_2 button p,
+            .st-key-nav_3 button p,
+            .st-key-nav_4 button p,
+            .st-key-nav_5 button p,
+            .st-key-nav_6 button p {
+                font-size: 0.82rem !important;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Navegación principal
+# ──────────────────────────────────────────────────────────────────────────────
 def init_navigation():
     if "current_tab" not in st.session_state:
         st.session_state["current_tab"] = "🏠  Inicio"
@@ -183,25 +280,28 @@ def go_to_tab(tab_name: str):
 def render_top_navigation():
     current = st.session_state.get("current_tab", "🏠  Inicio")
 
-    cols = st.columns(7)
-    labels = [
-        "🏠 Inicio",
-        "📋 Ingreso",
-        "⚡ Adquisición",
-        "🧩 Reconstrucción",
-        "📐 Reformaciones",
-        "💉 Inyectora",
-        "📄 Exportar",
-    ]
+    # Anchos levemente ajustados para que Reconstrucción/Reformaciones no queden apretados.
+    cols = st.columns([1, 1, 1.12, 1.28, 1.28, 1, 1], gap="small")
 
-    for col, tab_name, label in zip(cols, TAB_OPTIONS, labels):
+    for idx, (col, tab_name, label) in enumerate(zip(cols, TAB_OPTIONS, TAB_LABELS)):
         with col:
             tipo = "primary" if current == tab_name else "secondary"
-            if st.button(label, key=f"nav_{tab_name}", use_container_width=True, type=tipo):
+            if st.button(
+                label,
+                key=f"nav_{idx}",
+                use_container_width=True,
+                type=tipo,
+            ):
                 go_to_tab(tab_name)
                 st.rerun()
 
+    # Espaciado extra para evitar que algún componente posterior se monte sobre la barra.
+    st.markdown("<div style='height:0.2rem;'></div>", unsafe_allow_html=True)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inicio / portada
+# ──────────────────────────────────────────────────────────────────────────────
 def obtener_ruta_portada():
     posibles_rutas = [
         Path("data/images/PORTADA.png"),
@@ -269,6 +369,9 @@ def render_inicio():
         )
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────────────────────────────────
 def main():
     aplicar_css_global()
     init_navigation()
