@@ -496,14 +496,31 @@ def render_topogramas_independientes_interactivos(
     try {{
       var canvas = document.getElementById('topoCanvasInd' + idx);
       if (!canvas) return;
+      
+      var dataUrl = canvas.toDataURL('image/png');
+      
+      // Descarga del PNG (comportamiento original)
       var a = document.createElement('a');
       var safe = String(title || ('topograma_' + (idx + 1))).replace(/[^a-zA-Z0-9_-]+/g, '_');
-      a.href = canvas.toDataURL('image/png');
+      a.href = dataUrl;
       a.download = safe + '.png';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    }} catch (e) {{}}
+      
+      // NUEVO: enviar el PNG a Streamlit para guardarlo en el PDF
+      if (typeof Streamlit !== 'undefined') {{
+        Streamlit.setComponentValue({{
+          type: 'snapshot',
+          canvas_index: idx,
+          storage_key: baseStorageKey,
+          data_url: dataUrl,
+          timestamp: Date.now()
+        }});
+      }}
+    }} catch (e) {{
+      console.error('Error en downloadCanvasInd:', e);
+    }}
   }}
   window.downloadCanvasInd = downloadCanvasInd;
 
@@ -545,6 +562,9 @@ def render_topogramas_independientes_interactivos(
     var img = new Image();
     img.src = 'data:image/jpeg;base64,' + data.img_b64;
 
+    var dirty = false;
+    function markDirty() {{ dirty = true; }}
+
     function saveState() {{
       try {{
         if (storageKey) {{
@@ -556,9 +576,15 @@ def render_topogramas_independientes_interactivos(
         }}
         if (snapshotKey) {{
           localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+          dirty = false;
         }}
       }} catch (e) {{}}
     }}
+
+    // Auto-guardado cada 2 segundos si cambió
+    setInterval(function() {{ if (dirty) saveState(); }}, 2000);
+    // Guardar antes de cerrar la página
+    window.addEventListener('beforeunload', saveState);
 
     function clampRect() {{
       rectState.w = Math.max(minW, Math.min(0.92, rectState.w));
@@ -1625,6 +1651,38 @@ def _guardar_snapshot_adquisicion(exp, group_keys):
         set_snapshot("canvas_snapshots_topo_por_set", topo_idx, combinado, extra={"exp_id": exp.get("id")})
     st.success("Snapshot guardado para el PDF.")
 
+# ═══════════════════════════════════════════════════════════════════════════
+# CAPTURA AUTOMÁTICA DE SNAPSHOTS VÍA BOTÓN "DESCARGAR PNG"
+# ═══════════════════════════════════════════════════════════════════════════
+def _process_canvas_snapshot(snapshot_data, exp_id, topo_idx=None):
+    """Procesa el snapshot retornado por components.html cuando el usuario
+    hace clic en 'Descargar PNG'. Convierte el data URL a bytes y lo guarda
+    en session_state para incluirlo en el PDF."""
+    if not snapshot_data or snapshot_data.get('type') != 'snapshot':
+        return False
+    
+    data_url = snapshot_data.get('data_url', '')
+    if not data_url.startswith('data:image/png;base64,'):
+        return False
+    
+    try:
+        png_bytes = base64.b64decode(data_url.split(',')[1])
+        set_snapshot("canvas_snapshots_adq_por_exp", exp_id, png_bytes)
+        if topo_idx is not None:
+            set_snapshot(
+                "canvas_snapshots_topo_por_set",
+                topo_idx,
+                png_bytes,
+                extra={"exp_id": exp_id},
+            )
+        return True
+    except Exception:
+        return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# TOPOGRAMAS EN PESTAÑA ADQUISICIÓN
+# ═══════════════════════════════════════════════════════════════════════════
 def _render_topogramas_adq(exp, es_bolus):
     """Muestra el/los topograma(s) con caja DFOV (rect) o línea de corte (bolus).
     Lee del set de topograma asociado a la exploración."""
@@ -1747,11 +1805,14 @@ def _render_topogramas_adq(exp, es_bolus):
         if len(topos) >= 2 and html_topo1 and html_topo2 and html_roi_corte:
             c1, c2, c3 = st.columns([0.86, 0.86, 2.08], gap="medium")
             with c1:
-                st.components.v1.html(html_topo1, height=405)
+                snap1 = st.components.v1.html(html_topo1, height=405, key=f"topo1_{exp['id']}")
+                _process_canvas_snapshot(snap1, exp['id'], exp.get("topo_set_idx"))
             with c2:
-                st.components.v1.html(html_topo2, height=405)
+                snap2 = st.components.v1.html(html_topo2, height=405, key=f"topo2_{exp['id']}")
+                _process_canvas_snapshot(snap2, exp['id'], exp.get("topo_set_idx"))
             with c3:
-                st.components.v1.html(html_roi_corte, height=430)
+                snap3 = st.components.v1.html(html_roi_corte, height=430, key=f"roi_{exp['id']}")
+                _process_canvas_snapshot(snap3, exp['id'], exp.get("topo_set_idx"))
             _render_boton_snapshot_adquisicion(exp, [f"{exp['id']}_topo1", f"{exp['id']}_topo2", f"{exp['id']}_roi_corte"])
         elif html_roi_corte:
             c1, c2 = st.columns([1.0, 2.0], gap="medium")
@@ -1766,9 +1827,17 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=290 if len(topos) > 1 else 340,
                 )
                 if html_topos:
-                    st.components.v1.html(html_topos, height=430 if len(topos) > 1 else 470)
+                    snap_topos = st.components.v1.html(
+                        html_topos, height=430 if len(topos) > 1 else 470,
+                        key=f"topos_{exp['id']}"
+                    )
+                    _process_canvas_snapshot(snap_topos, exp['id'], exp.get("topo_set_idx"))
             with c2:
-                st.components.v1.html(html_roi_corte, height=430 if len(topos) > 1 else 500)
+                snap_roi = st.components.v1.html(
+                    html_roi_corte, height=430 if len(topos) > 1 else 500,
+                    key=f"roi2_{exp['id']}"
+                )
+                _process_canvas_snapshot(snap_roi, exp['id'], exp.get("topo_set_idx"))
             _render_boton_snapshot_adquisicion(exp, [exp['id'], f"{exp['id']}_roi_corte"])
         else:
             html = render_topogramas_independientes_interactivos(
@@ -1781,7 +1850,8 @@ def _render_topogramas_adq(exp, es_bolus):
                 canvas_css_height=290 if len(topos) > 1 else None,
             )
             if html:
-                st.components.v1.html(html, height=430 if len(topos) > 1 else 470)
+                snap = st.components.v1.html(html, height=430 if len(topos) > 1 else 470, key=f"topo_{exp['id']}")
+                _process_canvas_snapshot(snap, exp['id'], exp.get("topo_set_idx"))
                 _render_boton_snapshot_adquisicion(exp, [exp['id']])
         return
 
@@ -1794,7 +1864,8 @@ def _render_topogramas_adq(exp, es_bolus):
     )
     if html:
         alto = 430 if len(topos) > 1 else 470
-        st.components.v1.html(html, height=alto)
+        snap = st.components.v1.html(html, height=alto, key=f"topo_norm_{exp['id']}")
+        _process_canvas_snapshot(snap, exp['id'], exp.get("topo_set_idx"))
         _render_boton_snapshot_adquisicion(exp, [exp['id']])
 
 
