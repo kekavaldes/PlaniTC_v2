@@ -1430,13 +1430,13 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         titulo="Ajuste el DFOV",
         default_y_ini=topo_data.get("default_y_ini", 0.25),
         default_y_fin=topo_data.get("default_y_fin", 0.75),
-        canvas_css_width=260,
-        canvas_css_height=360,
+        canvas_css_width=280,
+        canvas_css_height=390,
         canvas_width=560,
         canvas_height=780,
     )
     if html_topo:
-        components.html(html_topo, height=480, scrolling=False)
+        components.html(html_topo, height=540, scrolling=False)
     else:
         st.image(img_pil, width=260)
 
@@ -1583,10 +1583,11 @@ def _render_panel_central(adquisiciones_validas):
         st.warning(topo_error)
 
     n_topos_visibles = len([t for t in topogramas_data if not t.get("error")])
+    # Proporciones ajustadas para que las imágenes queden más simétricas
     if n_topos_visibles >= 2:
-        fila_cols = st.columns([1.2, 1, 1], gap="medium")
+        fila_cols = st.columns([1.1, 1, 1], gap="medium")
     elif n_topos_visibles == 1:
-        fila_cols = st.columns([1.3, 1], gap="medium")
+        fila_cols = st.columns([1.15, 1], gap="medium")
     else:
         fila_cols = st.columns([1], gap="medium")
 
@@ -1609,11 +1610,6 @@ def _render_panel_central(adquisiciones_validas):
 
         img_guardada = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
         if img_guardada is not None:
-            if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=True):
-                st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
-                st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
-                st.rerun()
-
             try:
                 img_recon_pil = Image.open(io.BytesIO(img_guardada["bytes"]))
                 img_b64 = _pil_to_b64_jpeg(img_recon_pil, max_width=900)
@@ -1623,20 +1619,20 @@ def _render_panel_central(adquisiciones_validas):
                     storage_key=f"recon_square_{rec_actual['id']}",
                     color=color_rec,
                     titulo="Ajuste el Dfov",
-                    canvas_css_width=360,
-                    canvas_css_height=360,
+                    canvas_css_width=310,
+                    canvas_css_height=310,
                     canvas_width=760,
                     canvas_height=760,
                 )
                 if html_canvas:
-                    components.html(html_canvas, height=500, scrolling=False)
+                    components.html(html_canvas, height=460, scrolling=False)
                     # Mensaje ya no necesario - botón Descargar PNG está visible bajo cada canvas
                     # _render_boton_snapshot_reconstruccion ya no necesario (subida manual en Exportar)
                 else:
-                    st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+                    st.image(img_guardada["bytes"], caption="Imagen cargada", width=310)
             except Exception as e:
                 st.error(f"No se pudo cargar el cuadrado interactivo: {e}")
-                st.image(img_guardada["bytes"], caption="Imagen cargada", width=360)
+                st.image(img_guardada["bytes"], caption="Imagen cargada", width=310)
 
     # Topogramas a la derecha, uno al lado del otro si existen
     next_col_idx = 1
@@ -1652,6 +1648,14 @@ def _render_panel_central(adquisiciones_validas):
             "Esta adquisición no tiene topograma iniciado. "
             "Inícialo en la pestaña **Topograma** para verlo aquí."
         )
+
+    # Botón Borrar imagen debajo de las columnas para mejor layout
+    img_guardada_final = st.session_state["imagenes_recon_por_id"].get(rec_actual["id"])
+    if img_guardada_final is not None:
+        if st.button("🗑️ Borrar imagen", key=f"btn_borrar_img_recon_{rec_actual['id']}", use_container_width=False):
+            st.session_state["imagenes_recon_por_id"].pop(rec_actual["id"], None)
+            st.session_state.pop(f"img_recon_upload_{rec_actual['id']}", None)
+            st.rerun()
 
     # Parámetros debajo de toda la fila de imágenes
     st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
