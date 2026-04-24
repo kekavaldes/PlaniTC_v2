@@ -52,6 +52,8 @@ from ui.canvas_snapshot import (
     set_snapshot,
 )
 
+from ui.reformaciones import _ensure_image_state
+
 # Motor SVG→PDF. Preferimos svglib (Python puro, funciona en Streamlit Cloud
 # sin libs del sistema). cairosvg queda como fallback opcional.
 try:
@@ -935,7 +937,138 @@ def render_export_pdf():
 
     exportacion_habilitada = len(faltan) == 0
 
-    st.caption("Al generar el PDF, los recuadros, líneas y anotaciones dibujados sobre los canvas se capturan automáticamente y se incluyen en el reporte. El botón **Guardar para PDF** de cada pestaña es opcional (útil para forzar una captura intermedia).")
+    # ══════════════════════════════════════════════════════════════════════════
+    # SUBIDA DE SNAPSHOTS DE CANVAS (OPCIONAL)
+    # ══════════════════════════════════════════════════════════════════════════
+    st.markdown("---")
+    _panel_header("📸", "Snapshots de Canvas (opcional)")
+    st.caption(
+        "Sube los PNG que descargaste de cada canvas (usando el botón **Descargar PNG**) "
+        "para incluir tus anotaciones en el PDF. Si no subes nada, el PDF incluirá "
+        "las imágenes base sin dibujos."
+    )
+
+    # Contadores para mostrar resumen
+    uploaded_count = 0
+    total_possible = 0
+
+    # ─── Topogramas por exploración ───
+    if exps:
+        with st.expander("🔵 Topogramas", expanded=False):
+            for exp in exps:
+                exp_id = exp["id"]
+                exp_nombre = exp.get("nombre", f"Exploración {exp_id}")
+                topo_idx = exp.get("topo_set_idx")
+                
+                if topo_idx is not None:
+                    total_possible += 1
+                    col_upload, col_status = st.columns([3, 1])
+                    with col_upload:
+                        uploaded = st.file_uploader(
+                            f"Topograma de **{exp_nombre}**",
+                            type=['png'],
+                            key=f"upload_topo_{exp_id}",
+                            label_visibility="visible"
+                        )
+                    with col_status:
+                        if uploaded:
+                            png_bytes = uploaded.read()
+                            set_snapshot("canvas_snapshots_topo_por_set", topo_idx, png_bytes)
+                            set_snapshot("canvas_snapshots_adq_por_exp", exp_id, png_bytes)
+                            st.success("✓", icon="✅")
+                            uploaded_count += 1
+                        else:
+                            # Verificar si ya hay uno guardado
+                            existing = st.session_state.get("canvas_snapshots_topo_por_set", {}).get(topo_idx)
+                            if existing:
+                                st.info("📌", icon="ℹ️")
+
+    # ─── Reconstrucciones ───
+    recons_map = st.session_state.get("reconstrucciones_por_exp", {})
+    all_recons = []
+    for exp_id, recons in recons_map.items():
+        if recons:
+            all_recons.extend(recons)
+    
+    if all_recons:
+        with st.expander("🟢 Reconstrucciones (DFOV)", expanded=False):
+            for rec in all_recons:
+                rec_id = rec["id"]
+                rec_fase = rec.get("fase", "SIN CONTRASTE")
+                total_possible += 1
+                
+                col_upload, col_status = st.columns([3, 1])
+                with col_upload:
+                    uploaded = st.file_uploader(
+                        f"DFOV de **{rec_fase}**",
+                        type=['png'],
+                        key=f"upload_rec_{rec_id}",
+                        label_visibility="visible"
+                    )
+                with col_status:
+                    if uploaded:
+                        png_bytes = uploaded.read()
+                        set_snapshot("canvas_snapshots_recon_por_id", rec_id, png_bytes)
+                        st.success("✓", icon="✅")
+                        uploaded_count += 1
+                    else:
+                        existing = st.session_state.get("canvas_snapshots_recon_por_id", {}).get(rec_id)
+                        if existing:
+                            st.info("📌", icon="ℹ️")
+
+    # ─── Reformaciones ───
+    refs_map = st.session_state.get("reformaciones_por_rec", {})
+    all_refs = []
+    for rec_id, refs in refs_map.items():
+        if refs:
+            all_refs.extend(refs)
+    
+    if all_refs:
+        with st.expander("🟡 Reformaciones", expanded=False):
+            for ref in all_refs:
+                ref_id = ref["id"]
+                ref_tipo = ref.get("tipo", "MPR")
+                
+                st.markdown(f"**Reformación {ref_tipo}**")
+                
+                # Cada reformación puede tener hasta 3 imágenes
+                ref_state = _ensure_image_state(ref_id)
+                for img_idx in (1, 2, 3):
+                    img_data = ref_state.get(f"img{img_idx}")
+                    if img_data:  # Solo mostrar uploader si la imagen existe
+                        total_possible += 1
+                        col_upload, col_status = st.columns([3, 1])
+                        with col_upload:
+                            uploaded = st.file_uploader(
+                                f"└─ Imagen {img_idx}",
+                                type=['png'],
+                                key=f"upload_ref_{ref_id}_img{img_idx}",
+                                label_visibility="visible"
+                            )
+                        with col_status:
+                            if uploaded:
+                                png_bytes = uploaded.read()
+                                store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
+                                if ref_id not in store:
+                                    store[ref_id] = {}
+                                store[ref_id][f"img{img_idx}"] = {"bytes": png_bytes}
+                                st.success("✓", icon="✅")
+                                uploaded_count += 1
+                            else:
+                                existing_store = st.session_state.get("canvas_snapshots_ref_por_id", {})
+                                if ref_id in existing_store and f"img{img_idx}" in existing_store[ref_id]:
+                                    st.info("📌", icon="ℹ️")
+                
+                st.markdown("")  # Espaciado
+
+    # Mostrar resumen
+    if total_possible > 0:
+        if uploaded_count > 0:
+            st.info(f"📊 {uploaded_count} de {total_possible} canvas cargados", icon="ℹ️")
+        else:
+            st.caption(f"💡 Puedes subir hasta {total_possible} canvas (los expanders de arriba tienen los uploaders)")
+
+    st.caption("Al generar el PDF, se incluirán los snapshots que hayas subido. El botón **Guardar para PDF** de cada pestaña ya no es necesario.")
     st.markdown("---")
 
     col1, col2 = st.columns([1, 2])
@@ -947,64 +1080,16 @@ def render_export_pdf():
             disabled=not exportacion_habilitada,
         )
 
-    # ── Flujo de auto-captura + generación del PDF ─────────────────────────
-    # Paso 1: al hacer clic, marcamos "pendiente" con un nonce único. Esto
-    # fuerza que la siguiente llamada a streamlit_js_eval use una key nueva
-    # y lea localStorage al instante (no devuelve el cacheado anterior).
+    # ── Generación del PDF ─────────────────────────────────────────────────────
     if generar and exportacion_habilitada:
-        st.session_state["_pdf_capture_nonce"] = int(time.time() * 1000)
-        st.session_state["_pdf_capture_pending"] = True
-        st.session_state["_pdf_bytes"] = None  # Invalida el PDF viejo
+        with st.spinner("Generando PDF..."):
+            try:
+                st.session_state["_pdf_bytes"] = construir_pdf()
+                st.session_state["_pdf_generado_en"] = datetime.now()
+            except Exception as e:
+                st.session_state["_pdf_bytes"] = None
+                st.error(f"No se pudo generar el PDF: {e}")
         st.rerun()
-
-    # Paso 2: si hay captura pendiente, pedimos el bulk de snapshots. Si aún
-    # no llegaron del navegador, mostramos un mensaje con botón de escape
-    # para que el usuario no quede bloqueado si streamlit_js_eval no responde.
-    if st.session_state.get("_pdf_capture_pending") and exportacion_habilitada:
-        nonce = st.session_state.get("_pdf_capture_nonce", 0)
-        all_snaps = capture_all_snapshots_raw(js_key=f"pdf_snaps_{nonce}")
-
-        if all_snaps is None:
-            col_wait, col_skip = st.columns([3, 1], gap="small")
-            with col_wait:
-                st.info(
-                    "📸 Capturando canvas de las imágenes… Si no avanza en "
-                    "2-3 segundos, usa **Generar sin canvas** para continuar."
-                )
-            with col_skip:
-                if st.button(
-                    "Generar sin canvas",
-                    key="btn_skip_canvas_capture",
-                    use_container_width=True,
-                    help="Genera el PDF con los parámetros e imágenes base, omitiendo los dibujos sobre los canvas.",
-                ):
-                    with st.spinner("Generando PDF sin canvas…"):
-                        try:
-                            st.session_state["_pdf_bytes"] = construir_pdf()
-                            st.session_state["_pdf_generado_en"] = datetime.now()
-                            st.session_state["_pdf_capture_conteo"] = {}
-                        except Exception as e:
-                            st.session_state["_pdf_bytes"] = None
-                            st.error(f"No se pudo generar el PDF: {e}")
-                    st.session_state["_pdf_capture_pending"] = False
-                    st.rerun()
-        else:
-            # Paso 3: snapshots listos. Los distribuimos en los stores y
-            # construimos el PDF.
-            conteo = _ingest_canvas_snapshots(all_snaps)
-            total = sum(conteo.values())
-            with st.spinner(
-                f"Generando PDF… ({total} snapshots de canvas capturados)"
-            ):
-                try:
-                    st.session_state["_pdf_bytes"] = construir_pdf()
-                    st.session_state["_pdf_generado_en"] = datetime.now()
-                    st.session_state["_pdf_capture_conteo"] = conteo
-                except Exception as e:
-                    st.session_state["_pdf_bytes"] = None
-                    st.error(f"No se pudo generar el PDF: {e}")
-            st.session_state["_pdf_capture_pending"] = False
-            st.rerun()
 
     pdf_bytes = st.session_state.get("_pdf_bytes")
     if pdf_bytes and exportacion_habilitada:
@@ -1024,20 +1109,18 @@ def render_export_pdf():
 
         generado_en = st.session_state.get("_pdf_generado_en")
         if generado_en:
-            conteo = st.session_state.get("_pdf_capture_conteo", {})
+            # Contar snapshots subidos manualmente
+            snap_count = 0
+            snap_count += len(st.session_state.get("canvas_snapshots_topo_por_set", {}))
+            snap_count += len(st.session_state.get("canvas_snapshots_recon_por_id", {}))
+            snap_count += len(st.session_state.get("canvas_snapshots_ref_por_id", {}))
+            
             detalle = ""
-            if conteo:
-                partes = []
-                if conteo.get("adq"):
-                    partes.append(f"{conteo['adq']} adquisición(es)")
-                if conteo.get("recon"):
-                    partes.append(f"{conteo['recon']} reconstrucción(es)")
-                if conteo.get("ref"):
-                    partes.append(f"{conteo['ref']} reformación(es)")
-                if partes:
-                    detalle = f" — canvas incluidos: {', '.join(partes)}"
+            if snap_count > 0:
+                detalle = f" — {snap_count} snapshot(s) de canvas incluidos"
+            
             st.caption(
-                f"Última generación: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
+                f"✅ PDF generado: {generado_en.strftime('%d/%m/%Y %H:%M:%S')} — "
                 f"tamaño: {len(pdf_bytes) / 1024:.1f} KB{detalle}"
             )
 
