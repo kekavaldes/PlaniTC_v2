@@ -361,6 +361,7 @@ def render_topogramas_independientes_interactivos(
     canvas_css_height=None,
     canvas_width=None,
     canvas_height=None,
+    exp_nombre=None,  # Nombre de la exploración para el archivo descargado
 ):
     """
     Renderiza uno o más canvas interactivos.
@@ -435,7 +436,7 @@ def render_topogramas_independientes_interactivos(
           <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
           <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-          <button type="button" onclick="downloadCanvasInd({i}, {json.dumps(titulo)})"
+          <button type="button" onclick="downloadCanvasInd({i}, {json.dumps(titulo)}, {json.dumps(exp_nombre)})"
             style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
           <div style="margin-top:8px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
@@ -473,6 +474,50 @@ def render_topogramas_independientes_interactivos(
   </div>
 </div>
 <script>
+// Función global de descarga (debe estar disponible inmediatamente)
+function downloadCanvasInd(idx, title, expNombre) {{
+  try {{
+    var canvas = document.getElementById('topoCanvasInd' + idx);
+    if (!canvas) {{
+      console.error('Canvas no encontrado: topoCanvasInd' + idx);
+      alert('Error: no se pudo acceder al canvas');
+      return;
+    }}
+    
+    var dataUrl = canvas.toDataURL('image/png');
+    
+    // Crear nombre de archivo con exploración + título
+    var parts = [];
+    if (expNombre && expNombre.trim()) {{
+      parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (title && title.trim()) {{
+      parts.push(String(title).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (parts.length === 0) {{
+      parts.push('topograma_' + (idx + 1));
+    }}
+    
+    var filename = parts.join('_')
+      .replace(/^_+|_+$/g, '')  // quitar guiones bajos al inicio/fin
+      .replace(/_+/g, '_');     // normalizar múltiples guiones bajos
+    
+    // Descargar PNG
+    var a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    console.log('Descarga iniciada:', filename + '.png');
+  }} catch (e) {{
+    console.error('Error en downloadCanvasInd:', e);
+    alert('Error al descargar: ' + e.message);
+  }}
+}}
+
+// Lógica de canvas
 (function() {{
   var topoData = {json.dumps(topo_payload)};
   var modo = {json.dumps(modo)};
@@ -491,38 +536,6 @@ def render_topogramas_independientes_interactivos(
     var b = parseInt(h.substring(4,6), 16);
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
-
-  function downloadCanvasInd(idx, title) {{
-    try {{
-      var canvas = document.getElementById('topoCanvasInd' + idx);
-      if (!canvas) return;
-      
-      var dataUrl = canvas.toDataURL('image/png');
-      
-      // Descarga del PNG (comportamiento original)
-      var a = document.createElement('a');
-      var safe = String(title || ('topograma_' + (idx + 1))).replace(/[^a-zA-Z0-9_-]+/g, '_');
-      a.href = dataUrl;
-      a.download = safe + '.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      
-      // NUEVO: enviar el PNG a Streamlit para guardarlo en el PDF
-      if (typeof Streamlit !== 'undefined') {{
-        Streamlit.setComponentValue({{
-          type: 'snapshot',
-          canvas_index: idx,
-          storage_key: baseStorageKey,
-          data_url: dataUrl,
-          timestamp: Date.now()
-        }});
-      }}
-    }} catch (e) {{
-      console.error('Error en downloadCanvasInd:', e);
-    }}
-  }}
-  window.downloadCanvasInd = downloadCanvasInd;
 
   topoData.forEach(function(data, idx) {{
     var canvas = document.getElementById('topoCanvasInd' + idx);
@@ -1757,6 +1770,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
+                exp_nombre=exp.get("nombre"),
             )
         if len(topos) >= 2:
             html_topo2 = render_topogramas_independientes_interactivos(
@@ -1767,6 +1781,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
+                exp_nombre=exp.get("nombre"),
             )
 
         ruta_posicion = obtener_imagen_posicion_corte(exp.get("posicion_corte"))
@@ -1789,6 +1804,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=300,
                     canvas_width=980,
                     canvas_height=600,
+                    exp_nombre=exp.get("nombre"),
                 )
             except Exception:
                 html_roi_corte = None
@@ -1813,6 +1829,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     show_labels=False,
                     canvas_css_width=186 if len(topos) > 1 else 240,
                     canvas_css_height=290 if len(topos) > 1 else 340,
+                    exp_nombre=exp.get("nombre"),
                 )
                 if html_topos:
                     st.components.v1.html(html_topos, height=500 if len(topos) > 1 else 560)
@@ -1828,6 +1845,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=186 if len(topos) > 1 else None,
                 canvas_css_height=290 if len(topos) > 1 else None,
+                exp_nombre=exp.get("nombre"),
             )
             if html:
                 st.components.v1.html(html, height=500 if len(topos) > 1 else 560)
@@ -1840,6 +1858,7 @@ def _render_topogramas_adq(exp, es_bolus):
         storage_key=exp["id"],
         color=color_exp,
         show_labels=False,
+        exp_nombre=exp.get("nombre"),
     )
     if html:
         # Height aumentado para que quepa el botón "Descargar PNG" debajo del canvas
