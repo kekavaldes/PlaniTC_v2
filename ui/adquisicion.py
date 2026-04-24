@@ -1544,17 +1544,28 @@ def _render_boton_snapshot_adquisicion(exp, group_keys):
     """Muestra un botón manual para capturar el snapshot de esta adquisición
     y guardarlo en session_state para el PDF.
 
-    Este botón es OPCIONAL: al momento de generar el PDF también se hace
-    auto-captura de todos los canvas. Se mantiene aquí por si el estudiante
-    quiere forzar una captura intermedia."""
+    NOTA sobre `streamlit_js_eval`: el componente tiene un bug conocido
+    cuando se llama dentro de una rama condicional activada por un botón
+    (GitHub issue #2 del repo). Por eso la llamada está al TOPE de la
+    función, no dentro del `if nonce:`. Así el iframe permanece montado
+    entre reruns y el valor vuelve de forma fiable.
+    """
     pending_key = f"_pending_snap_adq_{exp['id']}"
+    nonce = st.session_state.get(pending_key, 0)
 
+    # 1) Llamada JS SIEMPRE, fuera de cualquier if. Key estable cuando
+    #    no hay captura pendiente; key con nonce cuando sí la hay.
+    effective_key = (
+        f"snap_adq_{exp['id']}_{nonce}" if nonce else f"snap_adq_{exp['id']}_idle"
+    )
+    all_snaps = capture_all_snapshots_raw(js_key=effective_key) if nonce else None
+
+    # 2) UI del botón
     col_info, col_btn = st.columns([2.6, 1], gap="small")
     with col_info:
         st.caption(
-            "La captura visual se descarga directamente desde cada canvas con el "
-            "botón **Descargar PNG**. Al generar el PDF, el snapshot se incluye "
-            "automáticamente."
+            "La captura visual se descarga desde el botón **Descargar PNG** de cada "
+            "canvas. Al generar el PDF, el snapshot se incluye automáticamente."
         )
     with col_btn:
         if st.button(
@@ -1566,20 +1577,33 @@ def _render_boton_snapshot_adquisicion(exp, group_keys):
             st.session_state[pending_key] = int(time.time() * 1000)
             st.rerun()
 
-    nonce = st.session_state.get(pending_key)
+    # 3) Procesamiento del resultado (sin st.rerun aquí para evitar loops)
     if nonce:
-        all_snaps = capture_all_snapshots_raw(
-            js_key=f"manual_snap_adq_{exp['id']}_{nonce}"
-        )
-        if all_snaps is None:
-            st.info("Capturando canvas… un momento.")
+        consumed_key = f"_consumed_snap_adq_{exp['id']}_{nonce}"
+        if st.session_state.get(consumed_key):
+            pass  # ya procesado en este nonce
+        elif all_snaps is None:
+            col_wait, col_cancel = st.columns([3, 1], gap="small")
+            with col_wait:
+                st.info(
+                    "📸 Capturando canvas… Si no avanza en 2-3 segundos, "
+                    "vuelve a pulsar **Guardar para PDF**."
+                )
+            with col_cancel:
+                if st.button(
+                    "Cancelar",
+                    key=f"cancel_snap_adq_{exp['id']}_{nonce}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(pending_key, None)
+                    st.rerun()
         else:
-            ok = _guardar_snapshot_adquisicion_desde_bulk(exp, group_keys, all_snaps)
-            if ok:
-                st.success("Snapshot guardado para el PDF.")
+            st.session_state[consumed_key] = True
+            if _guardar_snapshot_adquisicion_desde_bulk(exp, group_keys, all_snaps):
+                st.success("✓ Snapshot guardado para el PDF.")
             else:
                 st.warning(
-                    "No se pudo capturar el canvas. Mueve un poco la imagen "
+                    "No se pudo capturar el canvas. Ajusta algo en la imagen "
                     "y vuelve a intentarlo."
                 )
             st.session_state.pop(pending_key, None)
