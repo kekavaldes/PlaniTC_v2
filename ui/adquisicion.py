@@ -1767,7 +1767,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
-                exp_nombre=exp.get("nombre"),
+                exp_nombre=exp.get("examen"),
             )
         if len(topos) >= 2:
             html_topo2 = render_topogramas_independientes_interactivos(
@@ -1778,7 +1778,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=182,
                 canvas_css_height=290,
-                exp_nombre=exp.get("nombre"),
+                exp_nombre=exp.get("examen"),
             )
 
         ruta_posicion = obtener_imagen_posicion_corte(exp.get("posicion_corte"))
@@ -1801,7 +1801,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     canvas_css_height=300,
                     canvas_width=980,
                     canvas_height=600,
-                    exp_nombre=exp.get("nombre"),
+                    exp_nombre=exp.get("examen"),
                 )
             except Exception:
                 html_roi_corte = None
@@ -1826,7 +1826,7 @@ def _render_topogramas_adq(exp, es_bolus):
                     show_labels=False,
                     canvas_css_width=186 if len(topos) > 1 else 240,
                     canvas_css_height=290 if len(topos) > 1 else 340,
-                    exp_nombre=exp.get("nombre"),
+                    exp_nombre=exp.get("examen"),
                 )
                 if html_topos:
                     st.components.v1.html(html_topos, height=500 if len(topos) > 1 else 560)
@@ -1842,7 +1842,7 @@ def _render_topogramas_adq(exp, es_bolus):
                 show_labels=False,
                 canvas_css_width=186 if len(topos) > 1 else None,
                 canvas_css_height=290 if len(topos) > 1 else None,
-                exp_nombre=exp.get("nombre"),
+                exp_nombre=exp.get("examen"),
             )
             if html:
                 st.components.v1.html(html, height=500 if len(topos) > 1 else 560)
@@ -1855,7 +1855,7 @@ def _render_topogramas_adq(exp, es_bolus):
         storage_key=exp["id"],
         color=color_exp,
         show_labels=False,
-        exp_nombre=exp.get("nombre"),
+        exp_nombre=exp.get("examen"),
     )
     if html:
         # Height aumentado para que quepa el botón "Descargar PNG" debajo del canvas
