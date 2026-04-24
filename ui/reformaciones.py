@@ -659,11 +659,18 @@ def _overlay_canvas_html(
     tempCtx.font = 'bold 24px Arial';
     tempCtx.textBaseline = 'middle';
     
+    // Acceder directamente a los inputs
+    var inputs = [
+      document.getElementById({json.dumps('label_input_' + storage_key + '_0')}),
+      document.getElementById({json.dumps('label_input_' + storage_key + '_1')}),
+      document.getElementById({json.dumps('label_input_' + storage_key + '_2')})
+    ];
+    
     for (var i = 0; i < 3; i++) {{
       var ref = state.refs[i];
       if (!ref.enabled) continue;
       
-      var input = refInputs[i];
+      var input = inputs[i];
       var text = input ? input.value.trim() : '';
       if (!text) continue;
       
