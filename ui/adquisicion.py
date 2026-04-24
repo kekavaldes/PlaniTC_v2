@@ -436,8 +436,6 @@ def render_topogramas_independientes_interactivos(
           <div style="font-size:16px;font-weight:700;color:#fff;margin:0 0 6px 0;text-align:center;">{titulo}</div>
           <canvas id="topoCanvasInd{i}" data-planitc-snapshot-item="{i}" width="{canvas_width}" height="{canvas_height}"
             style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-          <button type="button" onclick='downloadCanvasInd({i}, {json.dumps(titulo)}, {json.dumps(exp_nombre)})'
-            style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
           <div style="margin-top:8px; font-size:12px; color:#ccc; text-align:center; min-height:32px;">{subtitulo}</div>
           {labels_html}
         </div>
@@ -1678,7 +1676,7 @@ def _render_boton_snapshot_adquisicion(exp, group_keys):
     col_info, col_btn = st.columns([2.6, 1], gap="small")
     with col_info:
         st.caption(
-            "La captura visual se descarga desde el botón **Descargar PNG** de cada "
+            "La captura visual se guarda automáticamente desde cada "
             "canvas. Al generar el PDF, el snapshot se incluye automáticamente."
         )
     with col_btn:
@@ -1740,11 +1738,11 @@ def _guardar_snapshot_adquisicion(exp, group_keys):
     st.success("Snapshot guardado para el PDF.")
 
 # ═══════════════════════════════════════════════════════════════════════════
-# CAPTURA AUTOMÁTICA DE SNAPSHOTS VÍA BOTÓN "DESCARGAR PNG"
+# CAPTURA AUTOMÁTICA DE SNAPSHOTS
 # ═══════════════════════════════════════════════════════════════════════════
 def _process_canvas_snapshot(snapshot_data, exp_id, topo_idx=None):
     """Procesa el snapshot retornado por components.html cuando el usuario
-    hace clic en 'Descargar PNG'. Convierte el data URL a bytes y lo guarda
+    Convierte el data URL a bytes y lo guarda
     en session_state para incluirlo en el PDF."""
     if not snapshot_data or snapshot_data.get('type') != 'snapshot':
         return False
@@ -1957,8 +1955,8 @@ def _render_topogramas_adq(exp, es_bolus):
         exp_nombre=nombre_completo,
     )
     if html:
-        # Height aumentado para que quepa el botón "Descargar PNG" debajo del canvas
-        alto = 500 if len(topos) > 1 else 560
+        # Altura del componente sin botón manual de descarga
+        alto = 455 if len(topos) > 1 else 510
         st.components.v1.html(html, height=alto)
         # _render_boton_snapshot_adquisicion ya no necesario
 
