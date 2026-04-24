@@ -543,25 +543,33 @@ function downloadCanvasInd(idx, title, expNombre) {{
     var storageKey = baseStorageKey ? ('planitc_' + baseStorageKey + '_' + modo + '_' + idx) : '';
     var snapshotKey = baseStorageKey ? ('planitc_snapshot_' + baseStorageKey + '_' + idx) : '';
 
-  function lsGet(key) {{
-    try {{
-      if (window.parent && window.parent !== window && window.parent.localStorage) {{
-        var pv = window.parent.localStorage.getItem(key);
-        if (pv !== null && pv !== undefined) return pv;
-      }}
-    }} catch (e) {{}}
-    try {{ return window.localStorage.getItem(key); }} catch (e) {{ return null; }}
-  }}
+    function lsGet(key) {{
+      try {{
+        if (window.parent && window.parent !== window && window.parent.localStorage) {{
+          var pv = window.parent.localStorage.getItem(key);
+          if (pv !== null && pv !== undefined) return pv;
+        }}
+      }} catch (e) {{}}
+      try {{ return window.localStorage.getItem(key); }} catch (e) {{ return null; }}
+    }}
 
-  function lsSet(key, value) {{
-    try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
-    try {{
-      if (window.parent && window.parent !== window && window.parent.localStorage) {{
-        window.parent.localStorage.setItem(key, value);
-      }}
-    }} catch (e) {{}}
-  }}
+    function lsSet(key, value) {{
+      try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+      try {{
+        if (window.parent && window.parent !== window && window.parent.localStorage) {{
+          window.parent.localStorage.setItem(key, value);
+        }}
+      }} catch (e) {{}}
+    }}
 
+    var saveTimer = null;
+    function scheduleSave() {{
+      if (saveTimer) return;
+      saveTimer = window.setTimeout(function() {{
+        saveTimer = null;
+        saveState();
+      }}, 80);
+    }}
 
     var rectState = {{ x: data.rect_x, y: data.rect_y, w: data.rect_w, h: data.rect_h }};
     var lineState = {{ y: data.line_y }};
@@ -897,6 +905,7 @@ function downloadCanvasInd(idx, title, expNombre) {{
         clampRect();
       }}
       draw();
+      scheduleSave();
     }});
 
     function endDrag() {{
@@ -989,10 +998,15 @@ function downloadCanvasInd(idx, title, expNombre) {{
         clampRect();
       }}
       draw();
+      scheduleSave();
     }}, {{passive:false}});
 
     canvas.addEventListener('touchend', endDrag);
-    img.onload = function() {{ draw(); }};
+    canvas.addEventListener('touchcancel', endDrag);
+    window.addEventListener('pagehide', saveState);
+    window.addEventListener('beforeunload', saveState);
+    document.addEventListener('visibilitychange', function() {{ if (document.hidden) saveState(); }});
+    img.onload = function() {{ draw(); saveState(); }};
     if (img.complete) draw();
   }});
 }})();
