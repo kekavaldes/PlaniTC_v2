@@ -543,13 +543,33 @@ function downloadCanvasInd(idx, title, expNombre) {{
     var storageKey = baseStorageKey ? ('planitc_' + baseStorageKey + '_' + modo + '_' + idx) : '';
     var snapshotKey = baseStorageKey ? ('planitc_snapshot_' + baseStorageKey + '_' + idx) : '';
 
+  function lsGet(key) {{
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        var pv = window.parent.localStorage.getItem(key);
+        if (pv !== null && pv !== undefined) return pv;
+      }}
+    }} catch (e) {{}}
+    try {{ return window.localStorage.getItem(key); }} catch (e) {{ return null; }}
+  }}
+
+  function lsSet(key, value) {{
+    try {{ window.localStorage.setItem(key, value); }} catch (e) {{}}
+    try {{
+      if (window.parent && window.parent !== window && window.parent.localStorage) {{
+        window.parent.localStorage.setItem(key, value);
+      }}
+    }} catch (e) {{}}
+  }}
+
+
     var rectState = {{ x: data.rect_x, y: data.rect_y, w: data.rect_w, h: data.rect_h }};
     var lineState = {{ y: data.line_y }};
     var circleState = {{ x: data.circle_x, y: data.circle_y, r: data.circle_r }};
 
     try {{
       if (storageKey) {{
-        var saved = localStorage.getItem(storageKey);
+        var saved = lsGet(storageKey);
         if (saved) {{
           var parsed = JSON.parse(saved);
           if (modo === 'rect' && parsed && parsed.rectState) rectState = parsed.rectState;
@@ -575,14 +595,14 @@ function downloadCanvasInd(idx, title, expNombre) {{
     function saveState() {{
       try {{
         if (storageKey) {{
-          localStorage.setItem(storageKey, JSON.stringify({{
+          lsSet(storageKey, JSON.stringify({{
             rectState: rectState,
             lineState: lineState,
             circleState: circleState
           }}));
         }}
         if (snapshotKey) {{
-          localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
+          lsSet(snapshotKey, canvas.toDataURL('image/png'));
         }}
       }} catch (e) {{}}
     }}
