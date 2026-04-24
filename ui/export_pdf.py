@@ -402,9 +402,12 @@ def _seccion_topogramas(story, plan, sty):
             ("Posición tubo", s.get("t1pt") or s.get("t1_posicion_tubo")),
             ("Posición extremidades", s.get("extremidades")),
         ], sty=sty))
-        # En la sección Topogramas NO se muestra el canvas/overlay de planificación.
-        # La planificación visual queda reservada para Adquisición y Reconstrucción,
-        # donde sí corresponde mostrar los límites definidos por el usuario.
+        snap_topo = _snapshot_bytes((plan.get("canvas_snapshots_topo_por_set") or {}).get(idx))
+        if snap_topo:
+            img_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=165, max_h_mm=85)
+            if img_flow is not None:
+                story.append(Spacer(1, 5))
+                story.append(img_flow)
         story.append(Spacer(1, 6))
 
         story.append(Paragraph("Topograma 1", sty["h3"]))
