@@ -538,8 +538,6 @@ def _overlay_canvas_html(
         style="width:150px; background:rgba(0,0,0,0.72); color:#fff; border:2px solid {rec_color}; border-radius:12px; padding:6px 10px; outline:none;" />
     </div>
   </div>
-  <button type="button" onclick='downloadRefCanvas_{storage_key}({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)}, {json.dumps(ref_nombre)})'
-    style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -1471,7 +1469,7 @@ def _render_panel_reformacion(ref_id: str, recons_planas):
     else:
         ref["subtipo"] = None
 
-    st.caption("Descarga la captura visual directamente desde el botón **Descargar PNG** que aparece bajo cada canvas.")
+    st.caption("La captura visual se guarda automáticamente para incorporarse al PDF.")
 
     is_vr = ref["tipo"] == "VR"
     overlay_mode = "radial" if is_vr else "parallel"
