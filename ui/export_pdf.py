@@ -27,7 +27,7 @@ import hashlib
 from datetime import datetime
 
 import streamlit as st
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageDraw, ImageFont
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -47,6 +47,7 @@ from reportlab.platypus import (
 
 from ui.canvas_snapshot import (
     capture_all_snapshots_raw,
+    capture_all_ref_states_raw,
     items_for_group,
     combine_png_bytes,
     set_snapshot,
@@ -761,10 +762,71 @@ def construir_pdf(plan=None) -> bytes:
     return buf.getvalue()
 
 
+
+
+def _overlay_ref_text_on_png(png_bytes, ref_state):
+    """Agrega al PNG del canvas los textos de referencia anatómica guardados por JS."""
+    if not png_bytes or not isinstance(ref_state, dict):
+        return png_bytes
+    refs = ref_state.get("refs") or []
+    if not isinstance(refs, list):
+        return png_bytes
+    try:
+        im = PILImage.open(io.BytesIO(png_bytes)).convert("RGBA")
+        draw = ImageDraw.Draw(im, "RGBA")
+        w, h = im.size
+        try:
+            font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(14, int(min(w, h) * 0.030)))
+            font_num = ImageFont.truetype("DejaVuSans-Bold.ttf", max(12, int(min(w, h) * 0.024)))
+        except Exception:
+            font = ImageFont.load_default()
+            font_num = ImageFont.load_default()
+
+        for idx, ref in enumerate(refs[:3], start=1):
+            if not isinstance(ref, dict) or not ref.get("enabled"):
+                continue
+            text = str(ref.get("text") or "").strip()
+            if not text:
+                continue
+            tx = float(ref.get("tx", 0.18) or 0.18)
+            ty = float(ref.get("ty", 0.12) or 0.12)
+            x = max(0, min(int(tx * w), w - 10))
+            y = max(0, min(int(ty * h), h - 10))
+
+            bbox = draw.textbbox((0, 0), text, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            pad_x = max(8, int(w * 0.012))
+            pad_y = max(5, int(h * 0.008))
+            r = max(11, int(min(w, h) * 0.025))
+            gap = max(5, int(w * 0.008))
+            box_w = min(tw + pad_x * 2, max(60, w - x - (2 * r + gap) - 8))
+            box_h = th + pad_y * 2
+            cx = max(r + 2, min(x + r, w - r - 2))
+            cy = max(r + 2, min(y + box_h // 2, h - r - 2))
+            box_x = max(2, min(cx + r + gap, w - box_w - 2))
+            box_y = max(2, min(cy - box_h // 2, h - box_h - 2))
+
+            badge_color = (0, 210, 255, 255)
+            border_color = (0, 210, 255, 255)
+            draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=badge_color)
+            nb = draw.textbbox((0, 0), str(idx), font=font_num)
+            draw.text((cx - (nb[2]-nb[0]) / 2, cy - (nb[3]-nb[1]) / 2 - 1), str(idx), font=font_num, fill=(5, 16, 24, 255))
+            try:
+                draw.rounded_rectangle((box_x, box_y, box_x + box_w, box_y + box_h), radius=max(6, int(min(w, h) * 0.012)), fill=(0,0,0,185), outline=border_color, width=max(2, int(min(w, h) * 0.003)))
+            except Exception:
+                draw.rectangle((box_x, box_y, box_x + box_w, box_y + box_h), fill=(0,0,0,185), outline=border_color)
+            draw.text((box_x + pad_x, box_y + pad_y - bbox[1]), text, font=font, fill=(255,255,255,255))
+        out = io.BytesIO()
+        im.convert("RGB").save(out, format="PNG")
+        return out.getvalue()
+    except Exception:
+        return png_bytes
+
 # ──────────────────────────────────────────────────────────────────────────
 # Auto-captura de canvas al generar el PDF
 # ──────────────────────────────────────────────────────────────────────────
-def _ingest_canvas_snapshots(all_snaps: dict) -> dict:
+def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None) -> dict:
     """A partir del dict masivo {planitc_snapshot_xxx: bytes}, distribuye
     los snapshots en los 4 stores de session_state que consume el PDF:
       - canvas_snapshots_adq_por_exp  → por exp_id
@@ -776,6 +838,7 @@ def _ingest_canvas_snapshots(all_snaps: dict) -> dict:
     sección (para feedback al usuario).
     """
     conteo = {"adq": 0, "topo": 0, "recon": 0, "ref": 0}
+    all_ref_states = all_ref_states or {}
     if not all_snaps:
         return conteo
 
@@ -842,7 +905,9 @@ def _ingest_canvas_snapshots(all_snaps: dict) -> dict:
                 group_key = f"{ref_id}_img{img_idx}_{sig}"
                 items = items_for_group(all_snaps, group_key)
                 if items:
-                    snaps[f"img{img_idx}"] = {"bytes": items[0]["bytes"]}
+                    ref_state = all_ref_states.get(f"planitc_ref_{group_key}") if isinstance(all_ref_states, dict) else None
+                    png_bytes = _overlay_ref_text_on_png(items[0]["bytes"], ref_state)
+                    snaps[f"img{img_idx}"] = {"bytes": png_bytes}
             if snaps:
                 store = st.session_state.setdefault("canvas_snapshots_ref_por_id", {})
                 store[ref_id] = snaps
@@ -872,11 +937,12 @@ def _finalizar_captura_y_generar_pdf(js_key: str) -> bool:
     y genera el PDF. Retorna True si terminó; False si el navegador aún no responde.
     """
     all_snaps = capture_all_snapshots_raw(js_key=js_key)
-    if all_snaps is None:
+    all_ref_states = capture_all_ref_states_raw(js_key=f"{js_key}_ref_states")
+    if all_snaps is None or all_ref_states is None:
         st.info("Capturando los canvas guardados antes de generar el PDF...")
         return False
 
-    conteo = _ingest_canvas_snapshots(all_snaps or {})
+    conteo = _ingest_canvas_snapshots(all_snaps or {}, all_ref_states or {})
     st.session_state["_pdf_ultimo_conteo_snapshots"] = conteo
     st.session_state["_pdf_ultimo_total_raw_snapshots"] = len(all_snaps or {})
 
