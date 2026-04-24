@@ -1194,8 +1194,18 @@ def _guardar_snapshots_reformacion_desde_bulk(ref_id: str, all_snaps) -> bool:
 
 def _render_boton_snapshot_reformacion(ref_id: str):
     """Botón manual para capturar los canvas de las imágenes de la reformación.
-    Es opcional: el PDF también auto-captura al generar."""
+
+    Patrón robusto: streamlit_js_eval al tope (fuera de ramas condicionales)
+    y botón Cancelar para que el usuario no quede bloqueado si el iframe
+    interno no responde.
+    """
     pending_key = f"_pending_snap_ref_{ref_id}"
+    nonce = st.session_state.get(pending_key, 0)
+
+    effective_key = (
+        f"snap_ref_{ref_id}_{nonce}" if nonce else f"snap_ref_{ref_id}_idle"
+    )
+    all_snaps = capture_all_snapshots_raw(js_key=effective_key) if nonce else None
 
     if st.button(
         "💾 Guardar canvas para PDF",
@@ -1206,16 +1216,29 @@ def _render_boton_snapshot_reformacion(ref_id: str):
         st.session_state[pending_key] = int(time.time() * 1000)
         st.rerun()
 
-    nonce = st.session_state.get(pending_key)
     if nonce:
-        all_snaps = capture_all_snapshots_raw(
-            js_key=f"manual_snap_ref_{ref_id}_{nonce}"
-        )
-        if all_snaps is None:
-            st.info("Capturando canvas…")
+        consumed_key = f"_consumed_snap_ref_{ref_id}_{nonce}"
+        if st.session_state.get(consumed_key):
+            pass
+        elif all_snaps is None:
+            col_wait, col_cancel = st.columns([3, 1], gap="small")
+            with col_wait:
+                st.info(
+                    "📸 Capturando canvas… Si no avanza en 2-3 segundos, "
+                    "vuelve a pulsar el botón."
+                )
+            with col_cancel:
+                if st.button(
+                    "Cancelar",
+                    key=f"cancel_snap_ref_{ref_id}_{nonce}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(pending_key, None)
+                    st.rerun()
         else:
+            st.session_state[consumed_key] = True
             if _guardar_snapshots_reformacion_desde_bulk(ref_id, all_snaps):
-                st.success("Snapshots guardados para el PDF.")
+                st.success("✓ Snapshots guardados para el PDF.")
             else:
                 st.warning(
                     "No se pudieron capturar los canvas. Ajusta algo en las "
