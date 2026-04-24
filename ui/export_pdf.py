@@ -602,13 +602,14 @@ def _seccion_reconstrucciones(story, plan, sty):
             # Imagen axial/slice de reconstrucción con su DFOV.
             img_flow = None
             if snap_rec:
+                # Preferimos siempre el snapshot real del canvas, porque conserva
+                # el DFOV tal como fue configurado por el alumno: posición, tamaño,
+                # contorno y transparencia.
                 img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=52, max_h_mm=52)
             elif img_data and img_data.get("bytes"):
-                img_bytes = _draw_recon_dfov_fallback(
-                    img_data["bytes"],
-                    color=_color_exploracion_pdf(exp.get("id"), exps),
-                )
-                img_flow = _pil_bytes_to_flowable(img_bytes, max_w_mm=52, max_h_mm=52)
+                # Si no se capturó el canvas real, mostramos la imagen base sin
+                # dibujar un cuadrado artificial encima.
+                img_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=52, max_h_mm=52)
 
             # Topogramas de reconstrucción con su DFOV.
             topo_store = (plan.get("canvas_snapshots_recon_topos_por_id") or {}).get(rec_id, {})
@@ -621,18 +622,9 @@ def _seccion_reconstrucciones(story, plan, sty):
                         if flow is not None:
                             topo_flows.append(flow)
 
-            # Fallback: si no se alcanza a capturar el canvas de los topogramas
-            # en reconstrucción, muestra las imágenes base limpias.
-            if not topo_flows:
-                limpio = _topogramas_limpios_bytes(_topo_set_para_exp(plan, exp))
-                if limpio:
-                    limpio = _draw_topo_dfov_fallback(
-                        limpio,
-                        color=_color_exploracion_pdf(exp.get("id"), exps),
-                    )
-                flow = _pil_bytes_to_flowable(limpio, max_w_mm=88, max_h_mm=62) if limpio else None
-                if flow is not None:
-                    topo_flows.append(flow)
+            # No dibujamos un DFOV artificial de respaldo sobre los topogramas.
+            # Solo se incluyen si existe el snapshot real del canvas de reconstrucción,
+            # para evitar colores sólidos que tapen la imagen.
 
             imagenes_col = []
             if img_flow is not None:
