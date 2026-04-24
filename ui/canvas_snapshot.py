@@ -275,3 +275,59 @@ def set_snapshot(store_name: str, obj_key, png_bytes: bytes, extra: dict | None 
     if extra:
         payload.update(extra)
     store[obj_key] = payload
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Captura de estados JS de reformaciones (texto de referencias anatómicas)
+# ────────────────────────────────────────────────────────────────────────
+def capture_all_ref_states_raw(js_key: str):
+    """Lee estados JSON guardados por los canvas de Reformaciones.
+
+    Devuelve {full_key: dict}, donde full_key tiene la forma:
+        planitc_ref_<ref_id>_img<idx>_<sig>
+    """
+    if streamlit_js_eval is None:
+        return {}
+
+    script = """
+    (function() {
+      try {
+        const out = {};
+        function readStorage(storage) {
+          try {
+            if (!storage) return;
+            for (let i = 0; i < storage.length; i++) {
+              const key = storage.key(i);
+              if (!key || !key.startsWith('planitc_ref_')) continue;
+              const raw = storage.getItem(key);
+              if (!raw || typeof raw !== 'string') continue;
+              out[key] = raw;
+            }
+          } catch (e) {}
+        }
+        readStorage(window.localStorage);
+        readStorage(window.sessionStorage);
+        try { if (window.parent && window.parent !== window) readStorage(window.parent.localStorage); } catch (e) {}
+        try { if (window.top && window.top !== window) readStorage(window.top.localStorage); } catch (e) {}
+        return JSON.stringify(out);
+      } catch (err) {
+        return JSON.stringify({});
+      }
+    })()
+    """
+
+    result = _normalize_js_result(
+        streamlit_js_eval(js_expressions=script, key=js_key)
+    )
+    if result is None:
+        return None
+    if not isinstance(result, dict):
+        return {}
+
+    decoded = {}
+    for key, raw in result.items():
+        try:
+            decoded[key] = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            continue
+    return decoded
