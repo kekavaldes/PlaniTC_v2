@@ -300,8 +300,6 @@ def render_canvas_recon_cuadrado(
   </div>
   <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
-    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -377,23 +375,6 @@ def render_canvas_recon_cuadrado(
     try {{ window.name = 'PLANITC_STORE::' + JSON.stringify(obj || {{}}); }} catch(e) {{}}
   }}
 
-  function _cookieGet(key) {{
-    try {{
-      var name = encodeURIComponent(key) + '=';
-      var parts = document.cookie ? document.cookie.split(';') : [];
-      for (var i = 0; i < parts.length; i++) {{
-        var c = parts[i].trim();
-        if (c.indexOf(name) === 0) return decodeURIComponent(c.substring(name.length));
-      }}
-    }} catch(e) {{}}
-    return null;
-  }}
-
-  function _cookieSet(key, value) {{
-    try {{
-      document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; path=/; max-age=86400; SameSite=Lax';
-    }} catch(e) {{}}
-  }}
 
   function lsGet(key) {{
     var v = null;
@@ -412,8 +393,7 @@ def render_canvas_recon_cuadrado(
       }}
     }} catch (e) {{}}
     try {{ var store = _wnRead(); if (store && store[key]) return store[key]; }} catch(e) {{}}
-    v = _cookieGet(key);
-    return (v !== null && v !== undefined) ? v : null;
+    return null;
   }}
 
   function lsSet(key, value) {{
@@ -430,7 +410,6 @@ def render_canvas_recon_cuadrado(
       }}
     }} catch (e) {{}}
     try {{ var store = _wnRead(); store[key] = value; _wnWrite(store); }} catch(e) {{}}
-    _cookieSet(key, value);
   }}
 
   try {{
@@ -784,8 +763,6 @@ def render_canvas_topo_dfov_rect(
   </div>
   <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
-    style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
 (function() {{
@@ -858,23 +835,6 @@ def render_canvas_topo_dfov_rect(
     try {{ window.name = 'PLANITC_STORE::' + JSON.stringify(obj || {{}}); }} catch(e) {{}}
   }}
 
-  function _cookieGet(key) {{
-    try {{
-      var name = encodeURIComponent(key) + '=';
-      var parts = document.cookie ? document.cookie.split(';') : [];
-      for (var i = 0; i < parts.length; i++) {{
-        var c = parts[i].trim();
-        if (c.indexOf(name) === 0) return decodeURIComponent(c.substring(name.length));
-      }}
-    }} catch(e) {{}}
-    return null;
-  }}
-
-  function _cookieSet(key, value) {{
-    try {{
-      document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; path=/; max-age=86400; SameSite=Lax';
-    }} catch(e) {{}}
-  }}
 
   function lsGet(key) {{
     var v = null;
@@ -893,8 +853,7 @@ def render_canvas_topo_dfov_rect(
       }}
     }} catch (e) {{}}
     try {{ var store = _wnRead(); if (store && store[key]) return store[key]; }} catch(e) {{}}
-    v = _cookieGet(key);
-    return (v !== null && v !== undefined) ? v : null;
+    return null;
   }}
 
   function lsSet(key, value) {{
@@ -911,7 +870,6 @@ def render_canvas_topo_dfov_rect(
       }}
     }} catch (e) {{}}
     try {{ var store = _wnRead(); store[key] = value; _wnWrite(store); }} catch(e) {{}}
-    _cookieSet(key, value);
   }}
 
   try {{
@@ -1796,7 +1754,6 @@ def _render_panel_central(adquisiciones_validas):
                 )
                 if html_canvas:
                     components.html(html_canvas, height=460, scrolling=False)
-                    # Mensaje ya no necesario - botón Descargar PNG está visible bajo cada canvas
                     # _render_boton_snapshot_reconstruccion ya no necesario (subida manual en Exportar)
                 else:
                     st.image(img_guardada["bytes"], caption="Imagen cargada", width=310)
