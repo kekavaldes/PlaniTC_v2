@@ -218,6 +218,58 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
     return RLImage(buf, width=draw_w, height=draw_h)
 
 
+def _combine_png_bytes_vertical(items, gap=14, padding=10, bg=(255, 255, 255, 0)):
+    """Combina PNGs en una sola imagen vertical para no achicarlas tanto en el PDF."""
+    valid = []
+    for item in items or []:
+        data = item.get("bytes") if isinstance(item, dict) else item
+        if not data:
+            continue
+        try:
+            valid.append(PILImage.open(io.BytesIO(data)).convert("RGBA"))
+        except Exception:
+            continue
+    if not valid:
+        return None
+    max_w = max(im.width for im in valid) + padding * 2
+    total_h = sum(im.height for im in valid) + gap * (len(valid) - 1) + padding * 2
+    canvas = PILImage.new("RGBA", (max_w, total_h), bg)
+    y = padding
+    for im in valid:
+        x = padding + (max_w - padding * 2 - im.width) // 2
+        canvas.alpha_composite(im, (x, y))
+        y += im.height + gap
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _items_for_any_recon_topogram(all_snaps, rec_id):
+    """Busca snapshots de topogramas de reconstrucción aunque el nombre exacto del key varíe."""
+    if not all_snaps or not rec_id:
+        return []
+    wanted = []
+    rec_id_s = str(rec_id)
+    for full_key, data in all_snaps.items():
+        k = str(full_key)
+        # Los topogramas de reconstrucción se guardan como planitc_snapshot_recon_topo_rect_<rec_id>_topo1/2.
+        # Esta búsqueda es deliberadamente más flexible para cubrir variaciones de nombre.
+        if not k.startswith("planitc_snapshot_"):
+            continue
+        kl = k.lower()
+        if rec_id_s in k and "recon" in kl and "topo" in kl:
+            wanted.append({"item": k, "bytes": data})
+    # Orden estable: topo1 antes de topo2, luego el resto.
+    def _rank(it):
+        kk = str(it.get("item", "")).lower()
+        if "topo1" in kk:
+            return (0, kk)
+        if "topo2" in kk:
+            return (1, kk)
+        return (2, kk)
+    return sorted(wanted, key=_rank)
+
+
 
 
 def _snapshot_bytes(snapshot):
@@ -498,27 +550,40 @@ def _seccion_reconstrucciones(story, plan, sty):
                 ("Fin reconstrucción", rec.get("fin_recons")),
             ], col_widths=(40 * mm, 65 * mm), sty=sty)
 
-            snap_rec = _snapshot_bytes((plan.get("canvas_snapshots_recon_por_id") or {}).get(rec.get("id")))
-            img_data = imagenes_rec.get(rec.get("id"))
-            img_flow = None
-            if snap_rec:
-                img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=55, max_h_mm=55)
-            elif img_data and img_data.get("bytes"):
-                img_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=55, max_h_mm=55)
+            rec_id = rec.get("id")
+            snap_axial = _snapshot_bytes((plan.get("canvas_snapshots_recon_por_id") or {}).get(rec_id))
+            snap_topo = _snapshot_bytes((plan.get("canvas_snapshots_recon_topo_por_id") or {}).get(rec_id))
+            img_data = imagenes_rec.get(rec_id)
 
-            if img_flow is not None:
-                fila = Table(
-                    [[params_table, img_flow]],
-                    colWidths=(105 * mm, 65 * mm),
-                )
-                fila.setStyle(TableStyle([
+            img_axial_flow = None
+            img_topo_flow = None
+            if snap_axial:
+                img_axial_flow = _pil_bytes_to_flowable(snap_axial, max_w_mm=82, max_h_mm=82)
+            elif img_data and img_data.get("bytes"):
+                img_axial_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=82, max_h_mm=82)
+            if snap_topo:
+                img_topo_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=82, max_h_mm=82)
+
+            # Para no achicar demasiado las imágenes, se deja la tabla primero y
+            # las imágenes de reconstrucción debajo, una sobre la otra.
+            block.append(params_table)
+            image_rows = []
+            if img_axial_flow is not None:
+                image_rows.append([Paragraph("<b>Imagen axial / DFOV</b>", sty["small"]), img_axial_flow])
+            if img_topo_flow is not None:
+                image_rows.append([Paragraph("<b>Topograma / límites de reconstrucción</b>", sty["small"]), img_topo_flow])
+            if image_rows:
+                img_table = Table(image_rows, colWidths=(55 * mm, 95 * mm))
+                img_table.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
                 ]))
-                block.append(fila)
-            else:
-                block.append(params_table)
+                block.append(Spacer(1, 6))
+                block.append(img_table)
 
             block.append(Spacer(1, 8))
             story.append(KeepTogether(block))
@@ -718,6 +783,7 @@ def _recopilar_plan():
         "canvas_snapshots_topo_por_set": dict(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {}),
         "canvas_snapshots_adq_por_exp": dict(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {}),
         "canvas_snapshots_recon_por_id": dict(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {}),
+        "canvas_snapshots_recon_topo_por_id": dict(st.session_state.get("canvas_snapshots_recon_topo_por_id", {}) or {}),
         "canvas_snapshots_ref_por_id": dict(st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}),
         "inyectora_store": iny_store,
     }
@@ -874,13 +940,11 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
                     conteo["topo"] += 1
 
     # RECONSTRUCCIONES
-    # Cada reconstrucción puede tener más de un canvas:
-    #   1) la imagen axial donde se ajusta el DFOV (recon_square_<rec_id>)
-    #   2) uno o dos topogramas donde se definen los límites de reconstrucción
-    #      (recon_topo_rect_<rec_id>_topo1 / topo2)
-    # Antes solo se guardaba el canvas axial, por eso el PDF no mostraba el
-    # topograma con los límites. Ahora combinamos todos los snapshots
-    # disponibles de la reconstrucción en una sola imagen para el informe.
+    # Se guardan por separado:
+    #   - axial/DFOV: recon_square_<rec_id>
+    #   - topograma/límites: recon_topo_rect_<rec_id>_topo1/topo2
+    # Esto permite que en el PDF aparezcan ambas imágenes, una sobre la otra,
+    # sin achicarlas demasiado.
     recons_map = st.session_state.get("reconstrucciones_por_exp", {}) or {}
     for recs in recons_map.values():
         for rec in (recs or []):
@@ -888,19 +952,22 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
             if not rec_id:
                 continue
 
-            candidate_groups = [
-                f"recon_square_{rec_id}",
-                f"recon_topo_rect_{rec_id}_topo1",
-                f"recon_topo_rect_{rec_id}_topo2",
-            ]
-            items = []
-            for group_key in candidate_groups:
-                items.extend(items_for_group(all_snaps, group_key))
+            axial_items = items_for_group(all_snaps, f"recon_square_{rec_id}")
+            if axial_items:
+                combinado_axial = combine_png_bytes(axial_items)
+                if combinado_axial:
+                    set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado_axial)
+                    conteo["recon"] += 1
 
-            if items:
-                combinado = combine_png_bytes(items)
-                if combinado:
-                    set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
+            topo_items = []
+            topo_items.extend(items_for_group(all_snaps, f"recon_topo_rect_{rec_id}_topo1"))
+            topo_items.extend(items_for_group(all_snaps, f"recon_topo_rect_{rec_id}_topo2"))
+            if not topo_items:
+                topo_items = _items_for_any_recon_topogram(all_snaps, rec_id)
+            if topo_items:
+                combinado_topo = _combine_png_bytes_vertical(topo_items)
+                if combinado_topo:
+                    set_snapshot("canvas_snapshots_recon_topo_por_id", rec_id, combinado_topo)
                     conteo["recon"] += 1
 
     # REFORMACIONES (3 imágenes por reformación, con sig dentro del group_key)
@@ -938,6 +1005,7 @@ def _contar_canvas_snapshots_guardados() -> int:
     total += len(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {})
     total += len(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {})
     total += len(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {})
+    total += len(st.session_state.get("canvas_snapshots_recon_topo_por_id", {}) or {})
 
     refs = st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}
     for value in refs.values():
