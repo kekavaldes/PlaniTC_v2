@@ -756,52 +756,98 @@ def _overlay_canvas_html(
   }}
   window.downloadRefCanvas_{storage_key} = downloadRefCanvas_{storage_key};
 
-  function buildSnapshotDataUrl() {{
-    // El canvas principal no incluye los inputs HTML de referencia anatómica.
-    // Para el PDF generamos una imagen temporal que mezcla canvas + textos.
+  function _syncRefTextsFromInputs() {{
     try {{
+      for (var i = 0; i < 3; i++) {{
+        if (labelInputs[i]) state.refs[i].text = labelInputs[i].value || '';
+      }}
+    }} catch(e) {{}}
+  }}
+
+  function _roundRectPath(c, x, y, w, h, r) {{
+    r = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.lineTo(x + w - r, y);
+    c.quadraticCurveTo(x + w, y, x + w, y + r);
+    c.lineTo(x + w, y + h - r);
+    c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    c.lineTo(x + r, y + h);
+    c.quadraticCurveTo(x, y + h, x, y + h - r);
+    c.lineTo(x, y + r);
+    c.quadraticCurveTo(x, y, x + r, y);
+    c.closePath();
+  }}
+
+  function _snapshotDataURLWithLabels() {{
+    try {{
+      _syncRefTextsFromInputs();
       var tempCanvas = document.createElement('canvas');
       tempCanvas.width = canvas.width;
       tempCanvas.height = canvas.height;
-      var tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(canvas, 0, 0);
-
-      tempCtx.font = 'bold 24px Arial';
-      tempCtx.textBaseline = 'middle';
-      tempCtx.textAlign = 'left';
-      var padX = 10;
-      var boxH = 34;
+      var tctx = tempCanvas.getContext('2d');
+      tctx.drawImage(canvas, 0, 0);
 
       for (var i = 0; i < 3; i++) {{
         var ref = state.refs[i];
         if (!ref || !ref.enabled) continue;
-
-        var input = labelInputs && labelInputs[i] ? labelInputs[i] : null;
-        var text = input ? input.value.trim() : String(ref.text || '').trim();
-        ref.text = text;
+        var text = (ref.text || '').trim();
         if (!text) continue;
 
         var tp = normToPx(ref.tx, ref.ty);
-        var textW = tempCtx.measureText(text).width;
-        var x = clamp(tp.x + 34, 4, W - textW - padX * 2 - 4);
-        var y = clamp(tp.y + 15, boxH / 2 + 4, H - boxH / 2 - 4);
+        var scaleLabel = Math.max(1, Math.min(W, H) / 700);
+        var badgeR = 18 * scaleLabel;
+        var gap = 8 * scaleLabel;
+        var padX = 12 * scaleLabel;
+        var padY = 7 * scaleLabel;
+        var fontSize = 20 * scaleLabel;
 
-        tempCtx.fillStyle = 'rgba(0,0,0,0.72)';
-        tempCtx.fillRect(x - padX, y - boxH / 2, textW + padX * 2, boxH);
-        tempCtx.strokeStyle = recColor;
-        tempCtx.lineWidth = 2;
-        tempCtx.strokeRect(x - padX, y - boxH / 2, textW + padX * 2, boxH);
-        tempCtx.fillStyle = recColor;
-        tempCtx.fillText(text, x, y + 1);
+        tctx.font = 'bold ' + fontSize + 'px Arial, Helvetica, sans-serif';
+        tctx.textBaseline = 'middle';
+        var tw = tctx.measureText(text).width;
+        var boxH = fontSize + padY * 2;
+        var boxW = Math.min(tw + padX * 2, W - tp.x - (badgeR * 2 + gap) - 8);
+        if (boxW < 70 * scaleLabel) boxW = Math.min(tw + padX * 2, 190 * scaleLabel);
+
+        var bx = clamp(tp.x, 0, W - 10);
+        var by = clamp(tp.y, 0, H - boxH - 4);
+        var circleX = clamp(bx + badgeR, badgeR + 2, W - badgeR - 2);
+        var circleY = clamp(by + boxH / 2, badgeR + 2, H - badgeR - 2);
+        var textBoxX = clamp(circleX + badgeR + gap, 2, W - boxW - 2);
+        var textBoxY = clamp(circleY - boxH / 2, 2, H - boxH - 2);
+
+        // Insignia numérica de la referencia
+        tctx.fillStyle = acqColor;
+        tctx.beginPath();
+        tctx.arc(circleX, circleY, badgeR, 0, Math.PI * 2);
+        tctx.fill();
+        tctx.fillStyle = '#071018';
+        tctx.font = 'bold ' + (15 * scaleLabel) + 'px Arial, Helvetica, sans-serif';
+        tctx.textAlign = 'center';
+        tctx.fillText(String(i + 1), circleX, circleY + 1);
+
+        // Caja de texto
+        tctx.lineWidth = Math.max(2, 2 * scaleLabel);
+        tctx.strokeStyle = recColor;
+        tctx.fillStyle = 'rgba(0,0,0,0.72)';
+        _roundRectPath(tctx, textBoxX, textBoxY, boxW, boxH, 12 * scaleLabel);
+        tctx.fill();
+        tctx.stroke();
+
+        tctx.fillStyle = '#ffffff';
+        tctx.font = 'bold ' + fontSize + 'px Arial, Helvetica, sans-serif';
+        tctx.textAlign = 'left';
+        tctx.fillText(text, textBoxX + padX, textBoxY + boxH / 2);
       }}
       return tempCanvas.toDataURL('image/png');
     }} catch(e) {{
-      return canvas.toDataURL('image/png');
+      try {{ return canvas.toDataURL('image/png'); }} catch(err) {{ return ''; }}
     }}
   }}
 
   function saveState() {{
     try {{
+      _syncRefTextsFromInputs();
       lsSet(storageKey, JSON.stringify({{
         refs: state.refs,
         linesOffset: state.linesOffset,
@@ -810,7 +856,7 @@ def _overlay_canvas_html(
         lineLen: state.lineLen,
         showRanges: showRanges
       }}));
-      lsSet(snapshotKey, buildSnapshotDataUrl());
+      lsSet(snapshotKey, _snapshotDataURLWithLabels());
     }} catch(e) {{}}
   }}
 
@@ -1186,6 +1232,14 @@ def _overlay_canvas_html(
     }}
     if (labelInputs[i]) {{
       labelInputs[i].addEventListener('input', function() {{
+        state.refs[i].text = this.value;
+        saveState();
+      }});
+      labelInputs[i].addEventListener('change', function() {{
+        state.refs[i].text = this.value;
+        saveState();
+      }});
+      labelInputs[i].addEventListener('blur', function() {{
         state.refs[i].text = this.value;
         saveState();
       }});
