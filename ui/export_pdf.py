@@ -89,18 +89,21 @@ def _styles():
             fontSize=16, leading=20,
             textColor=colors.HexColor("#0f172a"),
             spaceBefore=10, spaceAfter=8, alignment=TA_LEFT,
+            keepWithNext=1,
         ),
         "h2": ParagraphStyle(
             "PH2", parent=ss["Heading2"],
             fontSize=13, leading=17,
             textColor=colors.HexColor("#1e293b"),
             spaceBefore=8, spaceAfter=4, alignment=TA_LEFT,
+            keepWithNext=1,
         ),
         "h3": ParagraphStyle(
             "PH3", parent=ss["Heading3"],
             fontSize=11, leading=14,
             textColor=colors.HexColor("#334155"),
             spaceBefore=4, spaceAfter=2, alignment=TA_LEFT,
+            keepWithNext=1,
         ),
         "normal": ParagraphStyle(
             "PNormal", parent=ss["BodyText"],
@@ -216,6 +219,98 @@ def _pil_bytes_to_flowable(img_bytes, max_w_mm=80, max_h_mm=80):
     im.save(buf, format="PNG")
     buf.seek(0)
     return RLImage(buf, width=draw_w, height=draw_h)
+
+
+
+def _pil_to_png_bytes(img):
+    """Convierte una imagen PIL a PNG bytes sin overlays."""
+    if img is None:
+        return None
+    try:
+        im = img.copy()
+        if im.mode not in ("RGB", "RGBA", "L"):
+            im = im.convert("RGB")
+        buf = io.BytesIO()
+        im.save(buf, format="PNG")
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def _combine_pil_images_horizontal(images, gap=10, padding=10, bg=(0, 0, 0, 255)):
+    """Une imágenes PIL horizontalmente para mostrarlas juntas en el PDF."""
+    cleaned = []
+    for img in images or []:
+        if img is None:
+            continue
+        try:
+            cleaned.append(img.copy().convert("RGBA"))
+        except Exception:
+            continue
+    if not cleaned:
+        return None
+    max_h = max(im.height for im in cleaned)
+    total_w = sum(im.width for im in cleaned) + gap * (len(cleaned) - 1) + padding * 2
+    total_h = max_h + padding * 2
+    canvas = PILImage.new("RGBA", (total_w, total_h), bg)
+    x = padding
+    for im in cleaned:
+        y = padding + (max_h - im.height) // 2
+        canvas.alpha_composite(im, (x, y))
+        x += im.width + gap
+    out = io.BytesIO()
+    canvas.convert("RGB").save(out, format="PNG")
+    return out.getvalue()
+
+
+def _topogramas_limpios_bytes(tstore):
+    """Obtiene solo las imágenes base del/los topograma(s), sin DFOV ni recuadros."""
+    if not tstore:
+        return None
+    try:
+        from ui.topograma import obtener_imagen_topograma_adquirido
+    except Exception:
+        return None
+
+    imgs = []
+    hay_topo1 = bool(tstore.get("topograma_iniciado", False))
+    hay_topo2 = bool(tstore.get("aplica_topo2") or tstore.get("aplica_topograma_2")) and bool(tstore.get("topograma2_iniciado", False))
+
+    if hay_topo1:
+        img1, _err1 = obtener_imagen_topograma_adquirido(
+            tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("posicion") or tstore.get("t1_posicion_paciente") or "",
+            tstore.get("entrada") or tstore.get("t1_entrada_paciente") or "",
+            tstore.get("t1pt") or tstore.get("t1_posicion_tubo") or "",
+        )
+        if img1 is not None:
+            imgs.append(img1)
+
+    if hay_topo2:
+        img2, _err2 = obtener_imagen_topograma_adquirido(
+            tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
+            tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
+            tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
+            tstore.get("t2_posicion_tubo") or tstore.get("t2pt") or "",
+        )
+        if img2 is not None:
+            imgs.append(img2)
+
+    if len(imgs) > 1:
+        return _combine_pil_images_horizontal(imgs)
+    if imgs:
+        return _pil_to_png_bytes(imgs[0])
+    return None
+
+
+def _topo_set_para_exp(plan, exp):
+    sets = plan.get("topograma_sets") or []
+    idx = exp.get("topo_set_idx") if isinstance(exp, dict) else None
+    if isinstance(idx, int) and 0 <= idx < len(sets):
+        return sets[idx]
+    if sets:
+        return sets[0]
+    return plan.get("topograma_store") or {}
 
 
 
@@ -350,9 +445,11 @@ def _seccion_topogramas(story, plan, sty):
             ("Posición tubo", s.get("t1pt") or s.get("t1_posicion_tubo")),
             ("Posición extremidades", s.get("extremidades")),
         ], sty=sty))
-        snap_topo = _snapshot_bytes((plan.get("canvas_snapshots_topo_por_set") or {}).get(idx))
-        if snap_topo:
-            img_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=165, max_h_mm=85)
+        # En la sección Topogramas se muestra la imagen base limpia,
+        # sin el rectángulo DFOV usado como ayuda visual en el simulador.
+        topo_limpio = _topogramas_limpios_bytes(s)
+        if topo_limpio:
+            img_flow = _pil_bytes_to_flowable(topo_limpio, max_w_mm=165, max_h_mm=85)
             if img_flow is not None:
                 story.append(Spacer(1, 5))
                 story.append(img_flow)
@@ -498,18 +595,59 @@ def _seccion_reconstrucciones(story, plan, sty):
                 ("Fin reconstrucción", rec.get("fin_recons")),
             ], col_widths=(40 * mm, 65 * mm), sty=sty)
 
-            snap_rec = _snapshot_bytes((plan.get("canvas_snapshots_recon_por_id") or {}).get(rec.get("id")))
-            img_data = imagenes_rec.get(rec.get("id"))
+            rec_id = rec.get("id")
+            snap_rec = _snapshot_bytes((plan.get("canvas_snapshots_recon_por_id") or {}).get(rec_id))
+            img_data = imagenes_rec.get(rec_id)
+
+            # Imagen axial/slice de reconstrucción con su DFOV.
             img_flow = None
             if snap_rec:
-                img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=55, max_h_mm=55)
+                img_flow = _pil_bytes_to_flowable(snap_rec, max_w_mm=52, max_h_mm=52)
             elif img_data and img_data.get("bytes"):
-                img_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=55, max_h_mm=55)
+                img_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=52, max_h_mm=52)
 
+            # Topogramas de reconstrucción con su DFOV.
+            topo_store = (plan.get("canvas_snapshots_recon_topos_por_id") or {}).get(rec_id, {})
+            topo_flows = []
+            if isinstance(topo_store, dict):
+                for topo_key in ("topo1", "topo2"):
+                    topo_snap = _snapshot_bytes(topo_store.get(topo_key))
+                    if topo_snap:
+                        flow = _pil_bytes_to_flowable(topo_snap, max_w_mm=44, max_h_mm=62)
+                        if flow is not None:
+                            topo_flows.append(flow)
+
+            # Fallback: si no se alcanza a capturar el canvas de los topogramas
+            # en reconstrucción, muestra las imágenes base limpias.
+            if not topo_flows:
+                limpio = _topogramas_limpios_bytes(_topo_set_para_exp(plan, exp))
+                flow = _pil_bytes_to_flowable(limpio, max_w_mm=88, max_h_mm=62) if limpio else None
+                if flow is not None:
+                    topo_flows.append(flow)
+
+            imagenes_col = []
             if img_flow is not None:
+                imagenes_col.append(Paragraph("Imagen reconstrucción + DFOV", sty["caption"]))
+                imagenes_col.append(img_flow)
+                imagenes_col.append(Spacer(1, 4))
+            if topo_flows:
+                imagenes_col.append(Paragraph("Topograma(s) + DFOV", sty["caption"]))
+                if len(topo_flows) == 1:
+                    imagenes_col.append(topo_flows[0])
+                else:
+                    fila_topos = Table([topo_flows], colWidths=[45 * mm] * len(topo_flows))
+                    fila_topos.setStyle(TableStyle([
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 1),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+                    ]))
+                    imagenes_col.append(fila_topos)
+
+            if imagenes_col:
                 fila = Table(
-                    [[params_table, img_flow]],
-                    colWidths=(105 * mm, 65 * mm),
+                    [[params_table, imagenes_col]],
+                    colWidths=(92 * mm, 78 * mm),
                 )
                 fila.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -718,6 +856,7 @@ def _recopilar_plan():
         "canvas_snapshots_topo_por_set": dict(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {}),
         "canvas_snapshots_adq_por_exp": dict(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {}),
         "canvas_snapshots_recon_por_id": dict(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {}),
+        "canvas_snapshots_recon_topos_por_id": dict(st.session_state.get("canvas_snapshots_recon_topos_por_id", {}) or {}),
         "canvas_snapshots_ref_por_id": dict(st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}),
         "inyectora_store": iny_store,
     }
@@ -832,12 +971,13 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
       - canvas_snapshots_adq_por_exp  → por exp_id
       - canvas_snapshots_topo_por_set → por índice de set de topograma
       - canvas_snapshots_recon_por_id → por rec_id
+      - canvas_snapshots_recon_topos_por_id → por rec_id (dict {topo1, topo2})
       - canvas_snapshots_ref_por_id   → por ref_id (dict {img1, img2, img3})
 
     Devuelve un diccionario con el conteo de snapshots distribuidos por
     sección (para feedback al usuario).
     """
-    conteo = {"adq": 0, "topo": 0, "recon": 0, "ref": 0}
+    conteo = {"adq": 0, "topo": 0, "recon": 0, "recon_topos": 0, "ref": 0}
     all_ref_states = all_ref_states or {}
     if not all_snaps:
         return conteo
@@ -887,6 +1027,24 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
                     set_snapshot("canvas_snapshots_recon_por_id", rec_id, combinado)
                     conteo["recon"] += 1
 
+            # Topogramas mostrados dentro de la pestaña Reconstrucciones.
+            # Group keys generados en reconstruccion.py:
+            #   recon_topo_rect_{rec_id}_topo1
+            #   recon_topo_rect_{rec_id}_topo2
+            topo_snaps = {}
+            for topo_key in ("topo1", "topo2"):
+                topo_items = items_for_group(all_snaps, f"recon_topo_rect_{rec_id}_{topo_key}")
+                if topo_items:
+                    combinado_topo = combine_png_bytes(topo_items)
+                    if combinado_topo:
+                        topo_snaps[topo_key] = {"bytes": combinado_topo}
+            if topo_snaps:
+                store = st.session_state.setdefault("canvas_snapshots_recon_topos_por_id", {})
+                current = store.get(rec_id, {}) if isinstance(store.get(rec_id), dict) else {}
+                current.update(topo_snaps)
+                store[rec_id] = current
+                conteo["recon_topos"] += len(topo_snaps)
+
     # REFORMACIONES (3 imágenes por reformación, con sig dentro del group_key)
     refs_map = st.session_state.get("reformaciones_por_rec", {}) or {}
     imagenes_ref = st.session_state.get("imagenes_ref_por_id", {}) or {}
@@ -922,6 +1080,12 @@ def _contar_canvas_snapshots_guardados() -> int:
     total += len(st.session_state.get("canvas_snapshots_topo_por_set", {}) or {})
     total += len(st.session_state.get("canvas_snapshots_adq_por_exp", {}) or {})
     total += len(st.session_state.get("canvas_snapshots_recon_por_id", {}) or {})
+    rec_topos = st.session_state.get("canvas_snapshots_recon_topos_por_id", {}) or {}
+    for item in rec_topos.values():
+        if isinstance(item, dict):
+            total += len(item)
+        elif item:
+            total += 1
 
     refs = st.session_state.get("canvas_snapshots_ref_por_id", {}) or {}
     for value in refs.values():
@@ -1016,7 +1180,7 @@ def render_export_pdf():
 
     n_recons = sum(len(v or []) for v in recs_map.values())
     n_refs = sum(len(v or []) for v in refs_map.values())
-    n_snaps = sum(len(v or {}) for v in [st.session_state.get("canvas_snapshots_topo_por_set", {}), st.session_state.get("canvas_snapshots_adq_por_exp", {}), st.session_state.get("canvas_snapshots_recon_por_id", {}), st.session_state.get("canvas_snapshots_ref_por_id", {})])
+    n_snaps = sum(len(v or {}) for v in [st.session_state.get("canvas_snapshots_topo_por_set", {}), st.session_state.get("canvas_snapshots_adq_por_exp", {}), st.session_state.get("canvas_snapshots_recon_por_id", {}), st.session_state.get("canvas_snapshots_recon_topos_por_id", {}), st.session_state.get("canvas_snapshots_ref_por_id", {})])
 
     col_r1, col_r2, col_r3, col_r4, col_r5, col_r6 = st.columns(6)
     with col_r1:
