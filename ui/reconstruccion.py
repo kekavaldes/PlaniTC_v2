@@ -1454,9 +1454,22 @@ def _guardar_snapshot_reconstruccion_desde_bulk(rec_id: str, all_snaps) -> bool:
 
 
 def _render_boton_snapshot_reconstruccion(rec_id: str):
-    """Botón manual para capturar el canvas de reconstrucción y guardarlo en el PDF.
-    Es opcional: el PDF también auto-captura al generar."""
+    """Botón manual para capturar el canvas de reconstrucción.
+
+    Patrón robusto: la llamada a streamlit_js_eval se hace SIEMPRE al tope
+    de la función (no dentro de una rama condicional), porque el iframe
+    interno puede desmontarse si aparece/desaparece entre reruns y en ese
+    caso la respuesta del JS se pierde. La key cambia con el nonce para
+    forzar una lectura nueva de localStorage por click.
+    """
     pending_key = f"_pending_snap_rec_{rec_id}"
+    nonce = st.session_state.get(pending_key, 0)
+
+    # Llamada JS siempre activa. Solo leemos el resultado si hay nonce.
+    effective_key = (
+        f"snap_rec_{rec_id}_{nonce}" if nonce else f"snap_rec_{rec_id}_idle"
+    )
+    all_snaps = capture_all_snapshots_raw(js_key=effective_key) if nonce else None
 
     if st.button(
         "💾 Guardar canvas para PDF",
@@ -1467,16 +1480,29 @@ def _render_boton_snapshot_reconstruccion(rec_id: str):
         st.session_state[pending_key] = int(time.time() * 1000)
         st.rerun()
 
-    nonce = st.session_state.get(pending_key)
     if nonce:
-        all_snaps = capture_all_snapshots_raw(
-            js_key=f"manual_snap_rec_{rec_id}_{nonce}"
-        )
-        if all_snaps is None:
-            st.info("Capturando canvas…")
+        consumed_key = f"_consumed_snap_rec_{rec_id}_{nonce}"
+        if st.session_state.get(consumed_key):
+            pass
+        elif all_snaps is None:
+            col_wait, col_cancel = st.columns([3, 1], gap="small")
+            with col_wait:
+                st.info(
+                    "📸 Capturando canvas… Si no avanza en 2-3 segundos, "
+                    "vuelve a pulsar el botón."
+                )
+            with col_cancel:
+                if st.button(
+                    "Cancelar",
+                    key=f"cancel_snap_rec_{rec_id}_{nonce}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop(pending_key, None)
+                    st.rerun()
         else:
+            st.session_state[consumed_key] = True
             if _guardar_snapshot_reconstruccion_desde_bulk(rec_id, all_snaps):
-                st.success("Snapshot guardado para el PDF.")
+                st.success("✓ Snapshot guardado para el PDF.")
             else:
                 st.warning(
                     "No se pudo capturar el canvas. Ajusta algo en la imagen "
