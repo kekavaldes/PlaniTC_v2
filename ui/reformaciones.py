@@ -501,6 +501,9 @@ def _overlay_canvas_html(
     internal_h=700,
     overlay_mode="parallel",
     ranges_label="Rangos paralelos",
+    exp_nombre=None,
+    rec_nombre=None,
+    ref_nombre=None,
 ):
     refs_cfg = settings.get("refs", [])[:3]
     while len(refs_cfg) < 3:
@@ -535,7 +538,7 @@ def _overlay_canvas_html(
         style="width:150px; background:rgba(0,0,0,0.72); color:#fff; border:2px solid {rec_color}; border-radius:12px; padding:6px 10px; outline:none;" />
     </div>
   </div>
-  <button type="button" onclick="downloadRefCanvas_{storage_key}()"
+  <button type="button" onclick='downloadRefCanvas_{storage_key}({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)}, {json.dumps(ref_nombre)})'
     style="margin-top:8px; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer;">Descargar PNG</button>
 </div>
 <script>
@@ -626,15 +629,26 @@ def _overlay_canvas_html(
   ];
   var cutsBtn = document.getElementById({json.dumps('btn_' + storage_key + '_cuts')});
 
-  function downloadRefCanvas_{storage_key}() {{
-    try {{
-      var a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = {json.dumps(storage_key)} + '.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }} catch (e) {{}}
+  function downloadRefCanvas_{storage_key}(expNombre, recNombre, refNombre) {{
+    var parts = [];
+    if (expNombre && String(expNombre).trim()) {{
+      parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (recNombre && String(recNombre).trim()) {{
+      parts.push(String(recNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (refNombre && String(refNombre).trim()) {{
+      parts.push(String(refNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    var filename = parts.length > 0 ? parts.join('_') : {json.dumps(storage_key)};
+    
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    console.log('Descargado:', filename + '.png');
   }}
   window.downloadRefCanvas_{storage_key} = downloadRefCanvas_{storage_key};
 
@@ -1101,6 +1115,12 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
         pil = Image.open(io.BytesIO(image_data["bytes"]))
         img_b64 = _pil_to_b64_jpeg(pil)
         img_sig = image_data.get("sig") or hashlib.md5(image_data["bytes"]).hexdigest()[:10]
+        
+        # Calcular nombres limpios para archivo descargado
+        exp_nombre_limpio = rec.get("exp_nombre", "").replace(" ", "_").replace("·", "").replace("__", "_").strip("_") if rec else None
+        rec_nombre_limpio = rec.get("nombre", "").replace(" ", "_") if rec else None
+        ref_nombre_limpio = _nombre_reformacion(ref).replace(" ", "_") if ref else None
+        
         html = _overlay_canvas_html(
             img_b64=img_b64,
             storage_key=f"{ref['id']}_img{img_idx}_{img_sig}",
@@ -1112,6 +1132,9 @@ def _render_single_image_block(ref, rec, img_idx, title, css_width=320, css_heig
             css_height=css_height,
             overlay_mode=overlay_mode,
             ranges_label=ranges_label,
+            exp_nombre=exp_nombre_limpio,
+            rec_nombre=rec_nombre_limpio,
+            ref_nombre=ref_nombre_limpio,
         )
         components.html(html, height=css_height + 90, scrolling=False)
     except Exception as e:
