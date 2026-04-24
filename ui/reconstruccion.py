@@ -287,6 +287,8 @@ def render_canvas_recon_cuadrado(
     canvas_css_height=360,
     canvas_width=760,
     canvas_height=760,
+    exp_nombre=None,
+    rec_nombre=None,
 ):
     if not img_b64:
         return None
@@ -298,7 +300,7 @@ def render_canvas_recon_cuadrado(
   </div>
   <canvas id="reconSquareCanvas" data-planitc-snapshot-item="0" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick="downloadReconCanvas()"
+  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
     style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
@@ -340,15 +342,23 @@ def render_canvas_recon_cuadrado(
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
 
-  function downloadReconCanvas() {{
-    try {{
-      var a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'reconstruccion.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }} catch (e) {{}}
+  function downloadReconCanvas(expNombre, recNombre) {{
+    var parts = [];
+    if (expNombre && String(expNombre).trim()) {{
+      parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (recNombre && String(recNombre).trim()) {{
+      parts.push(String(recNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    var filename = parts.length > 0 ? parts.join('_') : 'reconstruccion';
+    
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    console.log('Descargado:', filename + '.png');
   }}
   window.downloadReconCanvas = downloadReconCanvas;
 
@@ -666,6 +676,8 @@ def render_canvas_topo_dfov_rect(
     canvas_css_height=420,
     canvas_width=600,
     canvas_height=840,
+    exp_nombre=None,
+    rec_nombre=None,
 ):
     """Topograma con caja DFOV rectangular (no cuadrada), movible y
     redimensionable desde las 4 esquinas o los 4 bordes. Misma UX que la
@@ -701,7 +713,7 @@ def render_canvas_topo_dfov_rect(
   </div>
   <canvas id="{canvas_id}" width="{canvas_width}" height="{canvas_height}"
     style="width:{canvas_css_width}px; height:{canvas_css_height}px; cursor:grab; border:1px solid #444; border-radius:8px; background:#000; display:block; margin:0 auto; touch-action:none;"></canvas>
-  <button type="button" onclick="downloadReconCanvas()"
+  <button type="button" onclick='downloadReconCanvas({json.dumps(exp_nombre)}, {json.dumps(rec_nombre)})'
     style="display:block; margin:12px auto 0 auto; background:#1f2937; color:#fff; border:1px solid #4b5563; border-radius:10px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer; position:relative; z-index:10;">📥 Descargar PNG</button>
 </div>
 <script>
@@ -740,15 +752,23 @@ def render_canvas_topo_dfov_rect(
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }}
 
-  function downloadReconCanvas() {{
-    try {{
-      var a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'reconstruccion.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }} catch (e) {{}}
+  function downloadReconCanvas(expNombre, recNombre) {{
+    var parts = [];
+    if (expNombre && String(expNombre).trim()) {{
+      parts.push(String(expNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    if (recNombre && String(recNombre).trim()) {{
+      parts.push(String(recNombre).replace(/[^a-zA-Z0-9_-]+/g, '_'));
+    }}
+    var filename = parts.length > 0 ? parts.join('_') : 'reconstruccion';
+    
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = filename + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    console.log('Descargado:', filename + '.png');
   }}
   window.downloadReconCanvas = downloadReconCanvas;
 
@@ -1434,6 +1454,8 @@ def _render_topograma_en_columna(exp, rec_actual, topo_data):
         canvas_css_height=390,
         canvas_width=560,
         canvas_height=780,
+        exp_nombre=nombre_exp_limpio,
+        rec_nombre=rec_nombre_limpio,
     )
     if html_topo:
         components.html(html_topo, height=540, scrolling=False)
@@ -1551,6 +1573,10 @@ def _render_panel_central(adquisiciones_validas):
     )
     region_exp = _get_region_label_for_exp(exp_activa)
     nombre_exp = f"{nombre_base_exp} · {region_exp}".strip(" ·").upper()
+    
+    # Versiones limpias para nombres de archivo
+    nombre_exp_limpio = nombre_exp.replace(" ", "_").replace("·", "").replace("__", "_").strip("_")
+    rec_nombre_limpio = rec_actual.get("nombre", "Reconstruccion").replace(" ", "_") if rec_actual else None
 
     # ── CASO A: no hay reconstrucción seleccionada → resumen de la adquisición ──
     if rec_actual is None:
@@ -1623,6 +1649,8 @@ def _render_panel_central(adquisiciones_validas):
                     canvas_css_height=310,
                     canvas_width=760,
                     canvas_height=760,
+                    exp_nombre=nombre_exp_limpio,
+                    rec_nombre=rec_nombre_limpio,
                 )
                 if html_canvas:
                     components.html(html_canvas, height=460, scrolling=False)
