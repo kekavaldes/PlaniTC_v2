@@ -562,9 +562,6 @@ def render_topogramas_independientes_interactivos(
     var img = new Image();
     img.src = 'data:image/jpeg;base64,' + data.img_b64;
 
-    var dirty = false;
-    function markDirty() {{ dirty = true; }}
-
     function saveState() {{
       try {{
         if (storageKey) {{
@@ -576,15 +573,9 @@ def render_topogramas_independientes_interactivos(
         }}
         if (snapshotKey) {{
           localStorage.setItem(snapshotKey, canvas.toDataURL('image/png'));
-          dirty = false;
         }}
       }} catch (e) {{}}
     }}
-
-    // Auto-guardado cada 2 segundos si cambió
-    setInterval(function() {{ if (dirty) saveState(); }}, 2000);
-    // Guardar antes de cerrar la página
-    window.addEventListener('beforeunload', saveState);
 
     function clampRect() {{
       rectState.w = Math.max(minW, Math.min(0.92, rectState.w));
