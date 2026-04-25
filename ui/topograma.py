@@ -65,8 +65,9 @@ REFS_TOPO = [
     "PLANTAS",
 ]
 
-# Centrajes de inicio de topograma por región anatómica
-CENTRAJES_POR_REGION = {
+# Opciones de centraje de inicio del topograma por región anatómica.
+# El orden sigue una lógica anatómica cráneo-caudal / próximo-distal, no alfabética.
+CENTRAJE_TOPO_POR_REGION = {
     "CABEZA": [
         "VERTEX",
         "GLABELA",
@@ -76,13 +77,14 @@ CENTRAJES_POR_REGION = {
     "CUELLO": [
         "GLABELA",
         "CAE",
-        "SOBRE ART. ACROMIOCLAV.",
-        "TERCIO DISTAL BRAZO",
+        "SOBRE ART. ACROMIOCLAVICULAR",
         "HORQUILLA ESTERNAL",
     ],
     "EESS": [
         "SOBRE ART. ACROMIOCLAV.",
+        "TERCIO PROXIMAL BRAZO",
         "TERCIO DISTAL BRAZO",
+        "TERCIO PROXIMAL ANTEBRAZO",
         "TERCIO DISTAL ANTEBRAZO",
         "TERCIO PROXIMAL MTC",
         "SOBRE FALANGES DISTALES",
@@ -93,45 +95,47 @@ CENTRAJES_POR_REGION = {
         "TERCIO DISTAL MUSLO",
         "TERCIO PROXIMAL PIERNA",
         "TERCIO DISTAL PIERNA",
-        "BAJO CALCANEO",
+        "BAJO CALCÁNEO",
         "HASTA COMPLETAR ORTEJOS",
     ],
     "COLUMNA": [
         "CAE",
         "HORQUILLA ESTERNAL",
         "BAJO MENTON",
-        "REBORDE COSTAL INFERIOR",
+        "REBORDDE COSTAL INFERIOR",
         "EIAS",
         "CRESTA ILIACA",
-        "BAJO SINFISIS PUBICA",
+        "BAJO SÍNFISIS PÚBICA",
     ],
     "CUERPO": [
         "SOBRE HOMBROS",
         "APENDICE XIFOIDES",
-        "REBORDE COSTAL INFERIOR",
+        "REBORDDE COSTAL INFERIOR",
         "CRESTA ILIACA",
         "EIAS",
-        "BAJO SINFISIS PUBICA",
+        "BAJO SÍNFISIS PÚBICA",
     ],
 }
 
 
-def obtener_centrajes_por_region(region):
+def opciones_centraje_topograma(region: str):
+    """Devuelve las opciones de centraje de inicio según región anatómica.
+
+    Para ANGIO se muestran todas las opciones en orden anatómico, conservando
+    el orden de las listas anteriores y evitando duplicados.
     """
-    Retorna las opciones de centraje de inicio según la región anatómica.
-    Si es ANGIO, retorna todas las opciones combinadas.
-    """
-    if not region:
-        return REFS_TOPO
-    
     if region == "ANGIO":
-        # Para ANGIO, retornar todas las opciones únicas de todas las regiones
-        todas = set()
-        for opciones in CENTRAJES_POR_REGION.values():
-            todas.update(opciones)
-        return sorted(list(todas))
-    
-    return CENTRAJES_POR_REGION.get(region, REFS_TOPO)
+        orden_regiones = ["CABEZA", "CUELLO", "COLUMNA", "CUERPO", "EESS", "EEII"]
+        opciones = []
+        vistos = set()
+        for r in orden_regiones:
+            for item in CENTRAJE_TOPO_POR_REGION.get(r, []):
+                clave = norm(item)
+                if clave not in vistos:
+                    opciones.append(item)
+                    vistos.add(clave)
+        return opciones
+    return CENTRAJE_TOPO_POR_REGION.get(region, REFS_TOPO)
 
 
 def norm(s):
@@ -783,8 +787,12 @@ def render_topograma_panel():
     with r1d:
         st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
     with r1e:
-        centrajes_disponibles = obtener_centrajes_por_region(region)
-        t1_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", centrajes_disponibles, f"t1_centraje_inicio_widget{sfx}", value=store.get("t1_centraje_inicio"))
+        t1_centraje_inicio = selectbox_con_placeholder(
+            "Centraje inicio de topograma",
+            opciones_centraje_topograma(region),
+            f"t1_centraje_inicio_widget{sfx}",
+            value=store.get("t1_centraje_inicio"),
+        )
 
     r2a, r2b, r2c = st.columns(3, gap="medium")
     with r2a:
@@ -909,8 +917,12 @@ def render_topograma_panel():
         with t2d:
             st.markdown("<div style='margin-bottom:0.45rem;'>mA</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>40</div>", unsafe_allow_html=True)
         with t2e:
-            centrajes_disponibles_t2 = obtener_centrajes_por_region(t2_region)
-            t2_centraje_inicio = selectbox_con_placeholder("Centraje inicio de topograma", centrajes_disponibles_t2, f"t2_centraje_inicio_widget{sfx}", value=store.get("t2_centraje_inicio"))
+            t2_centraje_inicio = selectbox_con_placeholder(
+                "Centraje inicio de topograma",
+                opciones_centraje_topograma(t2_region),
+                f"t2_centraje_inicio_widget{sfx}",
+                value=store.get("t2_centraje_inicio"),
+            )
 
         t2f, t2g, t2h = st.columns(3, gap="medium")
         with t2f:
