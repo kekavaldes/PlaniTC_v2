@@ -469,8 +469,8 @@ def _seccion_adquisiciones(story, plan, sty):
             ("Retardo (sg)", exp.get("retardo")),
         ]
 
-        tipo = (exp.get("tipo_exp") or "").upper()
-        if "BOLUS" in tipo:
+        nombre_tipo = (exp.get("nombre") or "").upper()
+        if "BOLUS" in nombre_tipo:
             rows += [
                 ("Período", exp.get("periodo")),
                 ("N° de imágenes", exp.get("n_imagenes")),
@@ -910,16 +910,34 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
         exp_id = exp.get("id")
         if not exp_id:
             continue
-        # Probamos todos los patrones conocidos de group_key usados en adquisicion.py
-        candidate_groups = [
-            exp_id,
-            f"{exp_id}_topo1",
-            f"{exp_id}_topo2",
-            f"{exp_id}_roi_corte",
-        ]
+        # Probamos los patrones conocidos de group_key usados en adquisicion.py.
+        # Ojo: items_for_group(exp_id) también captura exp_id_topo1, exp_id_topo2
+        # y exp_id_roi_corte porque comparten prefijo. En bolus esos canvas se
+        # renderizan separados, por eso se usan solo las claves explícitas para
+        # evitar que el PDF repita los topogramas y la imagen de posición de corte.
+        nombre_exp = (exp.get("nombre") or "").upper()
+        if "BOLUS" in nombre_exp:
+            candidate_groups = [
+                f"{exp_id}_topo1",
+                f"{exp_id}_topo2",
+                f"{exp_id}_roi_corte",
+            ]
+        else:
+            candidate_groups = [exp_id]
+
         items = []
+        seen_hashes = set()
         for gk in candidate_groups:
-            items.extend(items_for_group(all_snaps, gk))
+            for item in items_for_group(all_snaps, gk):
+                data = item.get("bytes")
+                if not data:
+                    continue
+                h = hashlib.md5(data).hexdigest()
+                if h in seen_hashes:
+                    continue
+                seen_hashes.add(h)
+                items.append(item)
+
         if items:
             combinado = combine_png_bytes(items)
             if combinado:
