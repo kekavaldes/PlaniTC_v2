@@ -168,30 +168,34 @@ def render_ingreso():
                 key="peso_widget",
             )
 
-            embarazo = selectbox_con_placeholder(
-                "¿Embarazo?",
-                ["SI", "NO", "PROBABLE"],
-                "embarazo_widget",
-                value=st.session_state.get("embarazo_widget"),
+            sexo_clearance = selectbox_con_placeholder(
+                "Sexo",
+                ["Femenino", "Masculino"],
+                "sexo_clearance_widget",
+                value=st.session_state.get("sexo_clearance_widget"),
             )
+
+            # Mostrar embarazo solo si es femenino
+            embarazo = None
+            if sexo_clearance == "Femenino":
+                embarazo = selectbox_con_placeholder(
+                    "¿Embarazo?",
+                    ["SI", "NO", "PROBABLE"],
+                    "embarazo_widget",
+                    value=st.session_state.get("embarazo_widget"),
+                )
+            else:
+                st.session_state["embarazo_widget"] = None
 
             requiere_creatinina = st.checkbox(
                 "¿Requiere creatinina?",
                 key="requiere_creatinina_widget",
             )
 
-            sexo_clearance = None
             creatinina_serica = None
             clearance = None
 
             if requiere_creatinina:
-                sexo_clearance = selectbox_con_placeholder(
-                    "Sexo",
-                    ["Femenino", "Masculino"],
-                    "sexo_clearance_widget",
-                    value=st.session_state.get("sexo_clearance_widget"),
-                )
-
                 creatinina_serica = st.number_input(
                     "Creatinina sérica (mg/dL)",
                     min_value=0.1,
@@ -244,8 +248,6 @@ def render_ingreso():
                         """,
                         unsafe_allow_html=True,
                     )
-            else:
-                st.session_state["sexo_clearance_widget"] = None
 
         with col_prep_der:
             contraste_ev = st.checkbox(
@@ -305,9 +307,9 @@ def render_ingreso():
         edad_unidad=edad_unidad,
         diagnostico=diagnostico,
         peso=peso,
-        embarazo=embarazo,
+        sexo_clearance=sexo_clearance,
+        embarazo=embarazo if sexo_clearance == "Femenino" else None,
         requiere_creatinina=requiere_creatinina,
-        sexo_clearance=sexo_clearance if requiere_creatinina else None,
         creatinina_serica=creatinina_serica if requiere_creatinina else None,
         clearance=clearance if requiere_creatinina else None,
         contraste_ev=contraste_ev,
