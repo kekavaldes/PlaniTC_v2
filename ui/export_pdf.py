@@ -1097,12 +1097,12 @@ def render_export_pdf():
 
     alumnos_default = _alumnos_participantes_str()
     alumnos_participantes = st.text_area(
-        "Nombre del alumno o de los alumnos participantes",
+        "Nombre de estudiante(s) participante(s)",
         value=alumnos_default,
         key="alumnos_participantes",
         height=90,
         placeholder="",
-        help="Completa aquí el nombre de todos los estudiantes que participaron en la actividad. Este dato se incluirá en la portada del PDF.",
+        help="Completa aquí el nombre de todos l@s estudiantes que participaron en la actividad. Este dato se incluirá en la portada del PDF.",
     )
 
     # Resumen rápido de lo que se va a exportar
