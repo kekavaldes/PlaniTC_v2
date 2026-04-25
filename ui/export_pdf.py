@@ -1105,13 +1105,6 @@ def render_export_pdf():
         help="Completa aquí el nombre de todos los estudiantes que participaron en la actividad. Este dato se incluirá en la portada del PDF.",
     )
 
-    if not HAS_SVG_ENGINE:
-        st.info(
-            "Para incluir la visualización gráfica de la inyectora en el PDF, "
-            "instala **svglib**: `pip install svglib`. "
-            "El PDF se genera igual sin esa imagen."
-        )
-
     # Resumen rápido de lo que se va a exportar
     ingreso = st.session_state.get("ingreso_store", {}) or {}
     sets_topo = st.session_state.get("topograma_sets", []) or []
