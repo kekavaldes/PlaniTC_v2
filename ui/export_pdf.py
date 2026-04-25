@@ -402,12 +402,8 @@ def _seccion_topogramas(story, plan, sty):
             ("Posición tubo", s.get("t1pt") or s.get("t1_posicion_tubo")),
             ("Posición extremidades", s.get("extremidades")),
         ], sty=sty))
-        snap_topo = _snapshot_bytes((plan.get("canvas_snapshots_topo_por_set") or {}).get(idx))
-        if snap_topo:
-            img_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=165, max_h_mm=85)
-            if img_flow is not None:
-                story.append(Spacer(1, 5))
-                story.append(img_flow)
+        # No mostrar imagen/canvas en la sección Topogramas.
+        # Los límites visuales del usuario se informan en Adquisición y Reconstrucción.
         story.append(Spacer(1, 6))
 
         story.append(Paragraph("Topograma 1", sty["h3"]))
