@@ -873,9 +873,19 @@ def render_topograma_panel():
     st.markdown(f"### 📡 Topograma 1 — {titulo_set}")
     r1a, r1b, r1c, r1d, r1e = st.columns(5, gap="medium")
     with r1a:
-        t1_ini_ref = selectbox_con_placeholder("Inicio Topograma 1", REFS_TOPO, f"t1_ini_ref_widget{sfx}", value=store.get("t1_ini_ref"))
+        t1_ini_ref = selectbox_con_placeholder(
+            "Inicio Topograma 1",
+            opciones_centraje_topograma(region, examen),
+            f"t1_ini_ref_widget{sfx}",
+            value=store.get("t1_ini_ref"),
+        )
     with r1b:
-        t1_fin_ref = selectbox_con_placeholder("Fin Topograma 1", REFS_TOPO, f"t1_fin_ref_widget{sfx}", value=store.get("t1_fin_ref"))
+        t1_fin_ref = selectbox_con_placeholder(
+            "Fin Topograma 1",
+            opciones_centraje_topograma(region, examen),
+            f"t1_fin_ref_widget{sfx}",
+            value=store.get("t1_fin_ref"),
+        )
     with r1c:
         st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
     with r1d:
@@ -1003,9 +1013,19 @@ def render_topograma_panel():
         st.markdown("### 📡 Parámetros Topograma 2")
         t2a, t2b, t2c, t2d, t2e = st.columns(5, gap="medium")
         with t2a:
-            t2_ini_ref = selectbox_con_placeholder("Inicio Topograma 2", REFS_TOPO, f"t2_ini_ref_widget{sfx}", value=store.get("t2_ini_ref"))
+            t2_ini_ref = selectbox_con_placeholder(
+                "Inicio Topograma 2",
+                opciones_centraje_topograma(t2_region, t2_examen),
+                f"t2_ini_ref_widget{sfx}",
+                value=store.get("t2_ini_ref"),
+            )
         with t2b:
-            t2_fin_ref = selectbox_con_placeholder("Fin Topograma 2", REFS_TOPO, f"t2_fin_ref_widget{sfx}", value=store.get("t2_fin_ref"))
+            t2_fin_ref = selectbox_con_placeholder(
+                "Fin Topograma 2",
+                opciones_centraje_topograma(t2_region, t2_examen),
+                f"t2_fin_ref_widget{sfx}",
+                value=store.get("t2_fin_ref"),
+            )
         with t2c:
             st.markdown("<div style='margin-bottom:0.45rem;'>kV</div><div style='background:#1A1A1A;border:1px solid #3A3A3A;border-radius:8px;padding:0.55rem 0.75rem;'>100</div>", unsafe_allow_html=True)
         with t2d:
