@@ -1133,7 +1133,7 @@ def render_export_pdf():
 
     faltan = []
     if not str(alumnos_participantes or "").strip():
-        faltan.append("Nombre del alumno o de los alumnos participantes")
+        faltan.append("Nombre de estudiante(s) participante(s)")
     if not ingreso.get("nombre"):
         faltan.append("Nombre del paciente")
     if not exps:
