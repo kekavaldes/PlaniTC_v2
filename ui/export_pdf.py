@@ -99,9 +99,18 @@ def _init_session_state():
     _restore_widget_value("edad_unidad_widget", store.get("edad_unidad", "Años"))
     _restore_widget_value("diagnostico_widget", store.get("diagnostico", ""))
     _restore_widget_value("peso_widget", _safe_int(store.get("peso", 70), 70))
+
+    # Campo general de sexo del paciente.
+    # Fallback a sexo_clearance para compatibilidad con versiones anteriores.
+    sexo_guardado = store.get("sexo_paciente") or store.get("sexo") or store.get("sexo_clearance")
+    _restore_widget_value("sexo_paciente_widget", sexo_guardado)
+
     _restore_widget_value("embarazo_widget", store.get("embarazo"))
     _restore_widget_value("requiere_creatinina_widget", bool(store.get("requiere_creatinina", False)))
-    _restore_widget_value("sexo_clearance_widget", store.get("sexo_clearance"))
+
+    # Se conserva este key por compatibilidad con export_pdf u otros módulos antiguos.
+    _restore_widget_value("sexo_clearance_widget", sexo_guardado)
+
     _restore_widget_value("creatinina_serica_widget", _safe_float(store.get("creatinina_serica", 1.0), 1.0))
     _restore_widget_value("contraste_ev_widget", bool(store.get("contraste_ev", False)))
     _restore_widget_value("vvp_widget", store.get("vvp"))
@@ -168,16 +177,18 @@ def render_ingreso():
                 key="peso_widget",
             )
 
-            sexo_clearance = selectbox_con_placeholder(
+            sexo_paciente = selectbox_con_placeholder(
                 "Sexo",
                 ["Femenino", "Masculino"],
-                "sexo_clearance_widget",
-                value=st.session_state.get("sexo_clearance_widget"),
+                "sexo_paciente_widget",
+                value=st.session_state.get("sexo_paciente_widget"),
             )
 
-            # Mostrar embarazo solo si es femenino
+            # Mantiene sincronía con el key antiguo usado para clearance/exportación.
+            st.session_state["sexo_clearance_widget"] = sexo_paciente
+
             embarazo = None
-            if sexo_clearance == "Femenino":
+            if sexo_paciente == "Femenino":
                 embarazo = selectbox_con_placeholder(
                     "¿Embarazo?",
                     ["SI", "NO", "PROBABLE"],
@@ -213,10 +224,10 @@ def render_ingreso():
                 except Exception:
                     edad_para_clearance = None
 
-                if sexo_clearance is not None and edad_para_clearance is not None:
+                if sexo_paciente is not None and edad_para_clearance is not None:
                     try:
                         clearance = ((140 - float(edad_para_clearance)) * float(peso)) / (72 * float(creatinina_serica))
-                        if sexo_clearance == "Femenino":
+                        if sexo_paciente == "Femenino":
                             clearance *= 0.85
                         clearance = round(clearance, 1)
                     except Exception:
@@ -307,9 +318,12 @@ def render_ingreso():
         edad_unidad=edad_unidad,
         diagnostico=diagnostico,
         peso=peso,
-        sexo_clearance=sexo_clearance,
-        embarazo=embarazo if sexo_clearance == "Femenino" else None,
+        sexo_paciente=sexo_paciente,
+        sexo=sexo_paciente,
+        embarazo=embarazo if sexo_paciente == "Femenino" else None,
         requiere_creatinina=requiere_creatinina,
+        # Compatibilidad con export_pdf actual: mantiene el dato bajo el nombre antiguo.
+        sexo_clearance=sexo_paciente if requiere_creatinina else None,
         creatinina_serica=creatinina_serica if requiere_creatinina else None,
         clearance=clearance if requiere_creatinina else None,
         contraste_ev=contraste_ev,
