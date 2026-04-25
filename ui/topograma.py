@@ -41,7 +41,7 @@ POSICIONES_PACIENTE = [
 ]
 ENTRADAS_PACIENTE = ["CABEZA PRIMERO", "PIES PRIMERO"]
 POS_TUBO = ["ARRIBA 0°", "ABAJO 180°", "DERECHA 90°", "IZQUIERDA 90°"]
-POS_EXTREMIDADES = ["brazos arriba", "brazos abajo", "eleva brazo derecho", "eleva brazo izquierdo", "flexión extremidad inferior derecha", "flexión extremidad inferior izquierda"]
+POS_EXTREMIDADES = ["BRAZOS ARRIBA", "BRAZOS ABAJO", "ELEVA BRAZO DERECHO", "ELEVA BRAZO IZQUIERDO", "FLEXIÓN EXTR. INF. DERECHA", "FLEXIÓN EXTR. INF. IZQUIERDA"]
 
 LONGITUDES_TOPO = [128, 256, 512, 768, 1020, 1560]
 DIRECCIONES = ["CAUDO-CRANEAL", "CRANEO-CAUDAL"]
