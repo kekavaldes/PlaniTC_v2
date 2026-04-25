@@ -553,33 +553,41 @@ def _seccion_reconstrucciones(story, plan, sty):
 
             img_axial_flow = None
             img_topo_flow = None
+            # En el PDF, las imágenes de reconstrucción se muestran a la derecha
+            # de la tabla de parámetros, igual que en Adquisición.
+            # Se apilan verticalmente para mantener ambas visibles sin ocupar otra página.
             if snap_axial:
-                img_axial_flow = _pil_bytes_to_flowable(snap_axial, max_w_mm=82, max_h_mm=82)
+                img_axial_flow = _pil_bytes_to_flowable(snap_axial, max_w_mm=58, max_h_mm=58)
             elif img_data and img_data.get("bytes"):
-                img_axial_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=82, max_h_mm=82)
+                img_axial_flow = _pil_bytes_to_flowable(img_data["bytes"], max_w_mm=58, max_h_mm=58)
             if snap_topo:
-                img_topo_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=82, max_h_mm=82)
+                img_topo_flow = _pil_bytes_to_flowable(snap_topo, max_w_mm=58, max_h_mm=58)
 
-            # Para no achicar demasiado las imágenes, se deja la tabla primero y
-            # las imágenes de reconstrucción debajo, una sobre la otra.
-            block.append(params_table)
-            image_rows = []
-            if img_axial_flow is not None:
-                image_rows.append([Paragraph("<b>Imagen axial / DFOV</b>", sty["small"]), img_axial_flow])
-            if img_topo_flow is not None:
-                image_rows.append([Paragraph("<b>Topograma / límites de reconstrucción</b>", sty["small"]), img_topo_flow])
-            if image_rows:
-                img_table = Table(image_rows, colWidths=(55 * mm, 95 * mm))
-                img_table.setStyle(TableStyle([
+            if img_axial_flow is not None or img_topo_flow is not None:
+                imagenes_stack = []
+                if img_axial_flow is not None:
+                    imagenes_stack.append(Paragraph("<b>Imagen axial / DFOV</b>", sty["small"]))
+                    imagenes_stack.append(img_axial_flow)
+                if img_axial_flow is not None and img_topo_flow is not None:
+                    imagenes_stack.append(Spacer(1, 5))
+                if img_topo_flow is not None:
+                    imagenes_stack.append(Paragraph("<b>Topograma / límites</b>", sty["small"]))
+                    imagenes_stack.append(img_topo_flow)
+
+                bloque_tabla_imagenes = Table(
+                    [[params_table, imagenes_stack]],
+                    colWidths=(105 * mm, 60 * mm),
+                )
+                bloque_tabla_imagenes.setStyle(TableStyle([
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
                     ("LEFTPADDING", (0, 0), (-1, -1), 4),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                    ("TOPPADDING", (0, 0), (-1, -1), 6),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
                 ]))
-                block.append(Spacer(1, 6))
-                block.append(img_table)
+                block.append(bloque_tabla_imagenes)
+            else:
+                block.append(params_table)
 
             block.append(Spacer(1, 8))
             story.append(KeepTogether(block))
