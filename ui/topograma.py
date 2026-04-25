@@ -118,23 +118,117 @@ CENTRAJE_TOPO_POR_REGION = {
 }
 
 
-def opciones_centraje_topograma(region: str):
-    """Devuelve las opciones de centraje de inicio según región anatómica.
+# Opciones específicas de centraje para estudios ANGIO.
+# En ANGIO el centraje depende del examen seleccionado, para evitar listas demasiado largas.
+# El orden de cada lista mantiene lógica anatómica, no alfabética.
+CENTRAJE_TOPO_POR_EXAMEN_ANGIO = {
+    "ATC CEREBRO": [
+        "VERTEX",
+        "GLABELA",
+        "CAE",
+        "MENTON",
+    ],
+    "ATC CEREBRO CUELLO": [
+        "VERTEX",
+        "GLABELA",
+        "CAE",
+        "SOBRE ART. ACROMIOCLAVICULAR",
+        "HORQUILLA ESTERNAL",
+    ],
+    "ATC CUELLO": [
+        "VERTEX",
+        "GLABELA",
+        "CAE",
+        "SOBRE ART. ACROMIOCLAVICULAR",
+        "HORQUILLA ESTERNAL",
+    ],
+    "ATC EESS DERECHA": [
+        "SOBRE ART. ACROMIOCLAV.",
+        "TERCIO PROXIMAL BRAZO",
+        "TERCIO DISTAL BRAZO",
+        "TERCIO PROXIMAL ANTEBRAZO",
+        "TERCIO DISTAL ANTEBRAZO",
+        "TERCIO PROXIMAL MTC",
+        "SOBRE FALANGES DISTALES",
+    ],
+    "ATC EESS IZQUIERDA": [
+        "SOBRE ART. ACROMIOCLAV.",
+        "TERCIO PROXIMAL BRAZO",
+        "TERCIO DISTAL BRAZO",
+        "TERCIO PROXIMAL ANTEBRAZO",
+        "TERCIO DISTAL ANTEBRAZO",
+        "TERCIO PROXIMAL MTC",
+        "SOBRE FALANGES DISTALES",
+    ],
+    "ATC EEII": [
+        "EIAS",
+        "TERCIO PROXIMAL MUSLO",
+        "TERCIO DISTAL MUSLO",
+        "TERCIO PROXIMAL PIERNA",
+        "TERCIO DISTAL PIERNA",
+        "BAJO CALCÁNEO",
+        "HASTA COMPLETAR ORTEJOS",
+    ],
+    "ATC TORAX": [
+        "SOBRE HOMBROS",
+        "APENDICE XIFOIDES",
+        "REBORDE COSTAL INFERIOR",
+        "CRESTA ILIACA",
+        "EIAS",
+        "BAJO SÍNFISIS PÚBICA",
+    ],
+    "ATC ABDOMEN-PELVIS": [
+        "SOBRE HOMBROS",
+        "APENDICE XIFOIDES",
+        "REBORDE COSTAL INFERIOR",
+        "CRESTA ILIACA",
+        "EIAS",
+        "BAJO SÍNFISIS PÚBICA",
+    ],
+    "ATC TORAX-ABDOMEN-PELVIS": [
+        "SOBRE HOMBROS",
+        "APENDICE XIFOIDES",
+        "REBORDE COSTAL INFERIOR",
+        "CRESTA ILIACA",
+        "EIAS",
+        "BAJO SÍNFISIS PÚBICA",
+    ],
+    "ATC ABDOMEN": [
+        "SOBRE HOMBROS",
+        "APENDICE XIFOIDES",
+        "REBORDE COSTAL INFERIOR",
+        "CRESTA ILIACA",
+        "EIAS",
+        "BAJO SÍNFISIS PÚBICA",
+    ],
+}
 
-    Para ANGIO se muestran todas las opciones en orden anatómico, conservando
-    el orden de las listas anteriores y evitando duplicados.
+
+def _opciones_centraje_angio_por_examen(examen: str):
+    """Busca opciones ANGIO por examen, tolerando diferencias menores de escritura."""
+    if not examen:
+        return []
+
+    examen_norm = norm(examen).replace("-", " ").replace("  ", " ").strip()
+    for nombre_examen, opciones in CENTRAJE_TOPO_POR_EXAMEN_ANGIO.items():
+        nombre_norm = norm(nombre_examen).replace("-", " ").replace("  ", " ").strip()
+        if examen_norm == nombre_norm:
+            return opciones
+    return []
+
+
+def opciones_centraje_topograma(region: str, examen: str = None):
+    """Devuelve las opciones de centraje de inicio.
+
+    - Para regiones no ANGIO: depende de la región anatómica.
+    - Para ANGIO: depende del examen seleccionado.
     """
     if region == "ANGIO":
-        orden_regiones = ["CABEZA", "CUELLO", "COLUMNA", "CUERPO", "EESS", "EEII"]
-        opciones = []
-        vistos = set()
-        for r in orden_regiones:
-            for item in CENTRAJE_TOPO_POR_REGION.get(r, []):
-                clave = norm(item)
-                if clave not in vistos:
-                    opciones.append(item)
-                    vistos.add(clave)
-        return opciones
+        opciones = _opciones_centraje_angio_por_examen(examen)
+        if opciones:
+            return opciones
+        # Fallback defensivo: si aún no hay examen, no mostramos una lista enorme.
+        return []
     return CENTRAJE_TOPO_POR_REGION.get(region, REFS_TOPO)
 
 
@@ -789,7 +883,7 @@ def render_topograma_panel():
     with r1e:
         t1_centraje_inicio = selectbox_con_placeholder(
             "Centraje inicio de topograma",
-            opciones_centraje_topograma(region),
+            opciones_centraje_topograma(region, examen),
             f"t1_centraje_inicio_widget{sfx}",
             value=store.get("t1_centraje_inicio"),
         )
@@ -919,7 +1013,7 @@ def render_topograma_panel():
         with t2e:
             t2_centraje_inicio = selectbox_con_placeholder(
                 "Centraje inicio de topograma",
-                opciones_centraje_topograma(t2_region),
+                opciones_centraje_topograma(t2_region, t2_examen),
                 f"t2_centraje_inicio_widget{sfx}",
                 value=store.get("t2_centraje_inicio"),
             )
