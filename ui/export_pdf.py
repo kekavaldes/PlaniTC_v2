@@ -271,6 +271,69 @@ def _items_for_any_recon_topogram(all_snaps, rec_id):
 
 
 
+def _items_for_group_strict(all_snaps_bytes: dict, group_key: str):
+    """Extrae snapshots SOLO del grupo exacto.
+
+    A diferencia de items_for_group(), no incluye subgrupos que comparten
+    prefijo (por ejemplo exp_id_topo1 o exp_id_roi_corte). Esto evita que
+    en Adquisición se mezclen topogramas/ROI antiguos o de otro subcanvas.
+    """
+    if not all_snaps_bytes or not group_key:
+        return []
+    prefix = "planitc_snapshot_" + str(group_key)
+    items = []
+    for key, data_bytes in all_snaps_bytes.items():
+        k = str(key)
+        if k == prefix:
+            item_id = "0"
+        elif k.startswith(prefix + "_"):
+            suffix = k[len(prefix) + 1:]
+            # Solo aceptar sufijos numéricos directos: _0, _1, _2...
+            # No aceptar _topo1_0, _roi_corte_0, etc.
+            if not re.fullmatch(r"\d+", str(suffix)):
+                continue
+            item_id = str(suffix)
+        else:
+            continue
+        if data_bytes:
+            items.append({"item": item_id, "bytes": data_bytes})
+    items.sort(key=lambda x: int(x["item"]) if str(x["item"]).isdigit() else 9999)
+    return items
+
+
+def _dedupe_items_by_bytes(items):
+    out = []
+    seen = set()
+    for item in items or []:
+        data = item.get("bytes") if isinstance(item, dict) else None
+        if not data:
+            continue
+        h = hashlib.md5(data).hexdigest()
+        if h in seen:
+            continue
+        seen.add(h)
+        out.append(item)
+    return out
+
+
+def _topograma_count_for_exp(exp) -> int:
+    """Cantidad real de topogramas iniciados para la exploración actual."""
+    try:
+        sets = st.session_state.get("topograma_sets", []) or []
+        topo_idx = int(exp.get("topo_set_idx", 0) or 0)
+        if not (0 <= topo_idx < len(sets)):
+            return 0
+        tstore = sets[topo_idx] or {}
+        n = 0
+        if tstore.get("topograma_iniciado"):
+            n += 1
+        if (tstore.get("aplica_topo2") or tstore.get("aplica_topograma_2")) and tstore.get("topograma2_iniciado"):
+            n += 1
+        return n
+    except Exception:
+        return 0
+
+
 
 def _snapshot_bytes(snapshot):
     if isinstance(snapshot, dict):
@@ -720,37 +783,8 @@ def _seccion_inyectora(story, plan, sty):
         ))
         story.append(Spacer(1, 10))
 
-    # Visualización: preferir Drawing vectorial (svglib); si no, PNG (cairosvg)
-    svg_str = iny.get("svg_snapshot")
-    if svg_str:
-        story.append(Paragraph("Visualización de la inyectora", sty["h2"]))
-
-        drawing = _svg_a_drawing(svg_str)
-        if drawing is not None:
-            _scale_drawing(drawing, 160 * mm, 110 * mm)
-            story.append(drawing)
-        else:
-            png = _svg_a_png_bytes(svg_str, scale=2.0)
-            if png:
-                try:
-                    im = PILImage.open(io.BytesIO(png))
-                    w_px, h_px = im.size
-                    max_w = 160 * mm
-                    max_h = 110 * mm
-                    ratio = min(max_w / w_px, max_h / h_px)
-                    story.append(RLImage(
-                        io.BytesIO(png),
-                        width=w_px * ratio,
-                        height=h_px * ratio,
-                    ))
-                except Exception:
-                    pass
-            elif not HAS_SVG_ENGINE:
-                story.append(Paragraph(
-                    "<i>(Instala <b>svglib</b> para incluir la visualización "
-                    "gráfica de la inyectora)</i>",
-                    sty["small"],
-                ))
+    # No se incluye visualización gráfica de la inyectora en el PDF.
+    # Se conservan solo los parámetros y fases de inyección.
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -759,20 +793,6 @@ def _seccion_inyectora(story, plan, sty):
 def _recopilar_plan():
     """Snapshot de todo lo planificado desde session_state."""
     iny_store = dict(st.session_state.get("inyectora_store", {}) or {})
-
-    # Intentamos generar el SVG actual de la inyectora para incrustarlo.
-    try:
-        from ui.inyectora import render_inyectora_svg, MAX_JERINGA
-        fases = iny_store.get("fases_data") or []
-        iny_store["svg_snapshot"] = render_inyectora_svg(
-            iny_store.get("vol_total_mc", 0),
-            iny_store.get("vol_total_sf", 0),
-            MAX_JERINGA,
-            MAX_JERINGA,
-            fases,
-        )
-    except Exception:
-        iny_store["svg_snapshot"] = None
 
     return {
         "alumnos_participantes": _alumnos_participantes_str(),
@@ -912,54 +932,53 @@ def _ingest_canvas_snapshots(all_snaps: dict, all_ref_states: dict | None = None
     if not all_snaps:
         return conteo
 
-    # ADQUISICIÓN + TOPOGRAMAS (comparten snapshot por exploración)
+    # ADQUISICIÓN
+    # Importante: se capturan SOLO los canvas de la exploración actual.
+    # No se usan búsquedas por prefijo amplio, porque eso mezcla subcanvas
+    # antiguos (_topo1/_topo2/_roi_corte) y puede duplicar o arrastrar imágenes
+    # de otro topograma.
     exps = st.session_state.get("exploraciones", []) or []
     for exp in exps:
         exp_id = exp.get("id")
         if not exp_id:
             continue
-        # Probamos los patrones conocidos de group_key usados en adquisicion.py.
-        # Ojo: items_for_group(exp_id) también captura exp_id_topo1, exp_id_topo2
-        # y exp_id_roi_corte porque comparten prefijo. En bolus esos canvas se
-        # renderizan separados, por eso se usan solo las claves explícitas para
-        # evitar que el PDF repita los topogramas y la imagen de posición de corte.
-        nombre_exp = (exp.get("nombre") or "").upper()
-        if "BOLUS" in nombre_exp:
-            candidate_groups = [
-                f"{exp_id}_topo1",
-                f"{exp_id}_topo2",
-                f"{exp_id}_roi_corte",
-            ]
-        else:
-            candidate_groups = [exp_id]
 
-        items = []
-        seen_hashes = set()
-        for gk in candidate_groups:
-            for item in items_for_group(all_snaps, gk):
-                data = item.get("bytes")
-                if not data:
-                    continue
-                h = hashlib.md5(data).hexdigest()
-                if h in seen_hashes:
-                    continue
-                seen_hashes.add(h)
-                items.append(item)
+        nombre_exp = (exp.get("nombre") or "").upper()
+        es_bolus = "BOLUS" in nombre_exp
+        n_topos = _topograma_count_for_exp(exp)
+
+        if es_bolus:
+            # Casos bolus:
+            # - Si hay 2 topogramas, adquisicion.py suele guardar cada uno como
+            #   exp_id_topo1 y exp_id_topo2, más exp_id_roi_corte.
+            # - Si hay 1 topograma + ROI, el topograma puede quedar guardado
+            #   como exp_id_0 y el ROI como exp_id_roi_corte_0.
+            topo_items = []
+            if n_topos >= 1:
+                topo_items.extend(_items_for_group_strict(all_snaps, f"{exp_id}_topo1")[:1])
+            if n_topos >= 2:
+                topo_items.extend(_items_for_group_strict(all_snaps, f"{exp_id}_topo2")[:1])
+
+            # Fallback para el caso de 1 topograma renderizado con storage_key=exp_id.
+            if not topo_items and n_topos > 0:
+                topo_items = _items_for_group_strict(all_snaps, exp_id)[:n_topos]
+
+            roi_items = _items_for_group_strict(all_snaps, f"{exp_id}_roi_corte")[:1]
+            items = _dedupe_items_by_bytes(topo_items + roi_items)
+        else:
+            # Exploraciones normales: el canvas base usa storage_key=exp_id.
+            # Limitar al número real de topogramas evita que queden imágenes
+            # residuales si una exploración antes tenía 2 topogramas y luego solo 1.
+            items = _items_for_group_strict(all_snaps, exp_id)
+            if n_topos > 0:
+                items = items[:n_topos]
+            items = _dedupe_items_by_bytes(items)
 
         if items:
             combinado = combine_png_bytes(items)
             if combinado:
                 set_snapshot("canvas_snapshots_adq_por_exp", exp_id, combinado)
                 conteo["adq"] += 1
-                topo_idx = exp.get("topo_set_idx")
-                if topo_idx is not None:
-                    set_snapshot(
-                        "canvas_snapshots_topo_por_set",
-                        topo_idx,
-                        combinado,
-                        extra={"exp_id": exp_id},
-                    )
-                    conteo["topo"] += 1
 
     # RECONSTRUCCIONES
     # Se guardan por separado:
@@ -1240,4 +1259,4 @@ def render_export_pdf():
             )
 
     elif st.session_state.get("_pdf_bytes") and not exportacion_habilitada:
-        st.info("Completa primero el nombre del alumno o de los alumnos participantes para habilitar la descarga del PDF.")
+        st.info("Completa primero el nombre de estudiante(s) participante(s) para habilitar la descarga del PDF.")
