@@ -42,6 +42,8 @@ from ui.canvas_snapshot import (
     set_snapshot,
 )
 
+import ui.topograma as topograma_mod
+
 from ui.topograma import (
     obtener_imagen_topograma_adquirido,
     render_topograma_panel,
@@ -1607,57 +1609,158 @@ def obtener_imagen_posicion_corte(nombre_posicion):
     return None
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FIX ROBUSTO: imágenes para DECÚBITO LATERAL DERECHO / IZQUIERDO
+# ═══════════════════════════════════════════════════════════════════════════
+_ORIGINAL_OBTENER_IMAGEN_TOPOGRAMA_ADQUIRIDO = obtener_imagen_topograma_adquirido
+
+
+def _strip_accents_planitc(texto):
+    import unicodedata
+    if texto is None:
+        return ""
+    return "".join(c for c in unicodedata.normalize("NFD", str(texto)) if unicodedata.category(c) != "Mn")
+
+
 def _posicion_paciente_variantes(posicion):
-    """Genera variantes para encontrar imágenes de decúbito lateral derecho/izquierdo."""
     if posicion is None:
         return [""]
     base = str(posicion).strip()
     if not base or base == "Seleccionar":
         return [""]
-
-    up = base.upper().strip()
-    variantes = [base, up]
-
+    up = _strip_accents_planitc(base).upper().strip()
+    variantes = [base, up, up.title(), up.lower()]
     if "LATERAL" in up and ("DERECHO" in up or "DER" in up):
         variantes.extend([
             "DECÚBITO LATERAL DERECHO", "DECUBITO LATERAL DERECHO",
-            "LATERAL DERECHO", "DECÚBITO LATERAL DER",
-            "DECUBITO LATERAL DER", "LATERAL DER",
+            "DECUBITO LATERAL DER", "DECÚBITO LATERAL DER",
+            "LATERAL DERECHO", "LATERAL DER", "DERECHO", "DER",
+            "decúbito lateral derecho", "decubito lateral derecho", "lateral derecho",
+            "lateral_der", "lateral_derecho", "decubito_lateral_der",
+            "decubito_lateral_derecho", "decúbito_lateral_derecho",
         ])
     elif "LATERAL" in up and ("IZQUIERDO" in up or "IZQ" in up):
         variantes.extend([
             "DECÚBITO LATERAL IZQUIERDO", "DECUBITO LATERAL IZQUIERDO",
-            "LATERAL IZQUIERDO", "DECÚBITO LATERAL IZQ",
-            "DECUBITO LATERAL IZQ", "LATERAL IZQ",
+            "DECUBITO LATERAL IZQ", "DECÚBITO LATERAL IZQ",
+            "LATERAL IZQUIERDO", "LATERAL IZQ", "IZQUIERDO", "IZQ",
+            "decúbito lateral izquierdo", "decubito lateral izquierdo", "lateral izquierdo",
+            "lateral_izq", "lateral_izquierdo", "decubito_lateral_izq",
+            "decubito_lateral_izquierdo", "decúbito_lateral_izquierdo",
         ])
-
     extras = []
     for v in variantes:
-        extras.append(v.replace("Ú", "U").replace("ú", "u"))
-        extras.append(v.replace("DECUBITO", "DECÚBITO").replace("Decubito", "Decúbito"))
-        extras.append(v.title())
-        extras.append(v.lower())
-    variantes.extend(extras)
-
-    salida = []
-    vistos = set()
-    for v in variantes:
+        s = str(v).strip()
+        extras.extend([s, s.replace("_", " "), s.replace(" ", "_"),
+                       s.replace("Ú", "U").replace("ú", "u"),
+                       s.replace("DECUBITO", "DECÚBITO").replace("Decubito", "Decúbito"),
+                       s.title(), s.lower(), s.upper()])
+    salida, vistos = [], set()
+    for v in extras:
         v = str(v).strip()
-        if v and v not in vistos:
-            vistos.add(v)
+        k = _strip_accents_planitc(v).upper()
+        if v and k not in vistos:
+            vistos.add(k)
             salida.append(v)
     return salida or [base]
 
 
 def _obtener_imagen_topograma_adquirido_flexible(examen, posicion, entrada, posicion_tubo):
-    """Busca la imagen probando variantes del texto de posicionamiento del paciente."""
     ultimo_error = None
     for pos in _posicion_paciente_variantes(posicion):
-        img, err = obtener_imagen_topograma_adquirido(examen, pos, entrada, posicion_tubo)
+        img, err = _ORIGINAL_OBTENER_IMAGEN_TOPOGRAMA_ADQUIRIDO(examen, pos, entrada, posicion_tubo)
         if img is not None:
             return img, None
         ultimo_error = err
     return None, ultimo_error
+
+
+obtener_imagen_topograma_adquirido = _obtener_imagen_topograma_adquirido_flexible
+
+
+def _wrap_helper_lateral_flexible(func):
+    if getattr(func, "_planitc_lateral_patch", False):
+        return func
+
+    def _wrapped(*args, **kwargs):
+        res = None
+        try:
+            res = func(*args, **kwargs)
+            if res is not None:
+                if isinstance(res, tuple):
+                    if len(res) and res[0] is not None:
+                        return res
+                else:
+                    return res
+        except Exception:
+            pass
+
+        for idx, val in enumerate(args):
+            up = _strip_accents_planitc(val).upper() if isinstance(val, str) else ""
+            if "LATERAL" not in up:
+                continue
+            for variante in _posicion_paciente_variantes(val):
+                if variante == val:
+                    continue
+                new_args = list(args)
+                new_args[idx] = variante
+                try:
+                    r = func(*new_args, **kwargs)
+                    if r is None:
+                        continue
+                    if isinstance(r, tuple):
+                        if len(r) and r[0] is not None:
+                            return r
+                    else:
+                        return r
+                except Exception:
+                    pass
+
+        for key, val in list(kwargs.items()):
+            up = _strip_accents_planitc(val).upper() if isinstance(val, str) else ""
+            if "LATERAL" not in up:
+                continue
+            for variante in _posicion_paciente_variantes(val):
+                if variante == val:
+                    continue
+                new_kwargs = dict(kwargs)
+                new_kwargs[key] = variante
+                try:
+                    r = func(*args, **new_kwargs)
+                    if r is None:
+                        continue
+                    if isinstance(r, tuple):
+                        if len(r) and r[0] is not None:
+                            return r
+                    else:
+                        return r
+                except Exception:
+                    pass
+        return res
+
+    _wrapped._planitc_lateral_patch = True
+    _wrapped.__name__ = getattr(func, "__name__", "wrapped_lateral_flexible")
+    _wrapped.__doc__ = getattr(func, "__doc__", None)
+    return _wrapped
+
+
+def _patch_topograma_module_image_helpers():
+    try:
+        topograma_mod.obtener_imagen_topograma_adquirido = _obtener_imagen_topograma_adquirido_flexible
+        for name in dir(topograma_mod):
+            lname = name.lower()
+            obj = getattr(topograma_mod, name, None)
+            if not callable(obj):
+                continue
+            if name == "render_topograma_panel":
+                continue
+            if (("imagen" in lname or "image" in lname or "ruta" in lname or "path" in lname)
+                and ("posicion" in lname or "paciente" in lname or "topograma" in lname)):
+                setattr(topograma_mod, name, _wrap_helper_lateral_flexible(obj))
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1816,7 +1919,7 @@ def _render_topogramas_adq(exp, es_bolus):
     topos = []
 
     if hay_topo1:
-        img1, _err1 = _obtener_imagen_topograma_adquirido_flexible(
+        img1, _err1 = obtener_imagen_topograma_adquirido(
             tstore.get("examen") or st.session_state.get("examen", ""),
             tstore.get("posicion") or "",
             tstore.get("entrada") or "",
@@ -1833,7 +1936,7 @@ def _render_topogramas_adq(exp, es_bolus):
             })
 
     if hay_topo2:
-        img2, _err2 = _obtener_imagen_topograma_adquirido_flexible(
+        img2, _err2 = obtener_imagen_topograma_adquirido(
             tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
             tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
             tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
@@ -2387,6 +2490,7 @@ def render_adquisicion():
     with col_main:
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
+            _patch_topograma_module_image_helpers()
             render_topograma_panel()
             return
 
