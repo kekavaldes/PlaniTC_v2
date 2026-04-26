@@ -1765,37 +1765,33 @@ def _patch_topograma_module_image_helpers():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# PATCH UI TOPOGRAMA: SOLO 6 PARÁMETROS EN 3 COLUMNAS
+# PANEL TOPOGRAMA: SOLO 6 PARÁMETROS EN 3 COLUMNAS
 # ═══════════════════════════════════════════════════════════════════════════
-def _norm_label_topo(label):
-    """Normaliza etiquetas para detectar campos aunque tengan tildes/HTML."""
-    import re
+def _norm_topo_label(texto):
     import unicodedata
-    if label is None:
+    if texto is None:
         return ""
-    txt = str(label)
-    txt = re.sub(r"<[^>]+>", " ", txt)
-    txt = txt.replace("&nbsp;", " ").replace("\u00a0", " ")
-    txt = "".join(
-        c for c in unicodedata.normalize("NFD", txt)
-        if unicodedata.category(c) != "Mn"
-    )
-    txt = " ".join(txt.upper().split())
-    return txt
+    texto = str(texto)
+    texto = "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+    for ch in ["*", "_", "#", ":", "?", "¿", "¡", "!", "—", "-", "(", ")", ".", ","]:
+        texto = texto.replace(ch, " ")
+    return " ".join(texto.upper().split())
 
 
-def _topo_field_id(label):
-    texto = _norm_label_topo(label)
-    compacto = texto.replace(" ", "")
-    if "INICIO TOPOGRAMA" in texto or "FIN TOPOGRAMA" in texto:
+def _topo_campo_desde_label(label):
+    t = _norm_topo_label(label)
+    compacto = t.replace(" ", "")
+    if not t:
+        return None
+    if "INICIO TOPOGRAMA" in t or "FIN TOPOGRAMA" in t:
         return "ocultar_inicio_fin"
-    if "CENTRAJE" in texto and "TOPOGRAMA" in texto:
+    if "CENTRAJE" in t and "TOPOGRAMA" in t:
         return "centraje"
-    if "DIRECCION" in texto and "TOPOGRAMA" in texto:
-        return "direccion"
-    if "LONGITUD" in texto and "TOPOGRAMA" in texto:
+    if "LONGITUD" in t and "TOPOGRAMA" in t:
         return "longitud"
-    if "INSTRUCCION" in texto and "VOZ" in texto:
+    if "DIRECCION" in t and "TOPOGRAMA" in t:
+        return "direccion"
+    if "INSTRUCCION" in t and "VOZ" in t:
         return "voz"
     if compacto in ("KV", "KVP"):
         return "kv"
@@ -1804,57 +1800,47 @@ def _topo_field_id(label):
     return None
 
 
-def _widget_default_value(args, kwargs):
-    if "value" in kwargs:
-        return kwargs.get("value")
-    if args:
-        return args[0]
-    return None
-
-
-def _select_default_value(args, kwargs):
+def _topo_select_default(args, kwargs):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
     options = args[0] if args else kwargs.get("options", [])
     try:
         options = list(options or [])
     except Exception:
         options = []
     if not options:
-        return "Seleccionar"
+        return None
     try:
         idx = int(kwargs.get("index", 0))
     except Exception:
         idx = 0
-    idx = max(0, min(idx, len(options) - 1))
+    idx = max(0, min(idx, len(options)-1))
     return options[idx]
 
 
-def _guardar_spec_topograma(campo, widget_type, label, args, kwargs):
-    specs = st.session_state.setdefault("_planitc_topograma_field_specs", {})
-    specs[campo] = {
+def _topo_value_default(args, kwargs, fallback=None):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
+    if "value" in kwargs:
+        return kwargs.get("value")
+    if args:
+        return args[0]
+    return fallback
+
+
+def _guardar_topo_spec(campo, widget_type, label, args, kwargs):
+    specs = st.session_state.setdefault("_planitc_topo_specs", {})
+    specs.setdefault(campo, {
         "widget_type": widget_type,
         "label": label,
         "args": list(args),
         "kwargs": dict(kwargs),
-        "key": kwargs.get("key"),
-    }
+    })
 
 
-def _valor_oculto_selectbox(args, kwargs):
-    key = kwargs.get("key")
-    if key and key in st.session_state:
-        return st.session_state[key]
-    return _select_default_value(args, kwargs)
-
-
-def _valor_oculto_number(args, kwargs):
-    key = kwargs.get("key")
-    if key and key in st.session_state:
-        return st.session_state[key]
-    val = _widget_default_value(args, kwargs)
-    return 0 if val is None else val
-
-
-def _render_widget_desde_spec(spec, original_selectbox, original_number_input, original_text_input, nuevo_label):
+def _render_spec_topo(spec, original_selectbox, original_number_input, original_text_input, label):
     if not spec:
         st.empty()
         return
@@ -1862,165 +1848,137 @@ def _render_widget_desde_spec(spec, original_selectbox, original_number_input, o
     kwargs = dict(spec.get("kwargs", {}))
     kwargs.pop("label", None)
     kwargs.pop("label_visibility", None)
-    # Evita doble label posicional.
-    if args and isinstance(args[0], str):
-        args = args[1:]
     if spec.get("widget_type") == "selectbox":
-        original_selectbox(nuevo_label, *args, **kwargs)
-    elif spec.get("widget_type") == "number_input":
-        original_number_input(nuevo_label, *args, **kwargs)
-    elif spec.get("widget_type") == "text_input":
-        original_text_input(nuevo_label, *args, **kwargs)
+        return original_selectbox(label, *args, **kwargs)
+    if spec.get("widget_type") == "number_input":
+        return original_number_input(label, *args, **kwargs)
+    if spec.get("widget_type") == "text_input":
+        return original_text_input(label, *args, **kwargs)
 
 
-def _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input):
-    specs = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
-    if st.session_state.get("_planitc_topograma_grid_rendered", False):
+def _topo_es_kvma(label, args, kwargs):
+    campo = _topo_campo_desde_label(label)
+    if campo in ("kv", "ma"):
+        return campo
+    key = _norm_topo_label(kwargs.get("key", ""))
+    if "KV" in key or "KVP" in key:
+        return "kv"
+    if key.endswith("MA") or " MA" in key or "MAS" in key:
+        return "ma"
+    val = _topo_value_default(args, kwargs, None)
+    sval = str(val).strip().replace(",", ".") if val is not None else ""
+    if sval in ("100", "100.0"):
+        return "kv"
+    if sval in ("40", "40.0"):
+        return "ma"
+    return None
+
+
+def _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input):
+    if st.session_state.get("_planitc_topo_grid_ya_renderizada"):
         return
-
-    st.markdown(
-        """
+    specs = st.session_state.get("_planitc_topo_specs", {}) or {}
+    st.markdown("""
         <style>
-        .planitc-topo-grid-wrap {
-            width: 100%;
-            max-width: 1280px;
-            margin: 0.6rem auto 1.1rem auto;
-        }
-        .planitc-topo-grid-wrap label,
-        .planitc-topo-grid-wrap [data-testid="stWidgetLabel"] {
-            font-weight: 700 !important;
-        }
-        .planitc-topo-grid-wrap div[data-baseweb="select"] > div,
-        .planitc-topo-grid-wrap div[data-testid="stTextInput"] input,
-        .planitc-topo-grid-wrap div[data-testid="stNumberInput"] input {
-            min-height: 2.75rem !important;
-        }
+        .planitc-topo-grid-fix { width:100%; max-width:1280px; margin:0.7rem auto 1.2rem auto; }
+        .planitc-topo-grid-fix label, .planitc-topo-grid-fix [data-testid="stWidgetLabel"] { font-weight:700 !important; }
+        .planitc-topo-grid-fix input, .planitc-topo-grid-fix div[data-baseweb="select"] > div { min-height:2.75rem !important; }
         </style>
-        <div class="planitc-topo-grid-wrap">
-        """,
-        unsafe_allow_html=True,
-    )
-
+        <div class="planitc-topo-grid-fix">
+    """, unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3, gap="large")
     with col1:
-        _render_widget_desde_spec(specs.get("centraje"), original_selectbox, original_number_input, original_text_input, "Centraje inicio de topograma")
-        _render_widget_desde_spec(specs.get("direccion"), original_selectbox, original_number_input, original_text_input, "Dirección topograma")
+        _render_spec_topo(specs.get("centraje"), original_selectbox, original_number_input, original_text_input, "Centraje inicio de topograma")
+        _render_spec_topo(specs.get("direccion"), original_selectbox, original_number_input, original_text_input, "Dirección topograma")
     with col2:
-        _render_widget_desde_spec(specs.get("longitud"), original_selectbox, original_number_input, original_text_input, "Longitud de topograma (mm)")
-        _render_widget_desde_spec(specs.get("voz"), original_selectbox, original_number_input, original_text_input, "Instrucción de voz")
+        _render_spec_topo(specs.get("longitud"), original_selectbox, original_number_input, original_text_input, "Longitud de topograma (mm)")
+        _render_spec_topo(specs.get("voz"), original_selectbox, original_number_input, original_text_input, "Instrucción de voz")
     with col3:
-        # kV y mA deben quedar fijos, visibles y alineados como tercera columna.
-        original_text_input("kV", value="100", key="topograma_kv_fijo_display", disabled=True)
-        original_text_input("mA", value="40", key="topograma_ma_fijo_display", disabled=True)
-
+        original_text_input("kV", value="100", key="topograma_grid_kv_fijo_unico", disabled=True)
+        original_text_input("mA", value="40", key="topograma_grid_ma_fijo_unico", disabled=True)
     st.markdown("</div>", unsafe_allow_html=True)
-    st.session_state["_planitc_topograma_grid_rendered"] = True
+    st.session_state["_planitc_topo_grid_ya_renderizada"] = True
 
 
-def _render_topograma_panel_solo_6_parametros():
-    """Renderiza ui.topograma ocultando los campos antiguos y moviendo los 6
-    parámetros a una grilla exacta de 3 columnas, antes de ¿Aplica Topograma 2?.
-    """
+def render_topograma_panel_limpio_3_columnas():
     original_selectbox = st.selectbox
     original_number_input = st.number_input
     original_text_input = st.text_input
-    original_checkbox = st.checkbox
     original_markdown = st.markdown
     original_write = st.write
     original_caption = getattr(st, "caption", None)
+    original_checkbox = st.checkbox
+    st.session_state["_planitc_topo_specs"] = {}
+    st.session_state["_planitc_topo_grid_ya_renderizada"] = False
+    st.session_state["_planitc_topo_ultimo_label_kvma"] = None
 
-    st.session_state["_planitc_topograma_grid_rendered"] = False
-    st.session_state["_planitc_topograma_field_specs"] = {}
-    st.session_state["_planitc_pending_kvma"] = None
-
-    def _capture_label_for_kvma(obj):
-        campo = _topo_field_id(obj)
-        if campo in ("kv", "ma"):
-            st.session_state["_planitc_pending_kvma"] = campo
-            return True
-        return False
-
-    def _selectbox_patched(label, *args, **kwargs):
-        campo = _topo_field_id(label)
+    def selectbox_patched(label, *args, **kwargs):
+        campo = _topo_campo_desde_label(label)
         if campo == "ocultar_inicio_fin":
-            return _valor_oculto_selectbox(args, kwargs)
-        if campo in ("centraje", "direccion", "longitud", "voz"):
-            _guardar_spec_topograma(campo, "selectbox", label, args, kwargs)
-            return _valor_oculto_selectbox(args, kwargs)
+            return _topo_select_default(args, kwargs)
+        if campo in ("centraje", "longitud", "direccion", "voz"):
+            _guardar_topo_spec(campo, "selectbox", label, args, kwargs)
+            return _topo_select_default(args, kwargs)
         return original_selectbox(label, *args, **kwargs)
 
-    def _es_widget_kvma_por_valor(label, args, kwargs):
-        campo_label = _topo_field_id(label)
-        if campo_label in ("kv", "ma"):
-            return campo_label
-        key = str(kwargs.get("key", "")).upper()
-        if "KV" in key or "KVP" in key:
-            return "kv"
-        if key.endswith("MA") or "_MA" in key or "MAS" in key:
-            return "ma"
-        val = _widget_default_value(args, kwargs)
-        sval = str(val).strip().replace(",", ".") if val is not None else ""
-        if sval in ("100", "100.0"):
-            return "kv"
-        if sval in ("40", "40.0"):
-            return "ma"
-        return None
-
-    def _number_input_patched(label, *args, **kwargs):
-        campo = _topo_field_id(label)
-        if campo is None and st.session_state.get("_planitc_pending_kvma") in ("kv", "ma"):
-            campo = st.session_state.pop("_planitc_pending_kvma")
-        if campo is None:
-            campo = _es_widget_kvma_por_valor(label, args, kwargs)
+    def number_input_patched(label, *args, **kwargs):
+        campo = _topo_es_kvma(label, args, kwargs)
+        if campo is None and st.session_state.get("_planitc_topo_ultimo_label_kvma") in ("kv", "ma"):
+            campo = st.session_state.pop("_planitc_topo_ultimo_label_kvma")
         if campo in ("kv", "ma"):
             return 100 if campo == "kv" else 40
         return original_number_input(label, *args, **kwargs)
 
-    def _text_input_patched(label, *args, **kwargs):
-        campo = _topo_field_id(label)
-        if campo is None and st.session_state.get("_planitc_pending_kvma") in ("kv", "ma"):
-            campo = st.session_state.pop("_planitc_pending_kvma")
-        if campo is None:
-            campo = _es_widget_kvma_por_valor(label, args, kwargs)
+    def text_input_patched(label, *args, **kwargs):
+        campo = _topo_es_kvma(label, args, kwargs)
+        if campo is None and st.session_state.get("_planitc_topo_ultimo_label_kvma") in ("kv", "ma"):
+            campo = st.session_state.pop("_planitc_topo_ultimo_label_kvma")
         if campo in ("kv", "ma"):
             return "100" if campo == "kv" else "40"
         return original_text_input(label, *args, **kwargs)
 
-    def _markdown_patched(body, *args, **kwargs):
-        if _capture_label_for_kvma(body):
+    def markdown_patched(body, *args, **kwargs):
+        campo = _topo_campo_desde_label(body)
+        if campo in ("kv", "ma"):
+            st.session_state["_planitc_topo_ultimo_label_kvma"] = campo
             return None
         return original_markdown(body, *args, **kwargs)
 
-    def _write_patched(*args, **kwargs):
-        if len(args) == 1 and _capture_label_for_kvma(args[0]):
-            return None
+    def write_patched(*args, **kwargs):
+        if len(args) == 1:
+            campo = _topo_campo_desde_label(args[0])
+            if campo in ("kv", "ma"):
+                st.session_state["_planitc_topo_ultimo_label_kvma"] = campo
+                return None
         return original_write(*args, **kwargs)
 
-    def _caption_patched(body, *args, **kwargs):
-        if _capture_label_for_kvma(body):
+    def caption_patched(body, *args, **kwargs):
+        campo = _topo_campo_desde_label(body)
+        if campo in ("kv", "ma"):
+            st.session_state["_planitc_topo_ultimo_label_kvma"] = campo
             return None
         if original_caption is not None:
             return original_caption(body, *args, **kwargs)
         return None
 
-    def _checkbox_patched(label, *args, **kwargs):
-        texto = _norm_label_topo(label)
+    def checkbox_patched(label, *args, **kwargs):
+        texto = _norm_topo_label(label)
         if "APLICA" in texto and "TOPOGRAMA 2" in texto:
-            _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input)
+            _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input)
         return original_checkbox(label, *args, **kwargs)
 
     try:
-        st.selectbox = _selectbox_patched
-        st.number_input = _number_input_patched
-        st.text_input = _text_input_patched
-        st.markdown = _markdown_patched
-        st.write = _write_patched
+        st.selectbox = selectbox_patched
+        st.number_input = number_input_patched
+        st.text_input = text_input_patched
+        st.markdown = markdown_patched
+        st.write = write_patched
         if original_caption is not None:
-            st.caption = _caption_patched
-        st.checkbox = _checkbox_patched
+            st.caption = caption_patched
+        st.checkbox = checkbox_patched
         topograma_mod.render_topograma_panel()
-        if not st.session_state.get("_planitc_topograma_grid_rendered", False):
-            _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input)
+        if not st.session_state.get("_planitc_topo_grid_ya_renderizada"):
+            _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input)
     finally:
         st.selectbox = original_selectbox
         st.number_input = original_number_input
@@ -2759,7 +2717,7 @@ def render_adquisicion():
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
             _patch_topograma_module_image_helpers()
-            _render_topograma_panel_solo_6_parametros()
+            render_topograma_panel_limpio_3_columnas()
             return
 
         idx = int(activa)
