@@ -1787,21 +1787,27 @@ def _topo_field_id(label):
 
 
 
-def _es_label_kv_ma_markdown(body):
-    """Detecta etiquetas sueltas kV/mA que ui.topograma.py a veces
-    dibuja con st.markdown antes del number_input. Se usa solo dentro del
-    parche del panel de topograma para que no queden duplicadas arriba.
-    """
+def _kv_ma_label_from_markdown(body):
+    """Devuelve 'kv' o 'ma' si el markdown corresponde a una etiqueta suelta."""
     if not isinstance(body, str):
-        return False
+        return None
+    import re
     txt = body.strip()
-    # Quitar markdown/html simple frecuente: **kV**, ### kV, <b>kV</b>
-    for ch in "*#:_`":
+    txt = re.sub(r"<[^>]+>", "", txt)
+    for ch in "*#:_`$\\{}[]()":
         txt = txt.replace(ch, "")
-    txt = txt.replace("<b>", "").replace("</b>", "")
-    txt = txt.replace("<strong>", "").replace("</strong>", "")
-    txt = txt.strip().lower()
-    return txt in ("kv", "k v", "ma", "m a")
+    txt = txt.replace("&nbsp;", " ").replace("\u00a0", " ")
+    txt = " ".join(txt.split()).strip().lower()
+    compacto = txt.replace(" ", "")
+    if compacto in ("kv", "kvp"):
+        return "kv"
+    if compacto in ("ma", "mas", "ma."):
+        return "ma"
+    return None
+
+
+def _es_label_kv_ma_markdown(body):
+    return _kv_ma_label_from_markdown(body) is not None
 
 
 def _widget_default_value(args, kwargs):
@@ -1809,6 +1815,21 @@ def _widget_default_value(args, kwargs):
         return kwargs.get("value")
     if len(args) >= 1:
         return args[0]
+    return None
+
+
+def _inferir_kv_ma_por_valor(args, kwargs):
+    """Captura kV/mA cuando el widget original tiene label oculto."""
+    val = _widget_default_value(args, kwargs)
+    try:
+        sval = str(val).strip().replace(",", ".")
+    except Exception:
+        return None
+    specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+    if sval in ("100", "100.0") and "kv" not in specs_actuales:
+        return "kv"
+    if sval in ("40", "40.0") and "ma" not in specs_actuales:
+        return "ma"
     return None
 
 
@@ -1956,6 +1977,7 @@ def _render_topograma_panel_sin_inicio_fin():
     original_checkbox = st.checkbox
     original_markdown = st.markdown
     st.session_state["_planitc_topograma_grid_rendered"] = False
+    st.session_state["_planitc_topograma_pending_kvma"] = None
     # Limpieza defensiva para que no queden specs antiguos de renders previos.
     st.session_state["_planitc_topograma_field_specs"] = {}
 
@@ -1979,11 +2001,12 @@ def _render_topograma_panel_sin_inicio_fin():
         # mientras se renderiza el panel de topograma, por lo que no afecta
         # los parámetros de adquisición.
         if campo is None:
-            specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
-            if "kv" not in specs_actuales:
-                campo = "kv"
-            elif "ma" not in specs_actuales:
-                campo = "ma"
+            pending = st.session_state.get("_planitc_topograma_pending_kvma")
+            if pending in ("kv", "ma"):
+                campo = pending
+                st.session_state["_planitc_topograma_pending_kvma"] = None
+            else:
+                campo = _inferir_kv_ma_por_valor(args, kwargs)
 
         if campo in ("kv", "ma"):
             _guardar_spec_topograma(campo, "number_input", label, args, kwargs)
@@ -1999,17 +2022,26 @@ def _render_topograma_panel_sin_inicio_fin():
         # Ese fue el origen del box incorrecto que aparecía con valor "Topograma 1"
         # bajo la etiqueta kV.
         #
-        # Solo capturamos text_input si el label identifica explícitamente kV o mA.
-        # Si kV/mA vienen como number_input, se capturan en _number_input_personalizado.
+        # Capturamos text_input solo si corresponde claramente a kV/mA.
+        # Esto evita capturar el nombre del topograma (ej.: "Topograma 1").
+        if campo is None:
+            pending = st.session_state.get("_planitc_topograma_pending_kvma")
+            if pending in ("kv", "ma"):
+                campo = pending
+                st.session_state["_planitc_topograma_pending_kvma"] = None
+            else:
+                campo = _inferir_kv_ma_por_valor(args, kwargs)
         if campo in ("kv", "ma"):
             _guardar_spec_topograma(campo, "text_input", label, args, kwargs)
             return _widget_default_value(args, kwargs)
         return original_text_input(label, *args, **kwargs)
 
     def _markdown_personalizado(body, *args, **kwargs):
-        # Oculta únicamente las etiquetas sueltas kV/mA del bloque original,
-        # porque ahora esos campos se muestran en la tercera columna.
-        if _es_label_kv_ma_markdown(body):
+        # Oculta las etiquetas sueltas kV/mA del bloque original y marca el
+        # próximo widget para moverlo a la tercera columna.
+        campo = _kv_ma_label_from_markdown(body)
+        if campo in ("kv", "ma"):
+            st.session_state["_planitc_topograma_pending_kvma"] = campo
             return None
         return original_markdown(body, *args, **kwargs)
 
