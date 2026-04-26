@@ -401,12 +401,10 @@ def render_topogramas_independientes_interactivos(
 
         titulo = topo.get("titulo", f"Topograma {i+1}")
         subtitulo = topo.get("subtitulo", "")
-        inicio_ref = topo.get("inicio_ref", "—")
-        fin_ref = topo.get("fin_ref", "—")
-        inicio_mm = topo.get("inicio_mm", 0)
-        fin_mm = topo.get("fin_mm", 0)
-        y_ini = topo.get("y_ini", get_y_position_with_offset(inicio_ref, inicio_mm))
-        y_fin = topo.get("y_fin", get_y_position_with_offset(fin_ref, fin_mm))
+        # Ya no se usan campos manuales de inicio/fin del topograma.
+        # Si no viene una posición guardada, se usa un DFOV inicial amplio y editable.
+        y_ini = topo.get("y_ini", 0.25)
+        y_fin = topo.get("y_fin", 0.75)
 
         y1 = max(0.05, min(y_ini, y_fin))
         y2 = min(0.95, max(y_ini, y_fin))
@@ -1130,10 +1128,6 @@ def _crear_exploracion_base(topo_set_idx=None):
         "retardo": None,
         "pitch": None,
         "rot_tubo": None,
-        "inicio_ref": None,
-        "ini_mm": 0,
-        "fin_ref": None,
-        "fin_mm": 400,
         "observaciones": "",
         # BOLUS
         "periodo": None,
@@ -1764,6 +1758,41 @@ def _patch_topograma_module_image_helpers():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# FIX UI: ocultar campos "Inicio Topograma" y "Fin Topograma"
+# ═══════════════════════════════════════════════════════════════════════════
+def _render_topograma_panel_sin_inicio_fin():
+    """Renderiza el panel de topograma ocultando los selectbox de
+    Inicio Topograma y Fin Topograma.
+
+    El archivo ui/topograma.py es el que dibuja esos campos. Como este módulo
+    solo importa y llama ese panel, aplicamos un parche temporal a st.selectbox
+    mientras se renderiza el panel. Así desaparecen de la interfaz sin afectar
+    los demás selectbox del simulador.
+    """
+    original_selectbox = st.selectbox
+
+    def _selectbox_sin_inicio_fin(label, *args, **kwargs):
+        texto = _strip_accents_planitc(label).upper() if isinstance(label, str) else ""
+        if "INICIO TOPOGRAMA" in texto or "FIN TOPOGRAMA" in texto:
+            options = args[0] if args else kwargs.get("options", [])
+            if options:
+                try:
+                    if "Seleccionar" in options:
+                        return "Seleccionar"
+                    return options[0]
+                except Exception:
+                    return "Seleccionar"
+            return "Seleccionar"
+        return original_selectbox(label, *args, **kwargs)
+
+    try:
+        st.selectbox = _selectbox_sin_inicio_fin
+        topograma_mod.render_topograma_panel()
+    finally:
+        st.selectbox = original_selectbox
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1956,22 +1985,11 @@ def _render_topogramas_adq(exp, es_bolus):
         st.info("Inicia el/los topograma(s) en la pestaña Topograma para verlos aquí con la caja DFOV.")
         return
 
-    # Enriquecer con inicio/fin para posicionar la caja
-    grupo = _region_grupo(exp)
-    refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
-    refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
-    ini_ref = exp.get("inicio_ref") or refs_ini[0]
-    fin_ref = exp.get("fin_ref") or refs_fin[0]
-    ini_mm = int(exp.get("ini_mm", 0) or 0)
-    fin_mm = int(exp.get("fin_mm", 400) or 400)
-
+    # DFOV inicial sin depender de campos manuales de inicio/fin del topograma.
+    # El usuario ajusta el rango directamente sobre el canvas.
     for t in topos:
-        t["inicio_ref"] = ini_ref
-        t["fin_ref"] = fin_ref
-        t["inicio_mm"] = ini_mm
-        t["fin_mm"] = fin_mm
-        t["y_ini"] = get_y_position_with_offset(ini_ref, ini_mm)
-        t["y_fin"] = get_y_position_with_offset(fin_ref, fin_mm)
+        t["y_ini"] = 0.25
+        t["y_fin"] = 0.75
 
     modo = "line" if es_bolus else "rect"
     color_exp = _color_exploracion(exp)
@@ -2311,37 +2329,6 @@ def _render_normales(exp):
             )
         _adq_pair(c4, "TPO ROTACION TUBO", _render_rot)
 
-    # ── FILA 4: rango de exploración ──
-    r4_icon, r4_body = st.columns([0.12, 1], gap="small")
-    with r4_icon:
-        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>📏</div>", unsafe_allow_html=True)
-    with r4_body:
-        r1, r2, r3, r4 = st.columns(4, gap="small")
-
-        def _render_iniref():
-            exp["inicio_ref"] = selectbox_con_placeholder(
-                "Inicio exploración", refs_ini,
-                value=exp.get("inicio_ref"),
-                key=f"iniref_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(r1, "Inicio exploración", _render_iniref)
-
-        def _render_inimm():
-            exp["ini_mm"] = _number("mm inicio", exp.get("ini_mm", 0), key=f"inimm_{eid}")
-        _adq_pair(r2, "mm inicio", _render_inimm)
-
-        def _render_finref():
-            exp["fin_ref"] = selectbox_con_placeholder(
-                "Fin exploración", refs_fin,
-                value=exp.get("fin_ref"),
-                key=f"finref_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(r3, "Fin exploración", _render_finref)
-
-        def _render_finmm():
-            exp["fin_mm"] = _number("mm fin", exp.get("fin_mm", 400), key=f"finmm_{eid}")
-        _adq_pair(r4, "mm fin", _render_finmm)
-
 
 def _render_bolus(exp):
     """Parámetros específicos para BOLUS TEST / BOLUS TRACKING.
@@ -2425,8 +2412,10 @@ def _render_resumen_calculado(exp):
     conf_det = exp.get("conf_det") or (CONF_DETECTORES[0] if CONF_DETECTORES else None)
     pitch = exp.get("pitch") or 1.0
     rot_tubo = exp.get("rot_tubo") or 0.5
-    ini_mm = exp.get("ini_mm", 0)
-    fin_mm = exp.get("fin_mm", 400)
+    # Sin campos manuales visibles de inicio/fin: se mantiene una longitud base
+    # para el cálculo estimado hasta integrar lectura directa del canvas.
+    ini_mm = 0
+    fin_mm = 400
     try:
         grosor_float = float(str(exp.get("grosor_prosp") or "1").replace(",", "."))
     except Exception:
@@ -2491,7 +2480,7 @@ def render_adquisicion():
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
             _patch_topograma_module_image_helpers()
-            render_topograma_panel()
+            _render_topograma_panel_sin_inicio_fin()
             return
 
         idx = int(activa)
@@ -2524,9 +2513,6 @@ def render_adquisicion():
             )
             if nuevo_set != exp.get("topo_set_idx"):
                 exp["topo_set_idx"] = nuevo_set
-                # Las refs anatómicas del otro set pueden ser distintas: reset
-                exp["inicio_ref"] = None
-                exp["fin_ref"] = None
                 st.rerun()
 
         # Nombre de la exploración (arriba, ancho completo)
