@@ -1205,7 +1205,6 @@ def _get_region_group_for_exp(exp) -> str:
 def _reconstruccion_completada(rec, exp_id) -> bool:
     img_ok = bool(st.session_state.get("imagenes_recon_por_id", {}).get(rec.get("id")))
     campos = [
-        rec.get("fase_recons"),
         rec.get("tipo_recons"),
         rec.get("kernel_sel"),
         rec.get("grosor_recons"),
@@ -1788,12 +1787,9 @@ def _render_panel_central(adquisiciones_validas):
     st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
     _panel_header("🔧", "Parámetros de Reconstrucción")
 
-    # Distribución limpia en 3 columnas:
-    # 1) Tipo de reconstrucción / Algoritmo (Kernel)
-    # 2) Grosor reconstrucción / Incremento
-    # 3) Algoritmo iterativo / Nivel-Porcentaje-Modo
-    # Se elimina de la interfaz "Fase a reconstruir" porque ya no es necesario
-    # que el alumno lo seleccione manualmente.
+    # Parámetros de reconstrucción en 3 columnas.
+    # Se elimina "Fase a reconstruir" porque esa fase ya queda determinada
+    # por la adquisición seleccionada.
     col_pr1, col_pr2, col_pr3 = st.columns([1, 1, 1], gap="large")
 
     with col_pr1:
@@ -1842,22 +1838,10 @@ def _render_panel_central(adquisiciones_validas):
         else:
             rec_actual["algoritmo_iter"] = "—"
             rec_actual["nivel_iter"] = "—"
-            st.markdown("**Algoritmo iterativo**")
-            st.text_input(
-                "Algoritmo iterativo",
-                value="No aplica",
-                key=f"alg_iter_na_{rec_actual['id']}_pr3",
-                disabled=True,
-                label_visibility="collapsed",
-            )
-            st.markdown("**Nivel / Porcentaje / Modo**")
-            st.text_input(
-                "Nivel / Porcentaje / Modo",
-                value="No aplica",
-                key=f"nivel_iter_na_{rec_actual['id']}_pr3",
-                disabled=True,
-                label_visibility="collapsed",
-            )
+            st.markdown("<div style='height:0.20rem;'></div>", unsafe_allow_html=True)
+            st.caption("Algoritmo iterativo no aplica")
+            st.markdown("<div style='height:2.65rem;'></div>", unsafe_allow_html=True)
+            st.caption("Nivel / Porcentaje / Modo no aplica")
 
     _panel_header("🪟", "Ventana de Visualización")
     ventanas_disp = list(VENTANAS.keys())
@@ -1920,7 +1904,6 @@ def _render_panel_central(adquisiciones_validas):
         f"""
         **Adquisición:** {nombre_exp}  
         **Nombre:** {rec_actual.get('nombre', '—')}  
-        **Fase:** {rec_actual.get('fase_recons', '—')}  
         **Tipo:** {rec_actual.get('tipo_recons', '—')}  
         **Algoritmo iterativo:** {rec_actual.get('algoritmo_iter', '—')}  
         **Nivel:** {rec_actual.get('nivel_iter', '—')}  
