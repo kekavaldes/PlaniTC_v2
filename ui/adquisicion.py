@@ -1785,6 +1785,25 @@ def _topo_field_id(label):
     return None
 
 
+
+
+def _es_label_kv_ma_markdown(body):
+    """Detecta etiquetas sueltas kV/mA que ui.topograma.py a veces
+    dibuja con st.markdown antes del number_input. Se usa solo dentro del
+    parche del panel de topograma para que no queden duplicadas arriba.
+    """
+    if not isinstance(body, str):
+        return False
+    txt = body.strip()
+    # Quitar markdown/html simple frecuente: **kV**, ### kV, <b>kV</b>
+    for ch in "*#:_`":
+        txt = txt.replace(ch, "")
+    txt = txt.replace("<b>", "").replace("</b>", "")
+    txt = txt.replace("<strong>", "").replace("</strong>", "")
+    txt = txt.strip().lower()
+    return txt in ("kv", "k v", "ma", "m a")
+
+
 def _widget_default_value(args, kwargs):
     if "value" in kwargs:
         return kwargs.get("value")
@@ -1935,7 +1954,10 @@ def _render_topograma_panel_sin_inicio_fin():
     original_number_input = st.number_input
     original_text_input = st.text_input
     original_checkbox = st.checkbox
+    original_markdown = st.markdown
     st.session_state["_planitc_topograma_grid_rendered"] = False
+    # Limpieza defensiva para que no queden specs antiguos de renders previos.
+    st.session_state["_planitc_topograma_field_specs"] = {}
 
     def _selectbox_personalizado(label, *args, **kwargs):
         campo = _topo_field_id(label)
@@ -1948,6 +1970,21 @@ def _render_topograma_panel_sin_inicio_fin():
 
     def _number_input_personalizado(label, *args, **kwargs):
         campo = _topo_field_id(label)
+
+        # En algunas versiones de ui.topograma.py, kV y mA se dibujan con
+        # una etiqueta aparte (st.markdown) y el number_input queda con
+        # label oculto o genérico. Por eso, si no logramos reconocer el
+        # campo por el label, capturamos los dos primeros number_input del
+        # panel como kV y mA respectivamente. Este parche está activo SOLO
+        # mientras se renderiza el panel de topograma, por lo que no afecta
+        # los parámetros de adquisición.
+        if campo is None:
+            specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+            if "kv" not in specs_actuales:
+                campo = "kv"
+            elif "ma" not in specs_actuales:
+                campo = "ma"
+
         if campo in ("kv", "ma"):
             _guardar_spec_topograma(campo, "number_input", label, args, kwargs)
             return _valor_oculto_number(args, kwargs)
@@ -1959,6 +1996,13 @@ def _render_topograma_panel_sin_inicio_fin():
             _guardar_spec_topograma(campo, "text_input", label, args, kwargs)
             return _widget_default_value(args, kwargs)
         return original_text_input(label, *args, **kwargs)
+
+    def _markdown_personalizado(body, *args, **kwargs):
+        # Oculta únicamente las etiquetas sueltas kV/mA del bloque original,
+        # porque ahora esos campos se muestran en la tercera columna.
+        if _es_label_kv_ma_markdown(body):
+            return None
+        return original_markdown(body, *args, **kwargs)
 
     def _checkbox_personalizado(label, *args, **kwargs):
         texto = _norm_label_topo(label)
@@ -1975,6 +2019,7 @@ def _render_topograma_panel_sin_inicio_fin():
         st.selectbox = _selectbox_personalizado
         st.number_input = _number_input_personalizado
         st.text_input = _text_input_personalizado
+        st.markdown = _markdown_personalizado
         st.checkbox = _checkbox_personalizado
         topograma_mod.render_topograma_panel()
 
@@ -1987,6 +2032,7 @@ def _render_topograma_panel_sin_inicio_fin():
         st.selectbox = original_selectbox
         st.number_input = original_number_input
         st.text_input = original_text_input
+        st.markdown = original_markdown
         st.checkbox = original_checkbox
 
 
