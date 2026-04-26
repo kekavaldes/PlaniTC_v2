@@ -1758,38 +1758,204 @@ def _patch_topograma_module_image_helpers():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FIX UI: ocultar campos "Inicio Topograma" y "Fin Topograma"
+# FIX UI: ocultar inicio/fin y ordenar parámetros del topograma en 3 columnas
 # ═══════════════════════════════════════════════════════════════════════════
-def _render_topograma_panel_sin_inicio_fin():
-    """Renderiza el panel de topograma ocultando los selectbox de
-    Inicio Topograma y Fin Topograma.
+def _norm_label_topo(label):
+    return _strip_accents_planitc(label).upper() if isinstance(label, str) else ""
 
-    El archivo ui/topograma.py es el que dibuja esos campos. Como este módulo
-    solo importa y llama ese panel, aplicamos un parche temporal a st.selectbox
-    mientras se renderiza el panel. Así desaparecen de la interfaz sin afectar
-    los demás selectbox del simulador.
+
+def _topo_field_id(label):
+    """Clasifica los campos del panel de topograma que queremos reordenar."""
+    texto = _norm_label_topo(label)
+    if "INICIO TOPOGRAMA" in texto or "FIN TOPOGRAMA" in texto:
+        return "ocultar_inicio_fin"
+    if "CENTRAJE" in texto and "INICIO" in texto and "TOPOGRAMA" in texto:
+        return "centraje"
+    if "DIRECCION" in texto and "TOPOGRAMA" in texto:
+        return "direccion"
+    if "LONGITUD" in texto and "TOPOGRAMA" in texto:
+        return "longitud"
+    if "INSTRUCCION" in texto and "VOZ" in texto:
+        return "voz"
+    if texto.strip() == "KV":
+        return "kv"
+    if texto.strip() == "MA":
+        return "ma"
+    return None
+
+
+def _widget_default_value(args, kwargs):
+    if "value" in kwargs:
+        return kwargs.get("value")
+    if len(args) >= 1:
+        return args[0]
+    return None
+
+
+def _select_default_value(args, kwargs):
+    options = None
+    if args:
+        options = args[0]
+    else:
+        options = kwargs.get("options")
+    try:
+        options = list(options or [])
+    except Exception:
+        options = []
+    if not options:
+        return "Seleccionar"
+    idx = kwargs.get("index", 0)
+    try:
+        idx = int(idx)
+    except Exception:
+        idx = 0
+    idx = max(0, min(idx, len(options) - 1))
+    return options[idx]
+
+
+def _guardar_spec_topograma(campo, widget_type, label, args, kwargs):
+    """Guarda la definición real del widget de ui.topograma.py para poder
+    volver a dibujarlo en el orden solicitado, usando la misma key y opciones.
+    """
+    specs = st.session_state.setdefault("_planitc_topograma_field_specs", {})
+    key = kwargs.get("key")
+    spec = {
+        "widget_type": widget_type,
+        "label": label,
+        "args": list(args),
+        "kwargs": dict(kwargs),
+        "key": key,
+    }
+    specs[campo] = spec
+
+
+def _valor_oculto_selectbox(args, kwargs):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
+    return _select_default_value(args, kwargs)
+
+
+def _valor_oculto_number(args, kwargs):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
+    return _widget_default_value(args, kwargs)
+
+
+def _render_widget_desde_spec(spec, original_selectbox, original_number_input, nuevo_label):
+    """Dibuja un widget usando su configuración original, pero con etiqueta nueva."""
+    if not spec:
+        return
+    args = list(spec.get("args", []))
+    kwargs = dict(spec.get("kwargs", {}))
+    kwargs["label"] = nuevo_label
+    kwargs.pop("label_visibility", None)
+
+    # En las llamadas de Streamlit el label suele ser el primer parámetro posicional.
+    # Como aquí lo pasamos por keyword, eliminamos el label posicional si existe.
+    if args and isinstance(args[0], str):
+        args = args[1:]
+
+    if spec.get("widget_type") == "selectbox":
+        original_selectbox(*args, **kwargs)
+    elif spec.get("widget_type") == "number_input":
+        original_number_input(*args, **kwargs)
+
+
+def _render_topograma_campos_ordenados(original_selectbox, original_number_input):
+    specs = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+    campos_necesarios = ["centraje", "direccion", "longitud", "voz", "kv", "ma"]
+    if not any(k in specs for k in campos_necesarios):
+        return
+
+    st.markdown(
+        """
+        <style>
+        .planitc-topo-grid-wrap {
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto 1.1rem auto;
+        }
+        .planitc-topo-grid-wrap div[data-testid="stVerticalBlock"] {
+            gap: 0.85rem !important;
+        }
+        .planitc-topo-grid-wrap label,
+        .planitc-topo-grid-wrap [data-testid="stWidgetLabel"] {
+            text-align: center !important;
+            justify-content: center !important;
+            font-weight: 700 !important;
+        }
+        .planitc-topo-grid-wrap div[data-baseweb="select"] > div,
+        .planitc-topo-grid-wrap div[data-testid="stNumberInput"] input {
+            text-align: center !important;
+        }
+        </style>
+        <div class="planitc-topo-grid-wrap">
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns(3, gap="large")
+    with col1:
+        _render_widget_desde_spec(specs.get("centraje"), original_selectbox, original_number_input, "Centraje inicio de topograma")
+        _render_widget_desde_spec(specs.get("direccion"), original_selectbox, original_number_input, "Dirección topograma")
+    with col2:
+        _render_widget_desde_spec(specs.get("longitud"), original_selectbox, original_number_input, "Longitud de topograma (mm)")
+        _render_widget_desde_spec(specs.get("voz"), original_selectbox, original_number_input, "Instrucción de voz")
+    with col3:
+        _render_widget_desde_spec(specs.get("kv"), original_selectbox, original_number_input, "kV")
+        _render_widget_desde_spec(specs.get("ma"), original_selectbox, original_number_input, "mA")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_topograma_panel_sin_inicio_fin():
+    """Renderiza el panel de topograma con la grilla solicitada:
+
+    Columna 1: Centraje inicio de topograma / Dirección topograma
+    Columna 2: Longitud de topograma / Instrucción de voz
+    Columna 3: kV / mA
+
+    Además oculta los campos antiguos Inicio Topograma y Fin Topograma.
     """
     original_selectbox = st.selectbox
+    original_number_input = st.number_input
 
-    def _selectbox_sin_inicio_fin(label, *args, **kwargs):
-        texto = _strip_accents_planitc(label).upper() if isinstance(label, str) else ""
-        if "INICIO TOPOGRAMA" in texto or "FIN TOPOGRAMA" in texto:
-            options = args[0] if args else kwargs.get("options", [])
-            if options:
-                try:
-                    if "Seleccionar" in options:
-                        return "Seleccionar"
-                    return options[0]
-                except Exception:
-                    return "Seleccionar"
-            return "Seleccionar"
+    def _selectbox_personalizado(label, *args, **kwargs):
+        campo = _topo_field_id(label)
+        if campo == "ocultar_inicio_fin":
+            return _valor_oculto_selectbox(args, kwargs)
+        if campo in ("centraje", "direccion", "longitud", "voz"):
+            _guardar_spec_topograma(campo, "selectbox", label, args, kwargs)
+            return _valor_oculto_selectbox(args, kwargs)
         return original_selectbox(label, *args, **kwargs)
 
+    def _number_input_personalizado(label, *args, **kwargs):
+        campo = _topo_field_id(label)
+        if campo in ("kv", "ma"):
+            _guardar_spec_topograma(campo, "number_input", label, args, kwargs)
+            return _valor_oculto_number(args, kwargs)
+        return original_number_input(label, *args, **kwargs)
+
     try:
-        st.selectbox = _selectbox_sin_inicio_fin
+        # Si ya tenemos los specs desde un render anterior, mostramos primero
+        # la grilla nueva. En el primer render se capturan los specs y aparecerá
+        # después; desde el siguiente rerun queda arriba y ordenada.
+        _render_topograma_campos_ordenados(original_selectbox, original_number_input)
+
+        st.selectbox = _selectbox_personalizado
+        st.number_input = _number_input_personalizado
         topograma_mod.render_topograma_panel()
+
+        # Primer render: si aún no existían los specs, ya fueron capturados.
+        if not st.session_state.get("_planitc_topograma_grid_rendered_once"):
+            st.session_state["_planitc_topograma_grid_rendered_once"] = True
+            if st.session_state.get("_planitc_topograma_field_specs"):
+                st.rerun()
     finally:
         st.selectbox = original_selectbox
+        st.number_input = original_number_input
 
 
 # ═══════════════════════════════════════════════════════════════════════════
