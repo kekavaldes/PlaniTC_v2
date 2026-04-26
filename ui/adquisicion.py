@@ -1938,6 +1938,14 @@ def render_topograma_panel_limpio_3_columnas():
         return original_text_input(label, *args, **kwargs)
 
     def markdown_patched(body, *args, **kwargs):
+        # El panel original dibuja kV/mA como un bloque HTML completo.
+        # Ese es el bloque duplicado marcado en rojo; se anula aquí para
+        # que solo quede la versión nueva en la tercera columna.
+        if isinstance(body, str):
+            b = body.lower().replace(" ", "")
+            if (("kv" in b and "100" in b and "background" in b and "border" in b) or
+                ("ma" in b and "40" in b and "background" in b and "border" in b)):
+                return None
         campo = _topo_campo_desde_label(body)
         if campo in ("kv", "ma"):
             st.session_state["_planitc_topo_ultimo_label_kvma"] = campo
