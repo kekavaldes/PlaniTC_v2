@@ -1922,9 +1922,16 @@ def _render_topograma_panel_sin_inicio_fin():
     Columna 3: kV / mA
 
     Además oculta los campos antiguos Inicio Topograma y Fin Topograma.
+
+    IMPORTANTE:
+    Los campos se insertan justo ANTES del checkbox "¿Aplica Topograma 2?".
+    Así quedan en la misma zona visual del Topograma 1, debajo del título/imagen
+    y no al comienzo de la página.
     """
     original_selectbox = st.selectbox
     original_number_input = st.number_input
+    original_checkbox = st.checkbox
+    st.session_state["_planitc_topograma_grid_rendered"] = False
 
     def _selectbox_personalizado(label, *args, **kwargs):
         campo = _topo_field_id(label)
@@ -1942,19 +1949,32 @@ def _render_topograma_panel_sin_inicio_fin():
             return _valor_oculto_number(args, kwargs)
         return original_number_input(label, *args, **kwargs)
 
+    def _checkbox_personalizado(label, *args, **kwargs):
+        texto = _norm_label_topo(label)
+        if ("APLICA" in texto and "TOPOGRAMA 2" in texto
+                and not st.session_state.get("_planitc_topograma_grid_rendered", False)):
+            _render_topograma_campos_ordenados(original_selectbox, original_number_input)
+            st.session_state["_planitc_topograma_grid_rendered"] = True
+        return original_checkbox(label, *args, **kwargs)
+
     try:
-        # Primero renderizamos el panel original. Durante este render, los campos
+        # Renderizamos el panel original. Durante este render, los campos
         # que queremos mover se capturan y NO se muestran en su ubicación antigua.
+        # Cuando aparece "¿Aplica Topograma 2?", insertamos la grilla justo antes.
         st.selectbox = _selectbox_personalizado
         st.number_input = _number_input_personalizado
+        st.checkbox = _checkbox_personalizado
         topograma_mod.render_topograma_panel()
 
-        # Luego dibujamos esos mismos campos en la ubicación solicitada:
-        # debajo del bloque visual del Topograma 1, organizados en 3 columnas.
-        _render_topograma_campos_ordenados(original_selectbox, original_number_input)
+        # Fallback: si por algún cambio futuro no existe el checkbox de Topograma 2,
+        # mostramos la grilla al final para que los campos no desaparezcan.
+        if not st.session_state.get("_planitc_topograma_grid_rendered", False):
+            _render_topograma_campos_ordenados(original_selectbox, original_number_input)
+            st.session_state["_planitc_topograma_grid_rendered"] = True
     finally:
         st.selectbox = original_selectbox
         st.number_input = original_number_input
+        st.checkbox = original_checkbox
 
 
 # ═══════════════════════════════════════════════════════════════════════════
