@@ -1830,7 +1830,7 @@ def _render_panel_central(adquisiciones_validas):
             )
             niveles_disp = NIVEL_ITERATIVO.get(rec_actual["algoritmo_iter"], [1])
             rec_actual["nivel_iter"] = selectbox_con_placeholder(
-                "Nivel / Porcentaje / Modo",
+                "Nivel / Porcentaje",
                 niveles_disp,
                 key=f"nivel_iter_{rec_actual['id']}_pr3",
                 value=rec_actual.get("nivel_iter"),
@@ -1841,7 +1841,7 @@ def _render_panel_central(adquisiciones_validas):
             st.markdown("<div style='height:0.20rem;'></div>", unsafe_allow_html=True)
             st.caption("Algoritmo iterativo no aplica")
             st.markdown("<div style='height:2.65rem;'></div>", unsafe_allow_html=True)
-            st.caption("Nivel / Porcentaje / Modo no aplica")
+            st.caption("Nivel / Porcentaje no aplica")
 
     _panel_header("🪟", "Ventana de Visualización")
     ventanas_disp = list(VENTANAS.keys())
