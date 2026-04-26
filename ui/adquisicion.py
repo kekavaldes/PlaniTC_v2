@@ -1943,20 +1943,15 @@ def _render_topograma_panel_sin_inicio_fin():
         return original_number_input(label, *args, **kwargs)
 
     try:
-        # Si ya tenemos los specs desde un render anterior, mostramos primero
-        # la grilla nueva. En el primer render se capturan los specs y aparecerá
-        # después; desde el siguiente rerun queda arriba y ordenada.
-        _render_topograma_campos_ordenados(original_selectbox, original_number_input)
-
+        # Primero renderizamos el panel original. Durante este render, los campos
+        # que queremos mover se capturan y NO se muestran en su ubicación antigua.
         st.selectbox = _selectbox_personalizado
         st.number_input = _number_input_personalizado
         topograma_mod.render_topograma_panel()
 
-        # Primer render: si aún no existían los specs, ya fueron capturados.
-        if not st.session_state.get("_planitc_topograma_grid_rendered_once"):
-            st.session_state["_planitc_topograma_grid_rendered_once"] = True
-            if st.session_state.get("_planitc_topograma_field_specs"):
-                st.rerun()
+        # Luego dibujamos esos mismos campos en la ubicación solicitada:
+        # debajo del bloque visual del Topograma 1, organizados en 3 columnas.
+        _render_topograma_campos_ordenados(original_selectbox, original_number_input)
     finally:
         st.selectbox = original_selectbox
         st.number_input = original_number_input
