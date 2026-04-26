@@ -1607,6 +1607,59 @@ def obtener_imagen_posicion_corte(nombre_posicion):
     return None
 
 
+def _posicion_paciente_variantes(posicion):
+    """Genera variantes para encontrar imágenes de decúbito lateral derecho/izquierdo."""
+    if posicion is None:
+        return [""]
+    base = str(posicion).strip()
+    if not base or base == "Seleccionar":
+        return [""]
+
+    up = base.upper().strip()
+    variantes = [base, up]
+
+    if "LATERAL" in up and ("DERECHO" in up or "DER" in up):
+        variantes.extend([
+            "DECÚBITO LATERAL DERECHO", "DECUBITO LATERAL DERECHO",
+            "LATERAL DERECHO", "DECÚBITO LATERAL DER",
+            "DECUBITO LATERAL DER", "LATERAL DER",
+        ])
+    elif "LATERAL" in up and ("IZQUIERDO" in up or "IZQ" in up):
+        variantes.extend([
+            "DECÚBITO LATERAL IZQUIERDO", "DECUBITO LATERAL IZQUIERDO",
+            "LATERAL IZQUIERDO", "DECÚBITO LATERAL IZQ",
+            "DECUBITO LATERAL IZQ", "LATERAL IZQ",
+        ])
+
+    extras = []
+    for v in variantes:
+        extras.append(v.replace("Ú", "U").replace("ú", "u"))
+        extras.append(v.replace("DECUBITO", "DECÚBITO").replace("Decubito", "Decúbito"))
+        extras.append(v.title())
+        extras.append(v.lower())
+    variantes.extend(extras)
+
+    salida = []
+    vistos = set()
+    for v in variantes:
+        v = str(v).strip()
+        if v and v not in vistos:
+            vistos.add(v)
+            salida.append(v)
+    return salida or [base]
+
+
+def _obtener_imagen_topograma_adquirido_flexible(examen, posicion, entrada, posicion_tubo):
+    """Busca la imagen probando variantes del texto de posicionamiento del paciente."""
+    ultimo_error = None
+    for pos in _posicion_paciente_variantes(posicion):
+        img, err = obtener_imagen_topograma_adquirido(examen, pos, entrada, posicion_tubo)
+        if img is not None:
+            return img, None
+        ultimo_error = err
+    return None, ultimo_error
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1763,7 +1816,7 @@ def _render_topogramas_adq(exp, es_bolus):
     topos = []
 
     if hay_topo1:
-        img1, _err1 = obtener_imagen_topograma_adquirido(
+        img1, _err1 = _obtener_imagen_topograma_adquirido_flexible(
             tstore.get("examen") or st.session_state.get("examen", ""),
             tstore.get("posicion") or "",
             tstore.get("entrada") or "",
@@ -1780,7 +1833,7 @@ def _render_topogramas_adq(exp, es_bolus):
             })
 
     if hay_topo2:
-        img2, _err2 = obtener_imagen_topograma_adquirido(
+        img2, _err2 = _obtener_imagen_topograma_adquirido_flexible(
             tstore.get("t2_examen") or tstore.get("examen") or st.session_state.get("examen", ""),
             tstore.get("t2_posicion_paciente") or tstore.get("t2_posicion") or "",
             tstore.get("t2_entrada_paciente") or tstore.get("t2_entrada") or "",
