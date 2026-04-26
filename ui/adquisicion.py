@@ -1993,18 +1993,14 @@ def _render_topograma_panel_sin_inicio_fin():
     def _text_input_personalizado(label, *args, **kwargs):
         campo = _topo_field_id(label)
 
-        # En el panel original de topograma algunas versiones muestran kV/mA
-        # como text_input/number_input con etiqueta no reconocible. Si el label
-        # no permite identificar el campo, capturamos los dos primeros inputs
-        # numéricos/de texto restantes del bloque como kV y mA. Así NO se
-        # renderizan arriba y luego se redibujan en la tercera columna.
-        if campo is None:
-            specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
-            if "kv" not in specs_actuales:
-                campo = "kv"
-            elif "ma" not in specs_actuales:
-                campo = "ma"
-
+        # IMPORTANTE:
+        # No capturamos text_input sin etiqueta como kV/mA, porque en este panel
+        # también existe el campo de nombre del topograma (ej.: "Topograma 1").
+        # Ese fue el origen del box incorrecto que aparecía con valor "Topograma 1"
+        # bajo la etiqueta kV.
+        #
+        # Solo capturamos text_input si el label identifica explícitamente kV o mA.
+        # Si kV/mA vienen como number_input, se capturan en _number_input_personalizado.
         if campo in ("kv", "ma"):
             _guardar_spec_topograma(campo, "text_input", label, args, kwargs)
             return _widget_default_value(args, kwargs)
