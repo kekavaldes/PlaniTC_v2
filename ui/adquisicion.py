@@ -1831,7 +1831,9 @@ def _topo_value_default(args, kwargs, fallback=None):
 
 
 def _guardar_topo_spec(campo, widget_type, label, args, kwargs):
-    specs = st.session_state.setdefault("_planitc_topo_specs", {})
+    grupo = st.session_state.get("_planitc_topo_grupo_actual", "t1")
+    specs_por_grupo = st.session_state.setdefault("_planitc_topo_specs_por_grupo", {})
+    specs = specs_por_grupo.setdefault(grupo, {})
     specs.setdefault(campo, {
         "widget_type": widget_type,
         "label": label,
@@ -1874,10 +1876,17 @@ def _topo_es_kvma(label, args, kwargs):
     return None
 
 
-def _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input):
-    if st.session_state.get("_planitc_topo_grid_ya_renderizada"):
+def _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input, grupo="t1"):
+    rendered = st.session_state.setdefault("_planitc_topo_grids_renderizadas", set())
+    if grupo in rendered:
         return
-    specs = st.session_state.get("_planitc_topo_specs", {}) or {}
+
+    specs_por_grupo = st.session_state.get("_planitc_topo_specs_por_grupo", {}) or {}
+    specs = specs_por_grupo.get(grupo, {}) or {}
+    if not any(specs.get(k) for k in ("centraje", "direccion", "longitud", "voz")):
+        return
+
+    sufijo = "1" if grupo == "t1" else "2"
     st.markdown("""
         <style>
         .planitc-topo-grid-fix { width:100%; max-width:1280px; margin:0.7rem auto 1.2rem auto; }
@@ -1886,6 +1895,7 @@ def _render_topo_grid_3_columnas(original_selectbox, original_number_input, orig
         </style>
         <div class="planitc-topo-grid-fix">
     """, unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns(3, gap="large")
     with col1:
         _render_spec_topo(specs.get("centraje"), original_selectbox, original_number_input, original_text_input, "Centraje inicio de topograma")
@@ -1894,10 +1904,12 @@ def _render_topo_grid_3_columnas(original_selectbox, original_number_input, orig
         _render_spec_topo(specs.get("longitud"), original_selectbox, original_number_input, original_text_input, "Longitud de topograma (mm)")
         _render_spec_topo(specs.get("voz"), original_selectbox, original_number_input, original_text_input, "Instrucción de voz")
     with col3:
-        original_text_input("kV", value="100", key="topograma_grid_kv_fijo_unico", disabled=True)
-        original_text_input("mA", value="40", key="topograma_grid_ma_fijo_unico", disabled=True)
+        original_text_input("kV", value="100", key=f"topograma_grid_kv_fijo_{sufijo}", disabled=True)
+        original_text_input("mA", value="40", key=f"topograma_grid_ma_fijo_{sufijo}", disabled=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
-    st.session_state["_planitc_topo_grid_ya_renderizada"] = True
+    rendered.add(grupo)
+    st.session_state["_planitc_topo_grid_ya_renderizada"] = bool(rendered)
 
 
 def render_topograma_panel_limpio_3_columnas():
@@ -1908,9 +1920,12 @@ def render_topograma_panel_limpio_3_columnas():
     original_write = st.write
     original_caption = getattr(st, "caption", None)
     original_checkbox = st.checkbox
-    st.session_state["_planitc_topo_specs"] = {}
+
+    st.session_state["_planitc_topo_specs_por_grupo"] = {}
+    st.session_state["_planitc_topo_grids_renderizadas"] = set()
     st.session_state["_planitc_topo_grid_ya_renderizada"] = False
     st.session_state["_planitc_topo_ultimo_label_kvma"] = None
+    st.session_state["_planitc_topo_grupo_actual"] = "t1"
 
     def selectbox_patched(label, *args, **kwargs):
         campo = _topo_campo_desde_label(label)
@@ -1938,9 +1953,6 @@ def render_topograma_panel_limpio_3_columnas():
         return original_text_input(label, *args, **kwargs)
 
     def markdown_patched(body, *args, **kwargs):
-        # El panel original dibuja kV/mA como un bloque HTML completo.
-        # Ese es el bloque duplicado marcado en rojo; se anula aquí para
-        # que solo quede la versión nueva en la tercera columna.
         if isinstance(body, str):
             b = body.lower().replace(" ", "")
             if (("kv" in b and "100" in b and "background" in b and "border" in b) or
@@ -1972,7 +1984,11 @@ def render_topograma_panel_limpio_3_columnas():
     def checkbox_patched(label, *args, **kwargs):
         texto = _norm_topo_label(label)
         if "APLICA" in texto and "TOPOGRAMA 2" in texto:
-            _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input)
+            _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input, grupo="t1")
+            aplica_topo_2 = original_checkbox(label, *args, **kwargs)
+            if aplica_topo_2:
+                st.session_state["_planitc_topo_grupo_actual"] = "t2"
+            return aplica_topo_2
         return original_checkbox(label, *args, **kwargs)
 
     try:
@@ -1985,8 +2001,8 @@ def render_topograma_panel_limpio_3_columnas():
             st.caption = caption_patched
         st.checkbox = checkbox_patched
         topograma_mod.render_topograma_panel()
-        if not st.session_state.get("_planitc_topo_grid_ya_renderizada"):
-            _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input)
+        _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input, grupo="t1")
+        _render_topo_grid_3_columnas(original_selectbox, original_number_input, original_text_input, grupo="t2")
     finally:
         st.selectbox = original_selectbox
         st.number_input = original_number_input
@@ -1996,8 +2012,6 @@ def render_topograma_panel_limpio_3_columnas():
         if original_caption is not None:
             st.caption = original_caption
         st.checkbox = original_checkbox
-
-# ═══════════════════════════════════════════════════════════════════════════
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
 
