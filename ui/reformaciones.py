@@ -31,7 +31,7 @@ PARAMS_POR_TIPO = {
     ("VR", None): ["n_vistas", "angulo"],
 }
 PARAMS_OPCIONES = {
-    "plano": ["AXIAL", "CORONAL", "SAGITAL", "CURVO"],
+    "plano": ["AXIAL", "CORONAL", "SAGITAL", "OBLICUO"],
     "grosor": ["1 mm", "2 mm", "3 mm", "4 mm", "5 mm", "7 mm", "10 mm"],
     "distancia": ["0,5 mm", "1 mm", "2 mm", "3 mm", "5 mm"],
     "n_vistas": [6, 8, 10, 12, 15, 18, 24, 30, 36, 60, 72],
