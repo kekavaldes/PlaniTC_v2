@@ -1853,7 +1853,9 @@ def _render_panel_central(adquisiciones_validas):
         ww_default = 400
         wl_default = 40
 
-    col_v1, col_v2, col_v3 = st.columns([1, 1, 1], gap="small")
+    # Ventana de visualización en 4 columnas, todos los parámetros uno al lado del otro.
+    col_v1, col_v2, col_v3, col_v4 = st.columns([1, 1, 1, 1], gap="large")
+
     with col_v1:
         rec_actual["ventana_preset"] = selectbox_con_placeholder(
             "Preset de ventana",
@@ -1881,10 +1883,12 @@ def _render_panel_central(adquisiciones_validas):
             step=1,
             key=f"wl_{rec_actual['id']}_vv3",
         )
+
+    with col_v4:
         rec_actual["dfov"] = selectbox_con_placeholder(
             "DFOV",
             DFOV_OPCIONES,
-            key=f"dfov_{rec_actual['id']}_vv3",
+            key=f"dfov_{rec_actual['id']}_vv4",
             value=rec_actual.get("dfov"),
         )
 
