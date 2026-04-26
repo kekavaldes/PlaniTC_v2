@@ -1844,24 +1844,28 @@ def _valor_oculto_number(args, kwargs):
 
 
 def _render_widget_desde_spec(spec, original_selectbox, original_number_input, nuevo_label):
-    """Dibuja un widget usando su configuración original, pero con etiqueta nueva."""
+    """Dibuja un widget usando su configuración original, pero con etiqueta nueva.
+
+    Importante: Streamlit recibe el label como primer argumento posicional.
+    En la versión anterior se pasaba `label` como keyword y también quedaba
+    un argumento posicional, provocando TypeError en Streamlit Cloud.
+    """
     if not spec:
         return
+
     args = list(spec.get("args", []))
     kwargs = dict(spec.get("kwargs", {}))
-    kwargs["label"] = nuevo_label
+    kwargs.pop("label", None)
     kwargs.pop("label_visibility", None)
 
-    # En las llamadas de Streamlit el label suele ser el primer parámetro posicional.
-    # Como aquí lo pasamos por keyword, eliminamos el label posicional si existe.
+    # Si por alguna razón el label original quedó dentro de args, se elimina.
     if args and isinstance(args[0], str):
         args = args[1:]
 
     if spec.get("widget_type") == "selectbox":
-        original_selectbox(*args, **kwargs)
+        original_selectbox(nuevo_label, *args, **kwargs)
     elif spec.get("widget_type") == "number_input":
-        original_number_input(*args, **kwargs)
-
+        original_number_input(nuevo_label, *args, **kwargs)
 
 def _render_topograma_campos_ordenados(original_selectbox, original_number_input):
     specs = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
