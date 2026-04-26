@@ -1788,14 +1788,20 @@ def _render_panel_central(adquisiciones_validas):
     st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
     _panel_header("🔧", "Parámetros de Reconstrucción")
 
-    col_pr1, col_pr2, col_pr3 = st.columns([1, 1, 1], gap="small")
+    # Distribución limpia en 3 columnas:
+    # 1) Tipo de reconstrucción / Algoritmo (Kernel)
+    # 2) Grosor reconstrucción / Incremento
+    # 3) Algoritmo iterativo / Nivel-Porcentaje-Modo
+    # Se elimina de la interfaz "Fase a reconstruir" porque ya no es necesario
+    # que el alumno lo seleccione manualmente.
+    col_pr1, col_pr2, col_pr3 = st.columns([1, 1, 1], gap="large")
 
     with col_pr1:
-        rec_actual["fase_recons"] = selectbox_con_placeholder(
-            "Fase a reconstruir",
-            FASES_RECONS,
-            key=f"fase_recons_{rec_actual['id']}_pr1",
-            value=rec_actual.get("fase_recons"),
+        rec_actual["tipo_recons"] = selectbox_con_placeholder(
+            "Tipo de reconstrucción",
+            TIPOS_RECONS,
+            key=f"tipo_recons_{rec_actual['id']}_pr1",
+            value=rec_actual.get("tipo_recons"),
         )
         rec_actual["kernel_sel"] = selectbox_con_placeholder(
             "Algoritmo (Kernel)",
@@ -1805,17 +1811,17 @@ def _render_panel_central(adquisiciones_validas):
         )
 
     with col_pr2:
-        rec_actual["tipo_recons"] = selectbox_con_placeholder(
-            "Tipo de reconstrucción",
-            TIPOS_RECONS,
-            key=f"tipo_recons_{rec_actual['id']}_pr2",
-            value=rec_actual.get("tipo_recons"),
-        )
         rec_actual["grosor_recons"] = selectbox_con_placeholder(
             "Grosor reconstrucción",
             GROSORES_RECONS,
             key=f"grosor_recons_{rec_actual['id']}_pr2",
             value=rec_actual.get("grosor_recons"),
+        )
+        rec_actual["incremento"] = selectbox_con_placeholder(
+            "Incremento",
+            INCREMENTOS_RECONS,
+            key=f"incremento_{rec_actual['id']}_pr2",
+            value=rec_actual.get("incremento"),
         )
 
     with col_pr3:
@@ -1836,16 +1842,22 @@ def _render_panel_central(adquisiciones_validas):
         else:
             rec_actual["algoritmo_iter"] = "—"
             rec_actual["nivel_iter"] = "—"
-            st.markdown("<div style='height:0.35rem;'></div>", unsafe_allow_html=True)
-            st.caption("Algoritmo iterativo no aplica")
-            st.markdown("<div style='height:1.65rem;'></div>", unsafe_allow_html=True)
-
-        rec_actual["incremento"] = selectbox_con_placeholder(
-            "Incremento",
-            INCREMENTOS_RECONS,
-            key=f"incremento_{rec_actual['id']}_pr3",
-            value=rec_actual.get("incremento"),
-        )
+            st.markdown("**Algoritmo iterativo**")
+            st.text_input(
+                "Algoritmo iterativo",
+                value="No aplica",
+                key=f"alg_iter_na_{rec_actual['id']}_pr3",
+                disabled=True,
+                label_visibility="collapsed",
+            )
+            st.markdown("**Nivel / Porcentaje / Modo**")
+            st.text_input(
+                "Nivel / Porcentaje / Modo",
+                value="No aplica",
+                key=f"nivel_iter_na_{rec_actual['id']}_pr3",
+                disabled=True,
+                label_visibility="collapsed",
+            )
 
     _panel_header("🪟", "Ventana de Visualización")
     ventanas_disp = list(VENTANAS.keys())
