@@ -1927,6 +1927,7 @@ def _render_topograma_panel_solo_6_parametros():
     original_checkbox = st.checkbox
     original_markdown = st.markdown
     original_write = st.write
+    original_caption = getattr(st, "caption", None)
 
     st.session_state["_planitc_topograma_grid_rendered"] = False
     st.session_state["_planitc_topograma_field_specs"] = {}
@@ -1948,18 +1949,30 @@ def _render_topograma_panel_solo_6_parametros():
             return _valor_oculto_selectbox(args, kwargs)
         return original_selectbox(label, *args, **kwargs)
 
+    def _es_widget_kvma_por_valor(label, args, kwargs):
+        campo_label = _topo_field_id(label)
+        if campo_label in ("kv", "ma"):
+            return campo_label
+        key = str(kwargs.get("key", "")).upper()
+        if "KV" in key or "KVP" in key:
+            return "kv"
+        if key.endswith("MA") or "_MA" in key or "MAS" in key:
+            return "ma"
+        val = _widget_default_value(args, kwargs)
+        sval = str(val).strip().replace(",", ".") if val is not None else ""
+        if sval in ("100", "100.0"):
+            return "kv"
+        if sval in ("40", "40.0"):
+            return "ma"
+        return None
+
     def _number_input_patched(label, *args, **kwargs):
         campo = _topo_field_id(label)
         if campo is None and st.session_state.get("_planitc_pending_kvma") in ("kv", "ma"):
             campo = st.session_state.pop("_planitc_pending_kvma")
-        val = _widget_default_value(args, kwargs)
-        sval = str(val).strip().replace(",", ".") if val is not None else ""
-        if campo is None and sval in ("100", "100.0"):
-            campo = "kv"
-        if campo is None and sval in ("40", "40.0"):
-            campo = "ma"
+        if campo is None:
+            campo = _es_widget_kvma_por_valor(label, args, kwargs)
         if campo in ("kv", "ma"):
-            # No se renderiza aquí; se devuelve su valor fijo para no romper lógica interna.
             return 100 if campo == "kv" else 40
         return original_number_input(label, *args, **kwargs)
 
@@ -1967,6 +1980,8 @@ def _render_topograma_panel_solo_6_parametros():
         campo = _topo_field_id(label)
         if campo is None and st.session_state.get("_planitc_pending_kvma") in ("kv", "ma"):
             campo = st.session_state.pop("_planitc_pending_kvma")
+        if campo is None:
+            campo = _es_widget_kvma_por_valor(label, args, kwargs)
         if campo in ("kv", "ma"):
             return "100" if campo == "kv" else "40"
         return original_text_input(label, *args, **kwargs)
@@ -1981,6 +1996,13 @@ def _render_topograma_panel_solo_6_parametros():
             return None
         return original_write(*args, **kwargs)
 
+    def _caption_patched(body, *args, **kwargs):
+        if _capture_label_for_kvma(body):
+            return None
+        if original_caption is not None:
+            return original_caption(body, *args, **kwargs)
+        return None
+
     def _checkbox_patched(label, *args, **kwargs):
         texto = _norm_label_topo(label)
         if "APLICA" in texto and "TOPOGRAMA 2" in texto:
@@ -1993,6 +2015,8 @@ def _render_topograma_panel_solo_6_parametros():
         st.text_input = _text_input_patched
         st.markdown = _markdown_patched
         st.write = _write_patched
+        if original_caption is not None:
+            st.caption = _caption_patched
         st.checkbox = _checkbox_patched
         topograma_mod.render_topograma_panel()
         if not st.session_state.get("_planitc_topograma_grid_rendered", False):
@@ -2003,6 +2027,8 @@ def _render_topograma_panel_solo_6_parametros():
         st.text_input = original_text_input
         st.markdown = original_markdown
         st.write = original_write
+        if original_caption is not None:
+            st.caption = original_caption
         st.checkbox = original_checkbox
 
 # ═══════════════════════════════════════════════════════════════════════════
