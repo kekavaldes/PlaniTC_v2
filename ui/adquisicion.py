@@ -401,12 +401,10 @@ def render_topogramas_independientes_interactivos(
 
         titulo = topo.get("titulo", f"Topograma {i+1}")
         subtitulo = topo.get("subtitulo", "")
-        inicio_ref = topo.get("inicio_ref", "—")
-        fin_ref = topo.get("fin_ref", "—")
-        inicio_mm = topo.get("inicio_mm", 0)
-        fin_mm = topo.get("fin_mm", 0)
-        y_ini = topo.get("y_ini", get_y_position_with_offset(inicio_ref, inicio_mm))
-        y_fin = topo.get("y_fin", get_y_position_with_offset(fin_ref, fin_mm))
+        # Ya no se usan campos manuales de inicio/fin del topograma.
+        # Si no viene una posición guardada, se usa un DFOV inicial amplio y editable.
+        y_ini = topo.get("y_ini", 0.25)
+        y_fin = topo.get("y_fin", 0.75)
 
         y1 = max(0.05, min(y_ini, y_fin))
         y2 = min(0.95, max(y_ini, y_fin))
@@ -1130,10 +1128,6 @@ def _crear_exploracion_base(topo_set_idx=None):
         "retardo": None,
         "pitch": None,
         "rot_tubo": None,
-        "inicio_ref": None,
-        "ini_mm": 0,
-        "fin_ref": None,
-        "fin_mm": 400,
         "observaciones": "",
         # BOLUS
         "periodo": None,
@@ -1764,6 +1758,298 @@ def _patch_topograma_module_image_helpers():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# FIX UI: ocultar inicio/fin y ordenar parámetros del topograma en 3 columnas
+# ═══════════════════════════════════════════════════════════════════════════
+def _norm_label_topo(label):
+    return _strip_accents_planitc(label).upper() if isinstance(label, str) else ""
+
+
+def _topo_field_id(label):
+    """Clasifica los campos del panel de topograma que queremos reordenar."""
+    texto = _norm_label_topo(label)
+    if "INICIO TOPOGRAMA" in texto or "FIN TOPOGRAMA" in texto:
+        return "ocultar_inicio_fin"
+    if "CENTRAJE" in texto and "INICIO" in texto and "TOPOGRAMA" in texto:
+        return "centraje"
+    if "DIRECCION" in texto and "TOPOGRAMA" in texto:
+        return "direccion"
+    if "LONGITUD" in texto and "TOPOGRAMA" in texto:
+        return "longitud"
+    if "INSTRUCCION" in texto and "VOZ" in texto:
+        return "voz"
+    limpio = texto.strip().replace(" ", "")
+    if limpio in ("KV", "KVP"):
+        return "kv"
+    if limpio in ("MA", "MAS", "MA."):
+        return "ma"
+    return None
+
+
+
+
+def _es_label_kv_ma_markdown(body):
+    """Detecta etiquetas sueltas kV/mA que ui.topograma.py a veces
+    dibuja con st.markdown antes del number_input. Se usa solo dentro del
+    parche del panel de topograma para que no queden duplicadas arriba.
+    """
+    if not isinstance(body, str):
+        return False
+    txt = body.strip()
+    # Quitar markdown/html simple frecuente: **kV**, ### kV, <b>kV</b>
+    for ch in "*#:_`":
+        txt = txt.replace(ch, "")
+    txt = txt.replace("<b>", "").replace("</b>", "")
+    txt = txt.replace("<strong>", "").replace("</strong>", "")
+    txt = txt.strip().lower()
+    return txt in ("kv", "k v", "ma", "m a")
+
+
+def _widget_default_value(args, kwargs):
+    if "value" in kwargs:
+        return kwargs.get("value")
+    if len(args) >= 1:
+        return args[0]
+    return None
+
+
+def _select_default_value(args, kwargs):
+    options = None
+    if args:
+        options = args[0]
+    else:
+        options = kwargs.get("options")
+    try:
+        options = list(options or [])
+    except Exception:
+        options = []
+    if not options:
+        return "Seleccionar"
+    idx = kwargs.get("index", 0)
+    try:
+        idx = int(idx)
+    except Exception:
+        idx = 0
+    idx = max(0, min(idx, len(options) - 1))
+    return options[idx]
+
+
+def _guardar_spec_topograma(campo, widget_type, label, args, kwargs):
+    """Guarda la definición real del widget de ui.topograma.py para poder
+    volver a dibujarlo en el orden solicitado, usando la misma key y opciones.
+    """
+    specs = st.session_state.setdefault("_planitc_topograma_field_specs", {})
+    key = kwargs.get("key")
+    spec = {
+        "widget_type": widget_type,
+        "label": label,
+        "args": list(args),
+        "kwargs": dict(kwargs),
+        "key": key,
+    }
+    specs[campo] = spec
+
+
+def _valor_oculto_selectbox(args, kwargs):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
+    return _select_default_value(args, kwargs)
+
+
+def _valor_oculto_number(args, kwargs):
+    key = kwargs.get("key")
+    if key and key in st.session_state:
+        return st.session_state[key]
+    return _widget_default_value(args, kwargs)
+
+
+def _render_widget_desde_spec(spec, original_selectbox, original_number_input, original_text_input, nuevo_label):
+    """Dibuja un widget usando su configuración original, pero con etiqueta nueva.
+
+    Importante: Streamlit recibe el label como primer argumento posicional.
+    En la versión anterior se pasaba `label` como keyword y también quedaba
+    un argumento posicional, provocando TypeError en Streamlit Cloud.
+    """
+    if not spec:
+        return
+
+    args = list(spec.get("args", []))
+    kwargs = dict(spec.get("kwargs", {}))
+    kwargs.pop("label", None)
+    kwargs.pop("label_visibility", None)
+
+    # Si por alguna razón el label original quedó dentro de args, se elimina.
+    if args and isinstance(args[0], str):
+        args = args[1:]
+
+    if spec.get("widget_type") == "selectbox":
+        original_selectbox(nuevo_label, *args, **kwargs)
+    elif spec.get("widget_type") == "number_input":
+        original_number_input(nuevo_label, *args, **kwargs)
+    elif spec.get("widget_type") == "text_input":
+        original_text_input(nuevo_label, *args, **kwargs)
+
+def _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input):
+    specs = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+    campos_necesarios = ["centraje", "direccion", "longitud", "voz", "kv", "ma"]
+    if not any(k in specs for k in campos_necesarios):
+        return
+
+    st.markdown(
+        """
+        <style>
+        .planitc-topo-grid-wrap {
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto 1.1rem auto;
+        }
+        .planitc-topo-grid-wrap div[data-testid="stVerticalBlock"] {
+            gap: 0.85rem !important;
+        }
+        .planitc-topo-grid-wrap label,
+        .planitc-topo-grid-wrap [data-testid="stWidgetLabel"] {
+            text-align: center !important;
+            justify-content: center !important;
+            font-weight: 700 !important;
+        }
+        .planitc-topo-grid-wrap div[data-baseweb="select"] > div,
+        .planitc-topo-grid-wrap div[data-testid="stNumberInput"] input {
+            text-align: center !important;
+        }
+        </style>
+        <div class="planitc-topo-grid-wrap">
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns(3, gap="large")
+    with col1:
+        _render_widget_desde_spec(specs.get("centraje"), original_selectbox, original_number_input, original_text_input, "Centraje inicio de topograma")
+        _render_widget_desde_spec(specs.get("direccion"), original_selectbox, original_number_input, original_text_input, "Dirección topograma")
+    with col2:
+        _render_widget_desde_spec(specs.get("longitud"), original_selectbox, original_number_input, original_text_input, "Longitud de topograma (mm)")
+        _render_widget_desde_spec(specs.get("voz"), original_selectbox, original_number_input, original_text_input, "Instrucción de voz")
+    with col3:
+        _render_widget_desde_spec(specs.get("kv"), original_selectbox, original_number_input, original_text_input, "kV")
+        _render_widget_desde_spec(specs.get("ma"), original_selectbox, original_number_input, original_text_input, "mA")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_topograma_panel_sin_inicio_fin():
+    """Renderiza el panel de topograma con la grilla solicitada:
+
+    Columna 1: Centraje inicio de topograma / Dirección topograma
+    Columna 2: Longitud de topograma / Instrucción de voz
+    Columna 3: kV / mA
+
+    Además oculta los campos antiguos Inicio Topograma y Fin Topograma.
+
+    IMPORTANTE:
+    Los campos se insertan justo ANTES del checkbox "¿Aplica Topograma 2?".
+    Así quedan en la misma zona visual del Topograma 1, debajo del título/imagen
+    y no al comienzo de la página.
+    """
+    original_selectbox = st.selectbox
+    original_number_input = st.number_input
+    original_text_input = st.text_input
+    original_checkbox = st.checkbox
+    original_markdown = st.markdown
+    st.session_state["_planitc_topograma_grid_rendered"] = False
+    # Limpieza defensiva para que no queden specs antiguos de renders previos.
+    st.session_state["_planitc_topograma_field_specs"] = {}
+
+    def _selectbox_personalizado(label, *args, **kwargs):
+        campo = _topo_field_id(label)
+        if campo == "ocultar_inicio_fin":
+            return _valor_oculto_selectbox(args, kwargs)
+        if campo in ("centraje", "direccion", "longitud", "voz"):
+            _guardar_spec_topograma(campo, "selectbox", label, args, kwargs)
+            return _valor_oculto_selectbox(args, kwargs)
+        return original_selectbox(label, *args, **kwargs)
+
+    def _number_input_personalizado(label, *args, **kwargs):
+        campo = _topo_field_id(label)
+
+        # En algunas versiones de ui.topograma.py, kV y mA se dibujan con
+        # una etiqueta aparte (st.markdown) y el number_input queda con
+        # label oculto o genérico. Por eso, si no logramos reconocer el
+        # campo por el label, capturamos los dos primeros number_input del
+        # panel como kV y mA respectivamente. Este parche está activo SOLO
+        # mientras se renderiza el panel de topograma, por lo que no afecta
+        # los parámetros de adquisición.
+        if campo is None:
+            specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+            if "kv" not in specs_actuales:
+                campo = "kv"
+            elif "ma" not in specs_actuales:
+                campo = "ma"
+
+        if campo in ("kv", "ma"):
+            _guardar_spec_topograma(campo, "number_input", label, args, kwargs)
+            return _valor_oculto_number(args, kwargs)
+        return original_number_input(label, *args, **kwargs)
+
+    def _text_input_personalizado(label, *args, **kwargs):
+        campo = _topo_field_id(label)
+
+        # En el panel original de topograma algunas versiones muestran kV/mA
+        # como text_input/number_input con etiqueta no reconocible. Si el label
+        # no permite identificar el campo, capturamos los dos primeros inputs
+        # numéricos/de texto restantes del bloque como kV y mA. Así NO se
+        # renderizan arriba y luego se redibujan en la tercera columna.
+        if campo is None:
+            specs_actuales = st.session_state.get("_planitc_topograma_field_specs", {}) or {}
+            if "kv" not in specs_actuales:
+                campo = "kv"
+            elif "ma" not in specs_actuales:
+                campo = "ma"
+
+        if campo in ("kv", "ma"):
+            _guardar_spec_topograma(campo, "text_input", label, args, kwargs)
+            return _widget_default_value(args, kwargs)
+        return original_text_input(label, *args, **kwargs)
+
+    def _markdown_personalizado(body, *args, **kwargs):
+        # Oculta únicamente las etiquetas sueltas kV/mA del bloque original,
+        # porque ahora esos campos se muestran en la tercera columna.
+        if _es_label_kv_ma_markdown(body):
+            return None
+        return original_markdown(body, *args, **kwargs)
+
+    def _checkbox_personalizado(label, *args, **kwargs):
+        texto = _norm_label_topo(label)
+        if ("APLICA" in texto and "TOPOGRAMA 2" in texto
+                and not st.session_state.get("_planitc_topograma_grid_rendered", False)):
+            _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input)
+            st.session_state["_planitc_topograma_grid_rendered"] = True
+        return original_checkbox(label, *args, **kwargs)
+
+    try:
+        # Renderizamos el panel original. Durante este render, los campos
+        # que queremos mover se capturan y NO se muestran en su ubicación antigua.
+        # Cuando aparece "¿Aplica Topograma 2?", insertamos la grilla justo antes.
+        st.selectbox = _selectbox_personalizado
+        st.number_input = _number_input_personalizado
+        st.text_input = _text_input_personalizado
+        st.markdown = _markdown_personalizado
+        st.checkbox = _checkbox_personalizado
+        topograma_mod.render_topograma_panel()
+
+        # Fallback: si por algún cambio futuro no existe el checkbox de Topograma 2,
+        # mostramos la grilla al final para que los campos no desaparezcan.
+        if not st.session_state.get("_planitc_topograma_grid_rendered", False):
+            _render_topograma_campos_ordenados(original_selectbox, original_number_input, original_text_input)
+            st.session_state["_planitc_topograma_grid_rendered"] = True
+    finally:
+        st.selectbox = original_selectbox
+        st.number_input = original_number_input
+        st.text_input = original_text_input
+        st.markdown = original_markdown
+        st.checkbox = original_checkbox
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TOPOGRAMAS CON DFOV (reemplaza al "Resumen de referencia" azul)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1956,22 +2242,11 @@ def _render_topogramas_adq(exp, es_bolus):
         st.info("Inicia el/los topograma(s) en la pestaña Topograma para verlos aquí con la caja DFOV.")
         return
 
-    # Enriquecer con inicio/fin para posicionar la caja
-    grupo = _region_grupo(exp)
-    refs_ini = REFS_INICIO.get(grupo, REFS_INICIO["CUERPO"])
-    refs_fin = REFS_FIN.get(grupo, REFS_FIN["CUERPO"])
-    ini_ref = exp.get("inicio_ref") or refs_ini[0]
-    fin_ref = exp.get("fin_ref") or refs_fin[0]
-    ini_mm = int(exp.get("ini_mm", 0) or 0)
-    fin_mm = int(exp.get("fin_mm", 400) or 400)
-
+    # DFOV inicial sin depender de campos manuales de inicio/fin del topograma.
+    # El usuario ajusta el rango directamente sobre el canvas.
     for t in topos:
-        t["inicio_ref"] = ini_ref
-        t["fin_ref"] = fin_ref
-        t["inicio_mm"] = ini_mm
-        t["fin_mm"] = fin_mm
-        t["y_ini"] = get_y_position_with_offset(ini_ref, ini_mm)
-        t["y_fin"] = get_y_position_with_offset(fin_ref, fin_mm)
+        t["y_ini"] = 0.25
+        t["y_fin"] = 0.75
 
     modo = "line" if es_bolus else "rect"
     color_exp = _color_exploracion(exp)
@@ -2311,37 +2586,6 @@ def _render_normales(exp):
             )
         _adq_pair(c4, "TPO ROTACION TUBO", _render_rot)
 
-    # ── FILA 4: rango de exploración ──
-    r4_icon, r4_body = st.columns([0.12, 1], gap="small")
-    with r4_icon:
-        st.markdown("<div style='font-size:2rem; text-align:center; margin-top:1.6rem;'>📏</div>", unsafe_allow_html=True)
-    with r4_body:
-        r1, r2, r3, r4 = st.columns(4, gap="small")
-
-        def _render_iniref():
-            exp["inicio_ref"] = selectbox_con_placeholder(
-                "Inicio exploración", refs_ini,
-                value=exp.get("inicio_ref"),
-                key=f"iniref_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(r1, "Inicio exploración", _render_iniref)
-
-        def _render_inimm():
-            exp["ini_mm"] = _number("mm inicio", exp.get("ini_mm", 0), key=f"inimm_{eid}")
-        _adq_pair(r2, "mm inicio", _render_inimm)
-
-        def _render_finref():
-            exp["fin_ref"] = selectbox_con_placeholder(
-                "Fin exploración", refs_fin,
-                value=exp.get("fin_ref"),
-                key=f"finref_{eid}", label_visibility="collapsed",
-            )
-        _adq_pair(r3, "Fin exploración", _render_finref)
-
-        def _render_finmm():
-            exp["fin_mm"] = _number("mm fin", exp.get("fin_mm", 400), key=f"finmm_{eid}")
-        _adq_pair(r4, "mm fin", _render_finmm)
-
 
 def _render_bolus(exp):
     """Parámetros específicos para BOLUS TEST / BOLUS TRACKING.
@@ -2425,8 +2669,10 @@ def _render_resumen_calculado(exp):
     conf_det = exp.get("conf_det") or (CONF_DETECTORES[0] if CONF_DETECTORES else None)
     pitch = exp.get("pitch") or 1.0
     rot_tubo = exp.get("rot_tubo") or 0.5
-    ini_mm = exp.get("ini_mm", 0)
-    fin_mm = exp.get("fin_mm", 400)
+    # Sin campos manuales visibles de inicio/fin: se mantiene una longitud base
+    # para el cálculo estimado hasta integrar lectura directa del canvas.
+    ini_mm = 0
+    fin_mm = 400
     try:
         grosor_float = float(str(exp.get("grosor_prosp") or "1").replace(",", "."))
     except Exception:
@@ -2491,7 +2737,7 @@ def render_adquisicion():
         activa = st.session_state.get("exp_activa", "topograma")
         if activa == "topograma":
             _patch_topograma_module_image_helpers()
-            render_topograma_panel()
+            _render_topograma_panel_sin_inicio_fin()
             return
 
         idx = int(activa)
@@ -2524,9 +2770,6 @@ def render_adquisicion():
             )
             if nuevo_set != exp.get("topo_set_idx"):
                 exp["topo_set_idx"] = nuevo_set
-                # Las refs anatómicas del otro set pueden ser distintas: reset
-                exp["inicio_ref"] = None
-                exp["fin_ref"] = None
                 st.rerun()
 
         # Nombre de la exploración (arriba, ancho completo)
